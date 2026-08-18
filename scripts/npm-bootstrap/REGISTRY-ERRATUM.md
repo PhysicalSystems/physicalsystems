@@ -6,12 +6,19 @@ also created the package's initial `latest` mapping. npm 11.19 returned HTTP 400
 when the maintainer used its supported `dist-tag rm` command to remove that
 initial mapping.
 
-The live fail-closed invariant is therefore:
+Before the real runtime release, the fail-closed invariant was:
 
 - `bootstrap` resolves to `0.0.0`;
-- `latest` resolves to the same exact inert `0.0.0` bytes;
-- `preview` is absent; and
-- the real `0.84.2-tinyedge.1` runtime remains unpublished until staged review.
+- `latest` resolved to the same exact inert `0.0.0` bytes;
+- `preview` was absent; and
+- the real `0.84.2-tinyedge.1` runtime remained unpublished until staged review.
+
+After the audited staged release and 2FA approval on 2026-08-18, the live tags
+are:
+
+- `bootstrap` remains pinned to the inert `0.0.0` artifact; and
+- `preview` and `latest` both resolve to the audited
+  `0.84.2-tinyedge.1` runtime.
 
 The reviewed immutable bootstrap identity is:
 

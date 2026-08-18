@@ -2,14 +2,14 @@
 
 ## Supported versions
 
-Security fixes currently target the source on `main`. TinyEdge `0.1.2` has not
-been published to npm. The existing `0.1.1` npm package is a legacy help-only
+Security fixes currently target the source on `main` and the published
+TinyEdge `0.1.2` release. The older `0.1.1` npm package is a legacy help-only
 client and is not the native Harness described by this repository.
 
 | Version | Security support |
 | --- | --- |
 | `main` | Yes |
-| `0.1.2` | Not released |
+| `0.1.2` | Yes |
 | `0.1.1` and earlier | No active maintenance in this repository |
 
 The current client supports Windows x64 and Windows ARM64 with Node.js 22.19.0

@@ -1,15 +1,20 @@
 # Release checklist
 
-Registry state at the time of this candidate: `tinyedge`, `@tinyedge/cli`, and
-`@tinyedge/pi` publish `0.1.1` under both `latest` and `preview`. Version `0.1.2`
-is not published, `@tinyedge/pi-runtime@0.84.2-tinyedge.1` is not published,
-and there is no verified public `install.ps1` route.
+## Released state on 2026-08-18
 
-Stage the Windows `0.1.2` candidate under the npm `preview` tag first. Do not
-approve it for public access, promote it to `latest`, expose the staged
-PowerShell bootstrap at a public route, or remove the package-level Windows
-restriction until each applicable item below has independent evidence attached
-to the release PR.
+`tinyedge`, `@tinyedge/cli`, and `@tinyedge/pi` publish `0.1.2` under both
+`latest` and `preview`. `@tinyedge/pi-runtime` preserves the inert
+`bootstrap=0.0.0` tag while `latest` and `preview` resolve to
+`0.84.2-tinyedge.1`. The exact artifacts were packed once by workflow
+[32132595628](https://github.com/TinyEdgeAI/tinyedge-edge/actions/runs/32132595628),
+verified on Windows x64 and native ARM64, downloaded from npm staging and
+matched to the build manifest, approved with 2FA in dependency order, and
+verified through a fresh public-registry Windows x64 canary. There is still no
+verified public `install.ps1` route.
+
+The checklist below remains the fail-closed policy for later releases. Do not
+remove the package-level Windows restriction or advertise a new installer or
+platform until each applicable item has evidence attached to its release PR.
 
 - Add Linux Secret Service and macOS Keychain credential-store adapters. The
   CLI must continue to fail closed when a native store is unavailable.
@@ -73,13 +78,13 @@ owner technically retains interactive 2FA publication capability, but using it
 for the real candidate would bypass the approved evidence and review path and
 is prohibited by this release policy.
 
-## One-time runtime package bootstrap
+## Historical one-time runtime package bootstrap
 
 npm staged publishing [cannot create a brand-new package](https://docs.npmjs.com/staged-publishing/#prerequisites).
-Before this workflow can stage the audited runtime, `@tinyedge/pi-runtime` must
-exist on npm. This is a separate, one-time release action and requires explicit
-human approval; neither this workflow nor any repository lifecycle script may
-perform it.
+The inert bootstrap below was completed before the first audited runtime stage.
+These steps record the pre-candidate invariant; they are not the runtime's
+current tag state. Neither this workflow nor any repository lifecycle script
+may recreate or replace the bootstrap package.
 
 1. Prepare a separately reviewed, minimal `@tinyedge/pi-runtime@0.0.0` tarball
    containing exactly `LICENSE`, `README.md`, and an inert `package.json`: MIT
@@ -219,6 +224,18 @@ Staged Packages view). Compare the downloaded tarballs with the workflow
 manifest and complete the live canaries above. Approve and publicly verify with
 2FA strictly in dependency order: the exact runtime first, then the CLI, then
 the Pi add-on and facade. Do not approve a dependent package while its exact
-dependency is still staged. Promotion from `preview` to `latest` remains a
-later, separately reviewed action after the exact public artifacts pass
-clean-install checks.
+dependency is still staged.
+
+For `0.1.2`, the later promotion completed only after exact public artifacts
+passed registry metadata, signature, attestation, clean-install, Harness,
+production read-only OAuth/MCP, revocation, and isolated global-install checks.
+Promotion changed tags only; it did not rebuild the artifacts. If a canary
+requires rollback, restore exposure in reverse order:
+
+1. `tinyedge@0.1.1` to `latest`;
+2. `@tinyedge/pi@0.1.1` to `latest`;
+3. `@tinyedge/cli@0.1.1` to `latest`; and
+4. `@tinyedge/pi-runtime@0.0.0` to `latest`.
+
+Leave `preview` and the runtime's `bootstrap` tag untouched so the audited
+candidate and namespace evidence remain available.

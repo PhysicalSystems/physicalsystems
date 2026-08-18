@@ -10,36 +10,32 @@ optimization intelligence.
 
 The source is available under the licenses in this repository. TinyEdge-authored
 client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
-Version `0.1.2` is **not published to npm**. Its four package manifests are
-release-ready, but TinyEdge policy authorizes staging only from the manual,
-main-only GitHub workflow, a protected `npm-release` environment, required
-x64/ARM64 checks, and npm stage-only trusted publishing. The founder has
-explicitly authorized a solo release; an npm owner technically retains
-interactive 2FA publication capability; that path is outside the approved
-release procedure. No repository lifecycle script publishes.
+Version `0.1.2` is published to npm under both `latest` and `preview`. Its exact
+artifacts passed the protected staged-release workflow, native Windows x64 and
+ARM64 verification, npm signature and provenance checks, and a clean public
+registry canary. On Windows with Node.js 22.19.0 or newer, launch the native
+Harness with:
 
-The currently published `tinyedge@0.1.1` prints CLI help when invoked without a
-subcommand. It does not launch the native Harness in this repository. Until the
-exact `0.1.2` artifacts pass staged release and clean-machine validation,
-`npx tinyedge` is not the native out-of-box experience described here.
+```powershell
+npx --yes tinyedge
+```
 
-Source availability and npm publication are separate transitions. Local
-validation may use `npm pack`; it does not publish anything.
+`npx` downloads and runs the command for that invocation; it does not install a
+persistent command. For a persistent command, use
+`npm install --global tinyedge@0.1.2`. The older `0.1.1` release remains public
+as historical registry evidence but is not the current Harness.
 
 ## Command ownership
 
 The npm client owns the product-level `tinyedge` command. TinyEdge's Python
 benchmark tooling uses `tinydevice`, so the two entry points do not compete for
-the same executable name. Once a reviewed version is published, prefer
-`npx tinyedge` to avoid ambiguity with an unrelated executable already on
+the same executable name. Prefer `npx --yes tinyedge` to avoid ambiguity with
+an unrelated executable already on
 `PATH`. In PowerShell, diagnose every matching command with:
 
 ```powershell
 Get-Command -All tinyedge
 ```
-
-While `0.1.2` remains unpublished, use the source workflow below instead of
-treating the registry's legacy `0.1.1` command as the current Harness.
 
 ## What is included
 
@@ -50,10 +46,10 @@ treating the registry's legacy `0.1.1` command as the current Harness.
   text-first Harness.
 - Deterministic package, legal, dependency, SBOM, and release checks.
 
-The supported source-development targets are Windows x64 and native Windows
-ARM64 with Node.js 22.19.0 or newer. The credential store currently relies on
-Windows DPAPI. macOS and Linux support are separate work and must not be
-inferred from npm availability.
+The supported release and source-development targets are Windows x64 and native
+Windows ARM64 with Node.js 22.19.0 or newer. The credential store currently
+relies on Windows DPAPI. macOS and Linux support are separate work and must not
+be inferred from npm availability.
 
 ## Develop and validate
 
@@ -67,9 +63,9 @@ npm start
 ```
 
 The bootstrap packs the local audited runtime, verifies its identity, seeds an
-isolated cache, and installs the CLI without relying on the unpublished runtime
-version in the npm registry. These commands do not stage, publish, deploy, or
-change GitHub or npm settings. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
+isolated cache, and installs the CLI from the checked-out source instead of
+consuming registry runtime bytes. These commands do not stage, publish, deploy,
+or change GitHub or npm settings. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
 complete source workflow.
 
 ## Source and legal boundary
@@ -100,10 +96,9 @@ or private support route.
 
 ## npm release gate
 
-The package manifests are publishable so the protected release workflow can
-pack and stage exact artifacts. Direct npm-owner publication remains a platform
-capability but is forbidden by TinyEdge release policy. The approved route
-requires explicit founder authorization, npm staged-package inspection and 2FA
-approval, hosted Windows x64/ARM64 checks, and clean-user live canaries. The
-detailed fail-closed procedure is in
+The `0.1.2` packages were published through the protected, stage-only workflow
+after founder authorization, npm staged-package inspection and 2FA approval,
+hosted Windows x64/ARM64 checks, and clean-user live canaries. Direct npm-owner
+publication remains a platform capability but is forbidden by TinyEdge release
+policy. Future releases retain the same fail-closed procedure in
 [packages/cli/RELEASE.md](packages/cli/RELEASE.md).

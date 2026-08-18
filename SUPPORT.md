@@ -8,8 +8,10 @@ version, Windows version, CPU architecture, expected behavior, actual behavior,
 and a minimal reproduction.
 
 The public source currently supports Windows x64 and Windows ARM64 with Node.js
-22.19.0 or newer. TinyEdge `0.1.2` is not yet published to npm, so a source
-checkout is required for the current Harness; see [DEVELOPMENT.md](DEVELOPMENT.md).
+22.19.0 or newer. TinyEdge `0.1.2` is published under `latest`; run the current
+Harness with `npx --yes tinyedge`. That command is ephemeral. A persistent
+command requires `npm install --global tinyedge@0.1.2`. To work from source,
+see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 Remove credentials, tokens, account details, device identifiers, private URLs,
 customer data, model artifacts, and session transcripts before posting. This
