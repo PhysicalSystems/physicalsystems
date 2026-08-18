@@ -768,7 +768,7 @@
     "node_modules/@tinyedge/pi-runtime": {
       "version": "0.84.2-tinyedge.1",
       "resolved": "https://registry.npmjs.org/@tinyedge/pi-runtime/-/pi-runtime-0.84.2-tinyedge.1.tgz",
-      "integrity": "sha512-8QXIAnBJDRnIVxk0vDu1SZ9YtTZE2Pgo0Zn6SdHjEIrVWD3Z93Y9FtfklVEjcqTk5trn1nQfgyFoSBgpgjp66g==",
+      "integrity": "sha512-k51lJ+KuNHodGgwBpgQuo+7VyKmFuzToGVBIdmjJgcuEJ7wbIFvMD+456ApkuxS/9/zcqXnHu8MTD7CVrx9O7A==",
       "hasShrinkwrap": true,
       "license": "MIT",
       "dependencies": {

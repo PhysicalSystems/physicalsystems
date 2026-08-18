@@ -534,7 +534,7 @@ function validateReleaseReadmes(packages) {
   assert.match(runtimeReadme, /@tinyedge\/pi-runtime/)
   assert.match(runtimeReadme, /MIT[- ]licensed|MIT license/i)
   assert.match(runtimeReadme, /optional peers/i)
-  assert.match(runtimeReadme, /candidate preparation[\s\S]{0,120}private: true/i)
+  assert.match(runtimeReadme, /manifest is publishable[\s\S]{0,180}protected workflow/i)
   assert.doesNotMatch(runtimeReadme, /remains\s+`?private:\s*true/i)
   assert.match(runtimeReadme, /source maps[\s\S]{0,100}npm[\s\S]{0,80}omits/i)
   for (const { key, directory, metadata } of packages) {

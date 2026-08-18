@@ -907,7 +907,7 @@ function assertExactBytes(actual, expected, label) {
 
 export async function verifyOperativeLegalBundle({ root = repositoryRoot } = {}) {
   assert(!(await fileExists(path.join(root, 'LICENSE-PENDING.md'))), 'operative legal bundle must not coexist with LICENSE-PENDING.md')
-  assert(await fileExists(path.join(root, 'NPM-RELEASE-PENDING.md')), 'source licensing must retain NPM-RELEASE-PENDING.md')
+  const npmPublicationLocked = await fileExists(path.join(root, 'NPM-RELEASE-PENDING.md'))
 
   const canonical = {
     apache: await readRequired(root, APACHE_2_TEMPLATE.path),
@@ -1001,21 +1001,29 @@ export async function verifyOperativeLegalBundle({ root = repositoryRoot } = {})
   for (const relativePath of ['packages/cli/package.json', 'packages/npx/package.json', 'packages/pi/package.json']) {
     const manifest = await manifestFor(relativePath)
     assert(manifest.license === 'Apache-2.0', `${relativePath} must declare Apache-2.0`)
-    assert(manifest.private === true, `${relativePath} must remain private while npm publication is locked`)
+    if (npmPublicationLocked) {
+      assert(manifest.private === true, `${relativePath} must remain private while npm publication is locked`)
+    } else {
+      assert(manifest.private !== true, `${relativePath} must be publishable after npm publication approval`)
+    }
     for (const legalFile of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'SBOM.cdx.json']) {
       assert(manifest.files?.includes(legalFile), `${relativePath} must pack ${legalFile}`)
     }
   }
   const runtimeManifest = await manifestFor('packages/pi-runtime/package.json')
   assert(runtimeManifest.license === 'MIT', 'Pi runtime must retain MIT')
-  assert(runtimeManifest.private === true, 'Pi runtime must remain private while npm publication is locked')
+  if (npmPublicationLocked) {
+    assert(runtimeManifest.private === true, 'Pi runtime must remain private while npm publication is locked')
+  } else {
+    assert(runtimeManifest.private !== true, 'Pi runtime must be publishable after npm publication approval')
+  }
   for (const legalFile of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'SBOM.cdx.json']) {
     assert(runtimeManifest.files?.includes(legalFile), `Pi runtime must pack ${legalFile}`)
   }
 
   return {
     sourceLicense: 'Apache-2.0',
-    npmPublicationLocked: true,
+    npmPublicationLocked,
     approvedMissingNamedLegalFileExceptions: MISSING_LICENSE_FILE_OVERRIDES.length,
     artifactContainedLegalFileRecords: ARTIFACT_LICENSE_FILE_EVIDENCE.length,
     thirdPartyNoticesSha256: sha256(canonical.thirdParty),

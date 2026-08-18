@@ -1,7 +1,6 @@
 {
 	"name": "@tinyedge/pi-runtime",
 	"version": "0.84.2-tinyedge.1",
-	"private": true,
 	"description": "Audited TinyEdge compatibility package for the Pi SDK and runtime",
 	"type": "module",
 	"piConfig": {

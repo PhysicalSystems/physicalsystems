@@ -69,7 +69,9 @@ exactly with the recorded toolchain. The SBOM preserves both the evidence and
 the limitation. Approval applies only to its exact URL and SRI and does not
 claim that the candidate source commit originated the publication.
 
-The operative root Apache-2.0 license grants the source license.
-`NPM-RELEASE-PENDING.md` and all four package `private: true` flags remain
-authoritative for npm publication; SBOM presence does not authorize publishing,
-staging, promotion, or a repository-visibility change.
+The operative root Apache-2.0 license grants the source license. TinyEdge policy
+authorizes the four publishable release manifests through the protected,
+main-only, stage-only npm workflow. An npm owner may technically retain an
+interactive 2FA publication capability, but that path is outside the approved
+procedure. SBOM presence does not independently authorize staging, public
+approval, promotion, or a repository-visibility change.

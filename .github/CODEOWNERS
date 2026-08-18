@@ -1,8 +1,9 @@
 # Default ownership for the public edge-client source.
 * @lienertdemaeyer
 
-# Release, dependency, and legal changes are especially sensitive. Repository
-# rules should also require approval from a reviewer other than the author.
+# Release, dependency, and legal changes are especially sensitive. Require a
+# pull request and x64/ARM64 checks; add independent review when another trusted
+# maintainer is available. A solo release requires explicit founder approval.
 /.github/workflows/ @lienertdemaeyer
 /packages/cli/package-lock.json @lienertdemaeyer
 /packages/cli/npm-shrinkwrap.json @lienertdemaeyer

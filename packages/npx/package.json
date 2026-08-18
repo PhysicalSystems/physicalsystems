@@ -1,7 +1,6 @@
 {
   "name": "tinyedge",
   "version": "0.1.2",
-  "private": true,
   "description": "Launch the secure TinyEdge physical-AI harness",
   "type": "module",
   "bin": {

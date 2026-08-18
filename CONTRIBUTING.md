@@ -16,8 +16,9 @@ and optimization-policy implementations are intentionally out of scope.
   payloads directly without a separately reviewed provenance update.
 - Keep the client Windows-only unless the change includes a native credential
   store, packaging support, and clean-machine evidence for another platform.
-- Do not remove `NPM-RELEASE-PENDING.md` or any package's `private: true` flag
-  as part of an ordinary contribution.
+- Do not add or change package publication permissions, trusted-publisher
+  identity, registry settings, release workflow authority, or release tags as
+  part of an ordinary contribution.
 
 ## Developer Certificate of Origin
 

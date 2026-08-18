@@ -48,25 +48,30 @@ Production deployment of the orchestration server, npm publication, and
 GitHub push are intentionally separate release actions. Building or testing
 this package must never perform any of them.
 
-## Source-license and npm-publication locks
+## Source-license and npm-publication approval
 
 The manual release workflow recognizes two independent repository locks and
-stops before its build job while either one exists. The source-license lock has
-now completed and is absent; the npm lock remains:
+stops before its build job while either one exists. Both approved cutovers are
+now complete and the files are absent:
 
 - `LICENSE-PENDING.md` protected the source-license decision. Its approved
   cutover removed it while installing the Apache-2.0 bundle for the three
   TinyEdge-authored packages and preserving MIT for the Pi runtime. The
   workflow retains its guard so an unresolved lock cannot be published.
-- `NPM-RELEASE-PENDING.md` protects package publication. The legal cutover must
-  retain it and `private: true` in all four npm packages. Remove this lock and
-  those four private flags only in the protected npm-release change after the
-  external controls below have current evidence.
+- `NPM-RELEASE-PENDING.md` protected package publication while the public repo,
+  namespace bootstrap, package ownership, staged-publisher identity, hosted
+  architecture evidence, and review controls were established. Its approved
+  cutover removed it and the four release-package `private` flags together.
+  The root workspace remains private.
 
-Source licensing therefore does not make an npm artifact buildable, stageable,
-or publishable by itself. Reintroducing the source lock beside the operative
-license, or removing the npm lock while source licensing is unresolved, is an
-invalid state rejected by executable checks.
+Publishable manifests do not make an npm artifact public by themselves. The
+workflow retains both guards so either lock can fail closed if reintroduced,
+and executable checks reject a lock/manifest mismatch. The protected, manual
+stage workflow is the only automated route authorized by TinyEdge policy; npm
+still requires separate 2FA approval before staged bytes become public. An npm
+owner technically retains interactive 2FA publication capability, but using it
+for the real candidate would bypass the approved evidence and review path and
+is prohibited by this release policy.
 
 ## One-time runtime package bootstrap
 
@@ -168,13 +173,15 @@ Before the first dispatch, configure external controls that cannot be stored in
 this repository:
 
 - Create a GitHub environment named `npm-release`, restrict deployments to
-  `main`, add required reviewers, and prevent self-review where available. Only
-  after independently verifying those controls, set the environment-scoped
+  `main`, and disable administrator bypass. For a solo-founder release, record
+  the founder's explicit authorization in the release issue or PR; when another
+  trusted maintainer is available, add required reviewers and prevent
+  self-review. After live-verifying those controls, set the environment-scoped
   variable `NPM_RELEASE_POLICY_VERSION` to `v1`. Never define that sentinel as
   an organization- or repository-level variable. GitHub expressions can fall
-  back to broader variables, so the reviewer must live-verify that no broader
-  variable exists and that the value is attached to the protected environment;
-  an unset value fails the staging preflight.
+  back to broader variables, so the release operator must verify that no
+  broader variable exists and that the value is attached to the protected
+  environment; an unset value fails the staging preflight.
 - In the same protected environment, set `PI_RUNTIME_BOOTSTRAP_INTEGRITY` and
   `PI_RUNTIME_BOOTSTRAP_SHASUM` to the independently reviewed public 0.0.0
   bootstrap artifact. The workflow requires an exact digest match, inert
@@ -201,8 +208,8 @@ npm reserves one name/version index across both staged and published packages.
 Consequently, each staging command fails instead of replacing an existing
 published or staged exact version (`0.84.2-tinyedge.1` for the runtime and
 `0.1.2` for the other packages). Trusted-publisher tokens cannot list or inspect
-other stages, so the environment reviewer must also inspect npm's **Staged
-Packages** view before authorizing the job. If a later package collides after an
+other stages, so the npm owner must also inspect npm's **Staged Packages** view
+before approving any stage. If a later package collides after an
 earlier one was newly staged, reject the new partial stage with 2FA before
 retrying; the workflow deliberately cannot remove or approve stages.
 

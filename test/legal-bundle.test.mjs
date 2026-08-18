@@ -130,18 +130,17 @@ test('approved NOTICE, runtime NOTICE, third-party notices, and trademark policy
   const bundle = await verifyOperativeLegalBundle({ root })
   assert.deepEqual(bundle, {
     sourceLicense: 'Apache-2.0',
-    npmPublicationLocked: true,
+    npmPublicationLocked: false,
     approvedMissingNamedLegalFileExceptions: 12,
     artifactContainedLegalFileRecords: 1,
     thirdPartyNoticesSha256: THIRD_PARTY_NOTICES_TEMPLATE.sha256,
   })
 })
 
-test('operative legal bundle drift fails closed while the npm publication lock remains', async (t) => {
+test('operative legal bundle validates both locked and approved npm publication states', async (t) => {
   const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'tinyedge-operative-legal-bundle-'))
   t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
   const fixtureFiles = [
-    'NPM-RELEASE-PENDING.md',
     'package.json',
     APACHE_2_TEMPLATE.path,
     NOTICE_TEMPLATE.path,
@@ -179,7 +178,41 @@ test('operative legal bundle drift fails closed while the npm publication lock r
     await copyFile(path.join(root, ...relativePath.split('/')), destination)
   }
 
-  await verifyOperativeLegalBundle({ root: fixtureRoot })
+  assert.equal((await verifyOperativeLegalBundle({ root: fixtureRoot })).npmPublicationLocked, false)
+
+  await writeFile(path.join(fixtureRoot, 'NPM-RELEASE-PENDING.md'), 'npm release pending\n', 'utf8')
+  await assert.rejects(
+    verifyOperativeLegalBundle({ root: fixtureRoot }),
+    /must remain private while npm publication is locked/,
+  )
+
+  const packageManifestPaths = [
+    'packages/cli/package.json',
+    'packages/npx/package.json',
+    'packages/pi/package.json',
+    'packages/pi-runtime/package.json',
+  ]
+  for (const relativePath of packageManifestPaths) {
+    const absolutePath = path.join(fixtureRoot, ...relativePath.split('/'))
+    const manifest = JSON.parse(await readFile(absolutePath, 'utf8'))
+    manifest.private = true
+    await writeFile(absolutePath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  }
+  assert.equal((await verifyOperativeLegalBundle({ root: fixtureRoot })).npmPublicationLocked, true)
+
+  await rm(path.join(fixtureRoot, 'NPM-RELEASE-PENDING.md'))
+  await assert.rejects(
+    verifyOperativeLegalBundle({ root: fixtureRoot }),
+    /must be publishable after npm publication approval/,
+  )
+  for (const relativePath of packageManifestPaths) {
+    const absolutePath = path.join(fixtureRoot, ...relativePath.split('/'))
+    const manifest = JSON.parse(await readFile(absolutePath, 'utf8'))
+    delete manifest.private
+    await writeFile(absolutePath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  }
+  assert.equal((await verifyOperativeLegalBundle({ root: fixtureRoot })).npmPublicationLocked, false)
+
   await writeFile(path.join(fixtureRoot, 'NOTICE'), 'drifted notice\n', 'utf8')
   await assert.rejects(
     verifyOperativeLegalBundle({ root: fixtureRoot }),
