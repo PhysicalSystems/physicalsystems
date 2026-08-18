@@ -12,8 +12,9 @@ The source is available under the licenses in this repository. TinyEdge-authored
 client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
 Version `0.1.2` is **not published to npm**. Its four package manifests are
 release-ready, but TinyEdge policy authorizes staging only from the manual,
-main-only GitHub workflow, a protected `npm-release` environment, independent
-review, and npm stage-only trusted publishing. An npm owner technically retains
+main-only GitHub workflow, a protected `npm-release` environment, required
+x64/ARM64 checks, and npm stage-only trusted publishing. The founder has
+explicitly authorized a solo release; an npm owner technically retains
 interactive 2FA publication capability; that path is outside the approved
 release procedure. No repository lifecycle script publishes.
 
@@ -102,7 +103,7 @@ or private support route.
 The package manifests are publishable so the protected release workflow can
 pack and stage exact artifacts. Direct npm-owner publication remains a platform
 capability but is forbidden by TinyEdge release policy. The approved route
-requires independent environment review, npm staged-package inspection and 2FA
+requires explicit founder authorization, npm staged-package inspection and 2FA
 approval, hosted Windows x64/ARM64 checks, and clean-user live canaries. The
 detailed fail-closed procedure is in
 [packages/cli/RELEASE.md](packages/cli/RELEASE.md).

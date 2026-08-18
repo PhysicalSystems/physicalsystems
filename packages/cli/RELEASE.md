@@ -173,13 +173,15 @@ Before the first dispatch, configure external controls that cannot be stored in
 this repository:
 
 - Create a GitHub environment named `npm-release`, restrict deployments to
-  `main`, add required reviewers, and prevent self-review where available. Only
-  after independently verifying those controls, set the environment-scoped
+  `main`, and disable administrator bypass. For a solo-founder release, record
+  the founder's explicit authorization in the release issue or PR; when another
+  trusted maintainer is available, add required reviewers and prevent
+  self-review. After live-verifying those controls, set the environment-scoped
   variable `NPM_RELEASE_POLICY_VERSION` to `v1`. Never define that sentinel as
   an organization- or repository-level variable. GitHub expressions can fall
-  back to broader variables, so the reviewer must live-verify that no broader
-  variable exists and that the value is attached to the protected environment;
-  an unset value fails the staging preflight.
+  back to broader variables, so the release operator must verify that no
+  broader variable exists and that the value is attached to the protected
+  environment; an unset value fails the staging preflight.
 - In the same protected environment, set `PI_RUNTIME_BOOTSTRAP_INTEGRITY` and
   `PI_RUNTIME_BOOTSTRAP_SHASUM` to the independently reviewed public 0.0.0
   bootstrap artifact. The workflow requires an exact digest match, inert
@@ -206,8 +208,8 @@ npm reserves one name/version index across both staged and published packages.
 Consequently, each staging command fails instead of replacing an existing
 published or staged exact version (`0.84.2-tinyedge.1` for the runtime and
 `0.1.2` for the other packages). Trusted-publisher tokens cannot list or inspect
-other stages, so the environment reviewer must also inspect npm's **Staged
-Packages** view before authorizing the job. If a later package collides after an
+other stages, so the npm owner must also inspect npm's **Staged Packages** view
+before approving any stage. If a later package collides after an
 earlier one was newly staged, reject the new partial stage with 2FA before
 retrying; the workflow deliberately cannot remove or approve stages.
 
