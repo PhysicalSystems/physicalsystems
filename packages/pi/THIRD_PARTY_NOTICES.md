@@ -2,7 +2,7 @@
 
 This file accompanies the TinyEdge edge-client workspace and each of its four
 candidate npm packages. It records the reviewed third-party material in the
-exact 0.1.3 / 0.84.2-tinyedge.1 dependency closure. It does not claim TinyEdge
+exact 0.1.2 / 0.84.2-tinyedge.1 dependency closure. It does not claim TinyEdge
 authorship of that material and does not change any third-party license.
 
 ## Reviewed closure and legal-file coverage

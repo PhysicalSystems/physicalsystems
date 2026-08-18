@@ -35,7 +35,7 @@ export const PI_RUNTIME_NOTICE_TEMPLATE = Object.freeze({
 
 export const THIRD_PARTY_NOTICES_TEMPLATE = Object.freeze({
   path: 'scripts/legal/templates/THIRD_PARTY_NOTICES.md',
-  sha256: '228d08065306ad2388f90520a0bb9bf5dd6198f1ffc5d4504446f2c6f4f960c3',
+  sha256: 'f568d72b2848fa304ade285e1f55cb5473659c579ea96ba0f5bbb9f80b904a65',
   status: 'approved-canonical-source',
 })
 
