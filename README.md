@@ -10,7 +10,7 @@ optimization intelligence.
 
 The source is available under the licenses in this repository. TinyEdge-authored
 client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
-Version `0.1.2` is published to npm under both `latest` and `preview`. Its exact
+Version `0.1.3` is published to npm under both `latest` and `preview`. Its exact
 artifacts passed the protected staged-release workflow, native Windows x64 and
 ARM64 verification, npm signature and provenance checks, and a clean public
 registry canary. On Windows with Node.js 22.19.0 or newer, launch the native
@@ -22,7 +22,7 @@ npx --yes tinyedge
 
 `npx` downloads and runs the command for that invocation; it does not install a
 persistent command. For a persistent command, use
-`npm install --global tinyedge@0.1.2`. The older `0.1.1` release remains public
+`npm install --global tinyedge@0.1.3`. The older `0.1.1` release remains public
 as historical registry evidence but is not the current Harness.
 
 ## Command ownership
@@ -96,7 +96,7 @@ or private support route.
 
 ## npm release gate
 
-The `0.1.2` packages were published through the protected, stage-only workflow
+The `0.1.3` packages were published through the protected, stage-only workflow
 after founder authorization, npm staged-package inspection and 2FA approval,
 hosted Windows x64/ARM64 checks, and clean-user live canaries. Direct npm-owner
 publication remains a platform capability but is forbidden by TinyEdge release

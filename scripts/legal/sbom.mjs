@@ -801,9 +801,9 @@ async function buildWorkspaceSbom({ root }) {
     componentsByRef.set(ref, component)
   }
 
-  const cliRef = npmPurl('@tinyedge/cli', '0.1.2')
-  const npxRef = npmPurl('tinyedge', '0.1.2')
-  const piRef = npmPurl('@tinyedge/pi', '0.1.2')
+  const cliRef = npmPurl('@tinyedge/cli', '0.1.3')
+  const npxRef = npmPurl('tinyedge', '0.1.3')
+  const piRef = npmPurl('@tinyedge/pi', '0.1.3')
   dependencies.push({ ref: npxRef, dependsOn: [cliRef] })
   dependencies.push({ ref: piRef, dependsOn: [cliRef] })
   const hostPeer = inventoryComponent({

@@ -12,6 +12,11 @@ matched to the build manifest, approved with 2FA in dependency order, and
 verified through a fresh public-registry Windows x64 canary. There is still no
 verified public `install.ps1` route.
 
+`0.1.3` reuses that already-published runtime. Pack all four artifacts for
+verification, match the packed runtime tarball to the live registry bytes, and
+stage only `@tinyedge/cli@0.1.3`, `@tinyedge/pi@0.1.3`, and `tinyedge@0.1.3`.
+Do not restage `@tinyedge/pi-runtime@0.84.2-tinyedge.1`.
+
 The checklist below remains the fail-closed policy for later releases. Do not
 remove the package-level Windows restriction or advertise a new installer or
 platform until each applicable item has evidence attached to its release PR.
@@ -19,7 +24,7 @@ platform until each applicable item has evidence attached to its release PR.
 - Add Linux Secret Service and macOS Keychain credential-store adapters. The
   CLI must continue to fail closed when a native store is unavailable.
 - Confirm npm publish access. The source-license cutover is complete: the three
-  TinyEdge-authored `0.1.2` manifests use the approved Apache-2.0 bundle, and
+  TinyEdge-authored `0.1.3` manifests use the approved Apache-2.0 bundle, and
   the compatibility runtime uses MIT with its exact upstream license,
   provenance, scoped notice, SBOM, and third-party notices. No staged manifest
   may be private or use `UNLICENSED`.
@@ -29,8 +34,8 @@ platform until each applicable item has evidence attached to its release PR.
   path is implemented. Do not describe GitHub artifact digests as npm
   provenance.
 - Configure the protected GitHub environment and npm trust relationships
-  described below; stage all four exact versions through OIDC and review them
-  before approval.
+  described below; pack all four exact versions, restage only unpublished
+  TinyEdge packages through OIDC, and review them before approval.
 - Install the packed/published compatibility runtime, facade, core, and
   existing-Pi artifacts on clean Windows x64 and arm64 environments. The clean
   dependency closure must omit the optional clipboard and Photon peers while
@@ -125,7 +130,7 @@ may recreate or replace the bootstrap package.
 `.github/workflows/npm-release.yml` is a manual, main-branch-only release
 workflow. It never invokes direct publication, never changes `latest`, and does
 not contain or consume a long-lived npm token. It performs the following fixed
-sequence for `0.1.2`:
+sequence for `0.1.3`:
 
 1. Pack `@tinyedge/pi-runtime@0.84.2-tinyedge.1`, the core, the existing-Pi
    add-on, and the facade exactly once on Windows x64, in that dependency order,
@@ -160,11 +165,13 @@ sequence for `0.1.2`:
    Local packing and pull-request x64/arm64 checks remain available while this
    manual release workflow stays blocked on unresolved publication policy.
 5. With npm `11.19.0`, first prove the no-code runtime bootstrap exists under
-   both `dist-tags.bootstrap` and the initial `dist-tags.latest`, then prove that
-   `dist-tags.preview` is absent and neither the real runtime candidate nor
-   any `0.1.2` package is publicly visible. Only then call
+   `dist-tags.bootstrap`, then prove that `dist-tags.latest` and
+   `dist-tags.preview` already resolve to the published
+   `@tinyedge/pi-runtime@0.84.2-tinyedge.1` artifact and that the packed runtime
+   tarball matches those live registry bytes. Prove that none of the `0.1.3`
+   packages is publicly visible. Do not restage the runtime. Only then call
    `npm stage publish --tag preview` in dependency order:
-   `@tinyedge/pi-runtime`, `@tinyedge/cli`, `@tinyedge/pi`, and finally
+   `@tinyedge/cli`, `@tinyedge/pi`, and finally
    `tinyedge`, always with explicit `--provenance` so attestation failure is
    fatal. Every registry read, bootstrap download, and stage command is pinned
    to `https://registry.npmjs.org/`, while every packed manifest must have
@@ -211,8 +218,8 @@ this repository:
 
 npm reserves one name/version index across both staged and published packages.
 Consequently, each staging command fails instead of replacing an existing
-published or staged exact version (`0.84.2-tinyedge.1` for the runtime and
-`0.1.2` for the other packages). Trusted-publisher tokens cannot list or inspect
+published or staged exact version (`0.84.2-tinyedge.1` for the already-published
+runtime and `0.1.3` for the other packages). Trusted-publisher tokens cannot list or inspect
 other stages, so the npm owner must also inspect npm's **Staged Packages** view
 before approving any stage. If a later package collides after an
 earlier one was newly staged, reject the new partial stage with 2FA before
@@ -222,9 +229,9 @@ After a successful workflow, use an authenticated maintainer session to run
 `npm stage list`, `npm stage view`, and `npm stage download` (or use the npmjs.com
 Staged Packages view). Compare the downloaded tarballs with the workflow
 manifest and complete the live canaries above. Approve and publicly verify with
-2FA strictly in dependency order: the exact runtime first, then the CLI, then
-the Pi add-on and facade. Do not approve a dependent package while its exact
-dependency is still staged.
+2FA strictly in dependency order: the CLI, then the Pi add-on, then the facade.
+The runtime is already public and must not be restaged. Do not approve a
+dependent package while its exact dependency is still staged.
 
 For `0.1.2`, the later promotion completed only after exact public artifacts
 passed registry metadata, signature, attestation, clean-install, Harness,

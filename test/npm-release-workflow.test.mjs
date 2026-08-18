@@ -378,7 +378,7 @@ test('staging fails closed on environment, provenance, and license policy', () =
   )
   const licenseGuard = workflow.indexOf('Refuse unresolved package licenses before staging', stageJob)
   const bootstrapGuard = workflow.indexOf(
-    'Require the runtime bootstrap and refuse published candidate versions',
+    'Require the runtime bootstrap, published runtime, and unpublished TinyEdge candidates',
     stageJob,
   )
   const firstStagePublish = workflow.indexOf('npm stage publish', stageJob)
@@ -413,9 +413,9 @@ test('staging fails closed on environment, provenance, and license policy', () =
   assert.match(workflow, /readFileSync\(path\.join\(sourceDirectory, legalFile\)\)/)
   for (const filename of [
     'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz',
-    'tinyedge-cli-0.1.2.tgz',
-    'tinyedge-pi-0.1.2.tgz',
-    'tinyedge-0.1.2.tgz',
+    'tinyedge-cli-0.1.3.tgz',
+    'tinyedge-pi-0.1.3.tgz',
+    'tinyedge-0.1.3.tgz',
   ]) {
     assert.match(workflow.slice(licenseGuard, firstStagePublish), new RegExp(filename.replaceAll('.', '\\.')))
   }
@@ -433,9 +433,9 @@ test('staging fails closed on environment, provenance, and license policy', () =
   assert.match(releaseGuide, /Local packing and pull-request x64\/arm64 checks remain available/)
 })
 
-test('a brand-new runtime requires a separate no-code bootstrap before staged publishing', () => {
+test('a published runtime is reused and only unpublished TinyEdge candidates are staged', () => {
   const bootstrapGuard = workflow.indexOf(
-    'Require the runtime bootstrap and refuse published candidate versions',
+    'Require the runtime bootstrap, published runtime, and unpublished TinyEdge candidates',
   )
   const packageExistence = workflow.indexOf(
     "npm view '@tinyedge/pi-runtime@0.0.0' name version license publishConfig",
@@ -445,24 +445,35 @@ test('a brand-new runtime requires a separate no-code bootstrap before staged pu
     "npm view '@tinyedge/pi-runtime' dist-tags --json",
     packageExistence,
   )
+  const publishedRuntime = workflow.indexOf(
+    'npm view "@tinyedge/pi-runtime@$PI_RUNTIME_VERSION" name version dist --json',
+    bootstrapTag,
+  )
   const candidateE404 = workflow.indexOf(
-    'check_unpublished \'@tinyedge/pi-runtime\' "$PI_RUNTIME_VERSION" pi-runtime',
+    'check_unpublished \'@tinyedge/cli\' "$RELEASE_VERSION" cli',
     bootstrapTag,
   )
   const runtimeStage = workflow.indexOf(
     'npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"',
+  )
+  const cliStage = workflow.indexOf(
+    'npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.3.tgz"',
     candidateE404,
   )
 
   assert.ok(bootstrapGuard >= 0)
   assert.ok(packageExistence > bootstrapGuard)
   assert.ok(bootstrapTag > packageExistence)
+  assert.ok(publishedRuntime > bootstrapTag)
   assert.ok(candidateE404 > bootstrapTag)
-  assert.ok(runtimeStage > candidateE404)
+  assert.equal(runtimeStage, -1)
+  assert.ok(cliStage > publishedRuntime)
   assert.match(workflow, /npm staged publishing cannot create a brand-new package/)
   assert.match(workflow, /tags\.bootstrap,\s*'0\.0\.0'/)
-  assert.match(workflow, /tags\.latest,\s*'0\.0\.0'/)
-  assert.match(workflow, /tags\.preview, undefined/)
+  assert.match(workflow, /tags\.latest,\s*process\.env\.PI_RUNTIME_VERSION/)
+  assert.match(workflow, /tags\.preview,\s*process\.env\.PI_RUNTIME_VERSION/)
+  assert.match(workflow, /packed runtime tarball must match the already-published registry artifact/)
+  assert.match(workflow, /this release reuses it and must not restage it/)
   assert.match(workflow, /PI_RUNTIME_BOOTSTRAP_INTEGRITY: \$\{\{ vars\.PI_RUNTIME_BOOTSTRAP_INTEGRITY \}\}/)
   assert.match(workflow, /PI_RUNTIME_BOOTSTRAP_SHASUM: \$\{\{ vars\.PI_RUNTIME_BOOTSTRAP_SHASUM \}\}/)
   assert.match(workflow, /metadata\.dist\?\.integrity, process\.env\.PI_RUNTIME_BOOTSTRAP_INTEGRITY/)
@@ -475,8 +486,8 @@ test('a brand-new runtime requires a separate no-code bootstrap before staged pu
   assert.match(workflow, /assertInertBootstrap\(packedManifest, 'downloaded tarball'\)/)
   assert.match(workflow, /\['LICENSE', 'README\.md', 'package\.json'\]/)
   assert.match(workflow, /bootstrap must not declare \$\{field\}/)
-  assert.match(workflow, /exact inert namespace bootstrap/)
-  assert.match(workflow, /this workflow never direct-publishes it/i)
+  assert.match(workflow, /namespace bootstrap must contain only its license/)
+  assert.match(workflow, /this workflow never direct-publishes the runtime/i)
   assert.match(workflow, /Automatic provenance applies to these staged candidate artifacts/)
 
   assert.match(releaseGuide, /cannot create a brand-new package/)
@@ -539,25 +550,27 @@ test('one Windows candidate is reused for x64, arm64, and ordered staging', () =
   assert.match(workflow, /run release:verify --/)
   assert.match(workflow, /runner: windows-latest/)
   assert.match(workflow, /runner: windows-11-arm/)
-  assert.match(workflow, /RELEASE_VERSION: 0\.1\.2/)
+  assert.match(workflow, /RELEASE_VERSION: 0\.1\.3/)
   assert.match(workflow, /PI_RUNTIME_VERSION: 0\.84\.2-tinyedge\.1/)
   assert.match(workflow, /node -p 'process\.arch'/)
   assert.match(workflow, /processArchitecture = \(node -p 'process\.arch'\)\.Trim\(\)/)
 
-  const runtime = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const cli = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const pi = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const facade = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  assert.ok(runtime >= 0)
-  assert.ok(runtime < cli)
+  const cli = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  const pi = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  const facade = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  assert.ok(cli >= 0)
   assert.ok(cli < pi)
   assert.ok(pi < facade)
+  assert.equal(
+    workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"'),
+    -1,
+  )
 
   const directPublish = /npm\s+publish(?:\s|$)/m
   assert.doesNotMatch(workflow, directPublish)
   assert.doesNotMatch(workflow, /--tag\s+latest/)
   const stageCommands = workflow.match(/^\s*npm stage publish[^\n]+/gm) || []
-  assert.equal(stageCommands.length, 4)
+  assert.equal(stageCommands.length, 3)
   for (const command of stageCommands) {
     assert.match(command, /npm stage publish "\.\/\$RELEASE_ARTIFACT_DIRECTORY\//)
     assert.doesNotMatch(command, /npm stage publish "\$RELEASE_ARTIFACT_DIRECTORY\//)
@@ -568,7 +581,7 @@ test('one Windows candidate is reused for x64, arm64, and ordered staging', () =
   }
   const liveVisibility = workflow.indexOf('Recheck live public GitHub visibility')
   assert.ok(liveVisibility >= 0)
-  assert.ok(liveVisibility < runtime)
+  assert.ok(liveVisibility < cli)
   assert.match(workflow, /repository\.private, false/)
   assert.match(workflow, /repository\.visibility, 'public'/)
   assert.match(workflow, /manifest-sha256: \$\{\{ steps\.candidate\.outputs\.manifest-sha256 \}\}/)
@@ -689,7 +702,7 @@ test('the clean export uses only the standalone repository identity', () => {
 })
 
 test('released documentation is truthful and the export boundary is executable', () => {
-  assert.match(rootReadme, /Version `0\.1\.2` is published to npm under both `latest` and `preview`/)
+  assert.match(rootReadme, /Version `0\.1\.3` is published to npm under both `latest` and `preview`/)
   assert.match(rootReadme, /npx --yes tinyedge/)
   assert.match(rootReadme, /does not install a[\s\S]{0,20}persistent command/)
   assert.match(rootReadme, /supported release and source-development targets are Windows x64 and native/)
@@ -714,26 +727,26 @@ test('released documentation is truthful and the export boundary is executable',
   assert.match(cliWorkflow, /node scripts\/check-export-boundary\.mjs/)
 })
 
-test('packed READMEs remain truthful when the exact 0.1.2 artifacts are public', () => {
+test('packed READMEs remain truthful when the exact 0.1.3 artifacts are public', () => {
   for (const readme of packedReadmes) {
     assert.match(readme, /0\.1\.1/)
     assert.doesNotMatch(
       readme,
-      /0\.1\.2[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+      /0\.1\.3[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
     )
     assert.doesNotMatch(
       readme,
-      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.2/i,
+      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.3/i,
     )
   }
-  assert.match(packedReadmes[0], /npx tinyedge@0\.1\.2/)
-  assert.match(packedReadmes[0], /npm view tinyedge@0\.1\.2 version --json/)
-  assert.match(packedReadmes[0], /npm install --global tinyedge@0\.1\.2/)
-  assert.match(packedReadmes[1], /npx tinyedge@0\.1\.2/)
-  assert.match(packedReadmes[1], /npm view tinyedge@0\.1\.2 version --json/)
-  assert.match(packedReadmes[1], /npm install --global tinyedge@0\.1\.2/)
-  assert.match(packedReadmes[2], /pi install npm:@tinyedge\/pi@0\.1\.2/)
-  assert.match(packedReadmes[2], /npm view @tinyedge\/pi@0\.1\.2 version --json/)
+  assert.match(packedReadmes[0], /npx tinyedge@0\.1\.3/)
+  assert.match(packedReadmes[0], /npm view tinyedge@0\.1\.3 version --json/)
+  assert.match(packedReadmes[0], /npm install --global tinyedge@0\.1\.3/)
+  assert.match(packedReadmes[1], /npx tinyedge@0\.1\.3/)
+  assert.match(packedReadmes[1], /npm view tinyedge@0\.1\.3 version --json/)
+  assert.match(packedReadmes[1], /npm install --global tinyedge@0\.1\.3/)
+  assert.match(packedReadmes[2], /pi install npm:@tinyedge\/pi@0\.1\.3/)
+  assert.match(packedReadmes[2], /npm view @tinyedge\/pi@0\.1\.3 version --json/)
 })
 
 test('pull-request CI covers release-workflow changes and its regression test', () => {

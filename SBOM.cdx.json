@@ -3731,10 +3731,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/%40tinyedge/cli@0.1.2",
+      "bom-ref": "pkg:npm/%40tinyedge/cli@0.1.3",
       "group": "@tinyedge",
       "name": "cli",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "licenses": [
         {
           "license": {
@@ -3742,7 +3742,7 @@
           }
         }
       ],
-      "purl": "pkg:npm/%40tinyedge/cli@0.1.2",
+      "purl": "pkg:npm/%40tinyedge/cli@0.1.3",
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
@@ -3758,7 +3758,7 @@
         },
         {
           "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "5301d5323451a5d58d8a6d97b8aeecc018f452c42ddd5ac53d9848cfcaea4128"
+          "value": "900c79f53e5e318691012a8875b8b5d0d57a8731737c7dd4c52f408b89114ee7"
         },
         {
           "name": "tinyedge:workspace:package-json-path",
@@ -3766,7 +3766,7 @@
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "e57aa38577e4799d17351b2446724ac8fb61adb735fd2945506d870761c6c4e2"
+          "value": "3452682d70a5881b2d2de9ccfd9404470c32c217acdc1844aaa1e652da861fe1"
         },
         {
           "name": "tinyedge:workspace:package-root",
@@ -3837,10 +3837,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/%40tinyedge/pi@0.1.2",
+      "bom-ref": "pkg:npm/%40tinyedge/pi@0.1.3",
       "group": "@tinyedge",
       "name": "pi",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "scope": "required",
       "licenses": [
         {
@@ -3849,7 +3849,7 @@
           }
         }
       ],
-      "purl": "pkg:npm/%40tinyedge/pi@0.1.2",
+      "purl": "pkg:npm/%40tinyedge/pi@0.1.3",
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
@@ -3865,7 +3865,7 @@
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "6f68aa8af32732fbc9a58181e11a411281083e0067c7d09b54e72dcfc8d1ae35"
+          "value": "bc29965d656c8753c96eeec2970bb9a3b3ff210107d21ee436c07d4f05838c4a"
         },
         {
           "name": "tinyedge:workspace:package-root",
@@ -7026,9 +7026,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/tinyedge@0.1.2",
+      "bom-ref": "pkg:npm/tinyedge@0.1.3",
       "name": "tinyedge",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "scope": "required",
       "licenses": [
         {
@@ -7037,7 +7037,7 @@
           }
         }
       ],
-      "purl": "pkg:npm/tinyedge@0.1.2",
+      "purl": "pkg:npm/tinyedge@0.1.3",
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
@@ -7053,7 +7053,7 @@
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "65367c5c89214c38e27dbd292ce8cd68d43fb87f8592457cbed8db6c17ad53ae"
+          "value": "a79a42f61e2987aa656814329a1fd48c52e471dcc46b314a085f4805b8bad101"
         },
         {
           "name": "tinyedge:workspace:package-root",
@@ -8121,7 +8121,7 @@
       ]
     },
     {
-      "ref": "pkg:npm/%40tinyedge/cli@0.1.2",
+      "ref": "pkg:npm/%40tinyedge/cli@0.1.3",
       "dependsOn": [
         "pkg:npm/%40earendil-works/pi-tui@0.84.2",
         "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
@@ -8158,9 +8158,9 @@
       ]
     },
     {
-      "ref": "pkg:npm/%40tinyedge/pi@0.1.2",
+      "ref": "pkg:npm/%40tinyedge/pi@0.1.3",
       "dependsOn": [
-        "pkg:npm/%40tinyedge/cli@0.1.2"
+        "pkg:npm/%40tinyedge/cli@0.1.3"
       ]
     },
     {
@@ -8520,16 +8520,16 @@
     {
       "ref": "pkg:npm/tinyedge-edge-workspace@0.0.0",
       "dependsOn": [
-        "pkg:npm/%40tinyedge/cli@0.1.2",
+        "pkg:npm/%40tinyedge/cli@0.1.3",
         "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
-        "pkg:npm/%40tinyedge/pi@0.1.2",
-        "pkg:npm/tinyedge@0.1.2"
+        "pkg:npm/%40tinyedge/pi@0.1.3",
+        "pkg:npm/tinyedge@0.1.3"
       ]
     },
     {
-      "ref": "pkg:npm/tinyedge@0.1.2",
+      "ref": "pkg:npm/tinyedge@0.1.3",
       "dependsOn": [
-        "pkg:npm/%40tinyedge/cli@0.1.2"
+        "pkg:npm/%40tinyedge/cli@0.1.3"
       ]
     },
     {

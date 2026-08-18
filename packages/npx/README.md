@@ -1,6 +1,6 @@
 # TinyEdge Harness
 
-`tinyedge@0.1.2` is the Windows preview facade for the native TinyEdge Harness.
+`tinyedge@0.1.3` is the Windows preview facade for the native TinyEdge Harness.
 It requires Node.js 22.19 or newer and delegates to the same exact version of
 `@tinyedge/cli`; the facade does not create a separate client or security
 boundary. The facade is the sole package that installs the `tinyedge` command;
@@ -8,16 +8,16 @@ the scoped core remains an importable library so npm cannot create competing
 command shims.
 
 Source-code availability is not registry evidence. Before using the commands
-below, require this exact lookup to return `"0.1.2"`:
+below, require this exact lookup to return `"0.1.3"`:
 
 ```powershell
-npm view tinyedge@0.1.2 version --json
+npm view tinyedge@0.1.3 version --json
 ```
 
 ## Run the exact version without a persistent command
 
 ```powershell
-npx tinyedge@0.1.2
+npx tinyedge@0.1.3
 ```
 
 `npx` may cache downloaded files, but this one-shot route does not install a
@@ -25,7 +25,7 @@ global `tinyedge` command. To make `tinyedge` available persistently in new
 terminals, install the exact facade globally:
 
 ```powershell
-npm install --global tinyedge@0.1.2
+npm install --global tinyedge@0.1.3
 tinyedge
 ```
 

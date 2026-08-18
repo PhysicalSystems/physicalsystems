@@ -24,3 +24,4 @@ export {
 } from './chat/pi-session.js'
 export { createPiCredentialStore } from './chat/pi-credential-store.js'
 export { createTinyEdgePiExtension } from './pi-extension.js'
+export { VERSION } from './version.js'

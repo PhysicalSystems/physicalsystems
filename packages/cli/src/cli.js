@@ -16,8 +16,7 @@ import {
   providerLoginCommand,
   providerLogoutCommand,
 } from './commands/provider.js'
-
-const VERSION = '0.1.2'
+import { VERSION } from './version.js'
 
 function help() {
   return `TinyEdge CLI ${VERSION}

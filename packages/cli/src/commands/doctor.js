@@ -1,6 +1,7 @@
 import { discoverOAuth } from '../auth/oauth.js'
 import { createAuthenticatedMcp } from '../auth/session.js'
 import { safeErrorMessage } from '../auth/redact.js'
+import { VERSION } from '../version.js'
 
 export function nodeVersionSupported(version = process.versions.node) {
   const [major, minor] = version.split('.').map(Number)
@@ -41,6 +42,7 @@ export async function doctorCommand({
     io.log(`${status === 'pass' ? '✓' : status === 'warn' ? '!' : '✗'} ${name}: ${detail}`)
   }
 
+  record('TinyEdge', 'pass', VERSION)
   record(
     'Node.js',
     nodeVersionSupported(nodeVersion) ? 'pass' : 'fail',
