@@ -240,7 +240,7 @@ export const TARGETS = Object.freeze({
     key: 'cli',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: 'bb28d35e2f949ec77d9cd11295ee13819e34b2676d7a481e20ddeb3073917d71',
+    shrinkwrapSha256: '5301d5323451a5d58d8a6d97b8aeecc018f452c42ddd5ac53d9848cfcaea4128',
     rootName: '@tinyedge/cli',
     rootVersion: '0.1.2',
     // Source and package-manifest approval are complete; public availability
