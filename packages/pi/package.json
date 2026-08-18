@@ -1,0 +1,49 @@
+{
+  "name": "@tinyedge/pi",
+  "version": "0.1.2",
+  "private": true,
+  "description": "TinyEdge orchestration tools for an existing Pi installation",
+  "type": "module",
+  "files": [
+    "extensions",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "SBOM.cdx.json"
+  ],
+  "keywords": ["pi-package", "tinyedge", "edge-ai", "benchmarking"],
+  "pi": {
+    "extensions": ["./extensions/tinyedge.js"]
+  },
+  "dependencies": {
+    "@tinyedge/cli": "0.1.2"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TinyEdgeAI/tinyedge-edge.git",
+    "directory": "packages/pi"
+  },
+  "homepage": "https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi#readme",
+  "bugs": {
+    "url": "https://github.com/TinyEdgeAI/tinyedge-edge/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0"
+}

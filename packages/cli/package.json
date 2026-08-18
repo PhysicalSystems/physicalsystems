@@ -1,0 +1,55 @@
+{
+  "name": "@tinyedge/cli",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Secure Pi-powered terminal client for TinyEdge orchestration",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./run": "./src/cli.js",
+    "./pi-extension": "./src/pi-extension.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "npm-shrinkwrap.json",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "SBOM.cdx.json"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/cli.js && node --check src/auth/oauth.js && node --check src/auth/secret-store.js && node --check src/mcp/client.js && node --check src/chat/pi-session.js && node --check src/pi-extension.js && node --check src/harness/header.js && node --check src/commands/harness.js && node --check src/commands/provider.js",
+    "check:pi-sdk": "node scripts/check-pi-sdk.js",
+    "bootstrap:pi-runtime": "node scripts/bootstrap-pi-runtime.js",
+    "check:release-packages": "node scripts/check-release-packages.js check",
+    "release:pack": "node scripts/check-release-packages.js pack",
+    "release:verify": "node scripts/check-release-packages.js verify",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "@earendil-works/pi-tui": "0.84.2",
+    "@tinyedge/pi-runtime": "0.84.2-tinyedge.1",
+    "proper-lockfile": "4.1.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TinyEdgeAI/tinyedge-edge.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/TinyEdgeAI/tinyedge-edge/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0"
+}

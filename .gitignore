@@ -1,0 +1,7 @@
+node_modules/
+release-artifacts/
+verification-evidence/
+*.tgz
+*.log
+.env
+.env.*

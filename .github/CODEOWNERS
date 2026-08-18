@@ -1,0 +1,14 @@
+# Default ownership for the public edge-client source.
+* @lienertdemaeyer
+
+# Release, dependency, and legal changes are especially sensitive. Repository
+# rules should also require approval from a reviewer other than the author.
+/.github/workflows/ @lienertdemaeyer
+/packages/cli/package-lock.json @lienertdemaeyer
+/packages/cli/npm-shrinkwrap.json @lienertdemaeyer
+/packages/pi-runtime/npm-shrinkwrap.json @lienertdemaeyer
+/scripts/legal/ @lienertdemaeyer
+/LICENSE @lienertdemaeyer
+/NOTICE @lienertdemaeyer
+/THIRD_PARTY_NOTICES.md @lienertdemaeyer
+/TRADEMARKS.md @lienertdemaeyer

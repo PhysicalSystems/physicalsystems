@@ -1,0 +1,18 @@
+{
+  "name": "@tinyedge/pi-runtime",
+  "version": "0.0.0",
+  "description": "Inert namespace bootstrap for the TinyEdge Pi compatibility runtime",
+  "license": "MIT",
+  "files": [
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TinyEdgeAI/tinyedge-edge.git",
+    "directory": "scripts/npm-bootstrap/pi-runtime-0.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

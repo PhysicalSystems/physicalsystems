@@ -1,0 +1,10 @@
+TinyEdge Pi Compatibility Runtime
+Copyright 2026 Lienert De Maeyer
+
+The copyright line above applies only to TinyEdge-authored compatibility
+packaging, provenance records, verification tooling, and documentation, which
+are provided under the accompanying MIT License.
+
+The retained Pi runtime payload remains Copyright (c) 2025 Mario Zechner and
+is provided under the accompanying MIT License. See UPSTREAM.md for the exact
+upstream artifact and source binding.

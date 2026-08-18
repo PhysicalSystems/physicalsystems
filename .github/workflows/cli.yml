@@ -1,0 +1,54 @@
+name: TinyEdge CLI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # The preview is Windows-only because credentials are protected with DPAPI.
+    # Running on Windows also exercises the real encryption round-trip test.
+    name: test (${{ matrix.architecture }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x64
+            runner: windows-latest
+          - architecture: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22.19.0
+          architecture: ${{ matrix.architecture }}
+          cache: npm
+          cache-dependency-path: |
+            packages/cli/package-lock.json
+            packages/cli/npm-shrinkwrap.json
+            packages/pi-runtime/npm-shrinkwrap.json
+      - run: node -e "if (process.arch !== '${{ matrix.architecture }}') throw new Error('Expected ${{ matrix.architecture }}, received ' + process.arch)"
+      - run: node scripts/check-export-boundary.mjs
+      - name: Pin the reviewed npm release runtime
+        shell: pwsh
+        run: |
+          npm install --global "npm@11.19.0"
+          if ((npm --version) -ne '11.19.0') { throw 'Expected npm 11.19.0' }
+      - name: Bootstrap the local Pi runtime and install the CLI offline
+        shell: pwsh
+        run: |
+          $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
+          npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
+      - run: npm run check:legal
+      - run: npm --prefix packages/cli run check:pi-sdk
+      - run: npm --prefix packages/cli run check
+      - run: npm --prefix packages/cli test
+      - run: node --test test/npm-release-workflow.test.mjs
+      - run: npm --prefix packages/cli run check:release-packages

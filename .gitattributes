@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.node binary
+*.wasm binary
+
+# These paths are byte-for-byte, hash-verified upstream Pi payload. Preserve
+# their original whitespace; the runtime verifier enforces the exact tree.
+packages/pi-runtime/CHANGELOG.md -whitespace
+packages/pi-runtime/UPSTREAM_README.md -whitespace
+packages/pi-runtime/dist/** -whitespace
+packages/pi-runtime/docs/** -whitespace

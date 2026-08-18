@@ -1,0 +1,40 @@
+{
+  "name": "tinyedge",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Launch the secure TinyEdge physical-AI harness",
+  "type": "module",
+  "bin": {
+    "tinyedge": "bin/tinyedge.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "SBOM.cdx.json"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "dependencies": {
+    "@tinyedge/cli": "0.1.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TinyEdgeAI/tinyedge-edge.git",
+    "directory": "packages/npx"
+  },
+  "homepage": "https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/npx#readme",
+  "bugs": {
+    "url": "https://github.com/TinyEdgeAI/tinyedge-edge/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0"
+}

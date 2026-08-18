@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "exportKind": "public-clean-root-snapshot",
+  "review": {
+    "privateSourceEvidence": "retained outside the public repository",
+    "historyPolicy": "one parentless public root commit; no private branches, tags, pull requests, or commit history"
+  },
+  "destination": {
+    "repository": "https://github.com/TinyEdgeAI/tinyedge-edge.git",
+    "status": "public-canonical"
+  },
+  "candidatePayload": {
+    "fileCount": 946,
+    "sha256": "749ca98c923081337730608ca16bba85f724273b6495182a281c5310b6bbed2f",
+    "canonicalization": "Exclude .git, every node_modules directory, release-artifacts, verification-evidence, and EXPORT-PROVENANCE.json; sort paths ordinally after replacing backslashes with forward slashes; normalize CRLF or CR to LF for text files without NUL bytes and leave binary bytes unchanged; concatenate lowercase SHA-256, two spaces, path, and LF for each file; SHA-256 the UTF-8 byte sequence."
+  },
+  "boundary": {
+    "included": "npm facade, CLI, Pi extension, audited Pi compatibility runtime, public contracts, tests, legal evidence, and release automation",
+    "excluded": "hosted control plane, scheduler, billing, fleet data, optimizer policy, production operations, credentials, customer data, and private source history"
+  }
+}
