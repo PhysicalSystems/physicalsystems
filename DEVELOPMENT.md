@@ -1,8 +1,8 @@
 # Run TinyEdge from source
 
-This workflow runs the reviewed client directly from the public source while
-version `0.1.2` remains unpublished. It does not change npm's `latest` or
-`preview` tags and does not demonstrate public npm availability.
+This workflow runs the reviewed client directly from the public source as an
+alternative to the published npm release. It does not change npm's `latest` or
+`preview` tags and does not replace a public-registry release canary.
 
 ## Requirements
 
@@ -24,8 +24,8 @@ npm run doctor
 
 The pinned bootstrap packs the local audited Pi compatibility runtime twice,
 verifies byte identity against the CLI lock, seeds an isolated npm cache, and
-installs the CLI without resolving the unpublished runtime from the registry.
-It does not stage or publish any package.
+installs the CLI from the checked-out runtime instead of consuming registry
+runtime bytes. It does not stage or publish any package.
 
 `doctor` should confirm Node.js, Windows DPAPI, OAuth discovery, and MCP
 discovery. An absent TinyEdge login is a warning during this first check.
@@ -47,16 +47,16 @@ node packages/cli/src/cli.js
 ```
 
 The npm client owns the `tinyedge` command; Python benchmark tooling uses
-`tinydevice`. For a published npm release, prefer `npx tinyedge` to avoid
-ambiguity with an unrelated executable on `PATH`. To inspect every PowerShell
-match, run:
+`tinydevice`. For the published npm release, prefer `npx --yes tinyedge` to
+avoid ambiguity with an unrelated executable on `PATH`. To inspect every
+PowerShell match, run:
 
 ```powershell
 Get-Command -All tinyedge
 ```
 
-Because `0.1.2` is not published yet, `npm start` is the current source launch
-route.
+Use `npm start` when you intend to run the checked-out source. Use
+`npx --yes tinyedge` when you intend to run the current public npm release.
 
 Do not copy credentials into an issue, terminal transcript, or chat. Windows
 secrets are stored inside the current user's DPAPI boundary.
@@ -64,7 +64,7 @@ secrets are stored inside the current user's DPAPI boundary.
 ## What this proves
 
 This proves that the reviewed source can install and launch on that computer.
-It does not prove public npm availability, a global command installation,
-production OAuth completion, provider quota, workload execution, or Windows
-support beyond the machine actually tested. Record release evidence separately
-before publishing or promoting an npm package.
+It does not by itself prove the current public npm bytes, a global command
+installation, production OAuth completion, provider quota, workload execution,
+or Windows support beyond the machine actually tested. Record source and
+release evidence separately.

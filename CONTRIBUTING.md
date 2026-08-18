@@ -45,8 +45,9 @@ npx --yes npm@11.19.0 run check:release-packages
 git diff --check
 ```
 
-The bootstrap installs the unpublished compatibility runtime from the local
-reviewed source. It does not publish or stage a package.
+The bootstrap installs the reviewed compatibility runtime from local source
+without consuming the published registry bytes. It does not publish or stage a
+package.
 
 ## Pull request expectations
 

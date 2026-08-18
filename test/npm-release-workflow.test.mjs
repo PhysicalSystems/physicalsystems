@@ -488,7 +488,7 @@ test('a brand-new runtime requires a separate no-code bootstrap before staged pu
   assert.match(releaseGuide, /unauthenticated clean environment/)
   assert.match(releaseGuide, /publish it interactively with 2FA under the `bootstrap` tag/)
   assert.match(releaseGuide, /both `bootstrap` and `latest` to resolve only to these exact inert/)
-  assert.match(releaseGuide, /separate, one-time release action and requires explicit\s+human approval/)
+  assert.match(releaseGuide, /inert bootstrap below was completed before the first audited runtime stage/)
   assert.match(releaseGuide, /does not receive this workflow's automatic provenance/)
   assert.match(releaseGuide, /Automatic\s+provenance applies later to the real staged candidate built from the public/)
 })
@@ -523,8 +523,10 @@ test('the reviewed runtime namespace bootstrap is inert and reproducible from so
   )
   assert.match(runtimeBootstrapRegistryErratum, /immutable `0\.0\.0` tarball's README/)
   assert.match(runtimeBootstrapRegistryErratum, /`bootstrap` resolves to `0\.0\.0`/)
-  assert.match(runtimeBootstrapRegistryErratum, /`latest` resolves to the same exact inert `0\.0\.0` bytes/)
-  assert.match(runtimeBootstrapRegistryErratum, /`preview` is absent/)
+  assert.match(runtimeBootstrapRegistryErratum, /`latest` resolved to the same exact inert `0\.0\.0` bytes/)
+  assert.match(runtimeBootstrapRegistryErratum, /`preview` was absent/)
+  assert.match(runtimeBootstrapRegistryErratum, /`bootstrap` remains pinned to the inert `0\.0\.0` artifact/)
+  assert.match(runtimeBootstrapRegistryErratum, /`preview` and `latest` both resolve to the audited/)
   assert.match(
     runtimeBootstrapRegistryErratum,
     /sha512-uYd5UDXq76shmjwrszLmxzKXm163VHl8yHEzrAEaDjXD1QrrHtlRKh2T\+CbrDXWgS0Q\/HpUYgKkA5zrkUcG3Hg==/,
@@ -686,15 +688,18 @@ test('the clean export uses only the standalone repository identity', () => {
   assert.doesNotMatch(JSON.stringify(provenance), /branchAtExport|sourceCommitTimestamp|gitObject/)
 })
 
-test('candidate documentation is truthful and the export boundary is executable', () => {
-  assert.match(rootReadme, /Version `0\.1\.2` is \*\*not published to npm\*\*/)
-  assert.match(rootReadme, /supported source-development targets are Windows x64 and native Windows/)
+test('released documentation is truthful and the export boundary is executable', () => {
+  assert.match(rootReadme, /Version `0\.1\.2` is published to npm under both `latest` and `preview`/)
+  assert.match(rootReadme, /npx --yes tinyedge/)
+  assert.match(rootReadme, /does not install a[\s\S]{0,20}persistent command/)
+  assert.match(rootReadme, /supported release and source-development targets are Windows x64 and native/)
   assert.match(rootReadme, /does not contain the TinyEdge hosted control/)
   assert.match(rootReadme, /DEVELOPMENT\.md/)
   assert.match(rootReadme, /source is available under the licenses in this repository/i)
-  assert.match(rootReadme, /four package manifests are[\s\S]{0,80}release-ready/i)
-  assert.match(rootReadme, /TinyEdge policy authorizes staging[\s\S]{0,180}stage-only trusted publishing/i)
-  assert.match(rootReadme, /npm owner technically retains[\s\S]{0,160}outside the approved[\s\S]{0,30}release procedure/i)
+  assert.match(rootReadme, /published through the protected, stage-only workflow/i)
+  assert.match(releaseGuide, /Released state on 2026-08-18/)
+  assert.match(releaseGuide, /restore exposure in reverse order/)
+  assert.match(runtimeBootstrapRegistryErratum, /`bootstrap` remains pinned[\s\S]{0,160}`preview` and `latest` both resolve/)
   assert.match(dependencyGuide, /TinyEdge policy[\s\S]{0,100}publishable release manifests[\s\S]{0,120}stage-only npm workflow/i)
   assert.match(dependencyGuide, /npm owner may technically retain[\s\S]{0,160}outside the approved[\s\S]{0,30}procedure/i)
   assert.doesNotMatch(dependencyGuide, /NPM-RELEASE-PENDING\.md[\s\S]{0,100}private:\s*true/i)
