@@ -183,7 +183,7 @@ test('Windows DPAPI adapter never passes plaintext secrets on the process comman
   t.after(() => rm(configDir, { recursive: true, force: true }))
   const calls = []
   const run = async (_executable, args, options) => {
-    calls.push({ args, input: options.input })
+    calls.push({ args, input: options.input, timeout: options.timeout })
     return { stdout: options.input }
   }
   const secrets = createWindowsDpapiSecretStore({ configDir, run })
@@ -191,14 +191,15 @@ test('Windows DPAPI adapter never passes plaintext secrets on the process comman
   assert.equal(await secrets.read('oauth'), 'access-secret')
   assert.equal(calls.some(({ args }) => args.join(' ').includes('access-secret')), false)
   assert.equal(calls.every(({ input }) => !String(input).includes('access-secret')), true)
+  assert.deepEqual(calls.map(({ timeout }) => timeout), [30_000, 30_000])
 })
 
 test('Windows DPAPI integration closes child stdin and round-trips an encrypted secret', {
   skip: process.platform !== 'win32',
-  // The round trip starts two independently bounded 10-second PowerShell
-  // processes. Cold hosted runners can take longer than 10 seconds in total
-  // even though neither child exceeds its production timeout.
-  timeout: 30_000,
+  // The round trip starts two independently bounded 30-second PowerShell
+  // processes. Keep the aggregate test budget above both production bounds so
+  // a cold runner can still prove the complete write/read path.
+  timeout: 70_000,
 }, async (t) => {
   const configDir = await mkdtemp(path.join(tmpdir(), 'tinyedge-dpapi-integration-'))
   t.after(() => rm(configDir, { recursive: true, force: true }))
