@@ -450,7 +450,7 @@ test('a brand-new runtime requires a separate no-code bootstrap before staged pu
     bootstrapTag,
   )
   const runtimeStage = workflow.indexOf(
-    'npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"',
+    'npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"',
     candidateE404,
   )
 
@@ -542,10 +542,10 @@ test('one Windows candidate is reused for x64, arm64, and ordered staging', () =
   assert.match(workflow, /node -p 'process\.arch'/)
   assert.match(workflow, /processArchitecture = \(node -p 'process\.arch'\)\.Trim\(\)/)
 
-  const runtime = workflow.indexOf('npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const cli = workflow.indexOf('npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const pi = workflow.indexOf('npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const facade = workflow.indexOf('npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  const runtime = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  const cli = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  const pi = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  const facade = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
   assert.ok(runtime >= 0)
   assert.ok(runtime < cli)
   assert.ok(cli < pi)
@@ -557,6 +557,8 @@ test('one Windows candidate is reused for x64, arm64, and ordered staging', () =
   const stageCommands = workflow.match(/^\s*npm stage publish[^\n]+/gm) || []
   assert.equal(stageCommands.length, 4)
   for (const command of stageCommands) {
+    assert.match(command, /npm stage publish "\.\/\$RELEASE_ARTIFACT_DIRECTORY\//)
+    assert.doesNotMatch(command, /npm stage publish "\$RELEASE_ARTIFACT_DIRECTORY\//)
     assert.match(
       command,
       /--registry="\$NPM_REGISTRY" --provenance --tag preview --access public/,

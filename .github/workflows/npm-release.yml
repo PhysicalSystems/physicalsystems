@@ -685,25 +685,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+          npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
             | tee stage-evidence/pi-runtime-stage.log
       - name: Stage @tinyedge/cli@0.1.2 under preview
         shell: bash
         run: |
           set -euo pipefail
-          npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+          npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
             | tee stage-evidence/cli-stage.log
       - name: Stage @tinyedge/pi@0.1.2 under preview
         shell: bash
         run: |
           set -euo pipefail
-          npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+          npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
             | tee stage-evidence/pi-stage.log
       - name: Stage tinyedge@0.1.2 under preview
         shell: bash
         run: |
           set -euo pipefail
-          npm stage publish "$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+          npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
             | tee stage-evidence/facade-stage.log
       - name: Record staging evidence and the human approval boundary
         if: always()
