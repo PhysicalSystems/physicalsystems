@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { TINYEDGE_CHAT_TOOL_ALLOWLIST } from '../src/chat/pi-session.js'
 import { harnessCommand } from '../src/commands/harness.js'
+import { createTinyEdgeInteractiveMode } from '../src/harness/interactive-mode.js'
 
 function fakeSdk({ extensionErrors = [], disposeError, onModelRuntimeCreate } = {}) {
   const calls = {}
@@ -211,4 +212,53 @@ test('native Harness preserves the run failure if cleanup also fails', async () 
     }),
   }), (error) => error === runError)
   assert.equal(calls.disposed, true)
+})
+
+test('Harness interactive mode hides Pi changelog, offline tool warnings, and extension inventory', () => {
+  class InteractiveMode {
+    getChangelogForDisplay() { return 'pi notes' }
+    handleChangelogCommand() { this.changelogShown = true }
+    showStatus(message) { this.status = message }
+    showManagedToolStatus(status) { this.toolStatus = status }
+    showLoadedResources(options) { this.resources = options }
+  }
+  const mode = new (createTinyEdgeInteractiveMode(InteractiveMode))()
+  assert.equal(mode.getChangelogForDisplay(), undefined)
+  mode.handleChangelogCommand()
+  assert.equal(mode.changelogShown, undefined)
+  assert.match(mode.status, /tinyedge\.ai\/docs/)
+  mode.showManagedToolStatus({
+    type: 'warning',
+    message: 'ripgrep not found. Offline mode enabled, skipping download.',
+  })
+  assert.equal(mode.toolStatus, undefined)
+  mode.showManagedToolStatus({ type: 'info', message: 'ready' })
+  assert.equal(mode.toolStatus.message, 'ready')
+  mode.showLoadedResources({ force: true })
+  assert.deepEqual(mode.resources, { force: true, extensions: [] })
+})
+
+test('native Harness uses the TinyEdge interactive mode wrapper by default', async () => {
+  const { sdk } = fakeSdk()
+  let constructed
+  sdk.InteractiveMode = class {
+    constructor(runtime, options) {
+      constructed = {
+        runtime,
+        options,
+        changelog: this.getChangelogForDisplay(),
+      }
+    }
+    getChangelogForDisplay() { return 'pi notes' }
+    async run() {}
+  }
+  await harnessCommand({
+    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+    tokenStore: { async summary() { return { connected: false } } },
+    sdk,
+    cwd: 'C:\\work',
+    createExtension: () => () => {},
+  })
+  assert.equal(constructed.changelog, undefined)
+  assert.equal(constructed.options.verbose, false)
 })

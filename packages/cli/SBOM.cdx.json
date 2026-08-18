@@ -5,10 +5,10 @@
   "metadata": {
     "component": {
       "type": "library",
-      "bom-ref": "pkg:npm/%40tinyedge/cli@0.1.2",
+      "bom-ref": "pkg:npm/%40tinyedge/cli@0.1.3",
       "group": "@tinyedge",
       "name": "cli",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "licenses": [
         {
           "license": {
@@ -16,7 +16,7 @@
           }
         }
       ],
-      "purl": "pkg:npm/%40tinyedge/cli@0.1.2",
+      "purl": "pkg:npm/%40tinyedge/cli@0.1.3",
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
@@ -32,7 +32,7 @@
         },
         {
           "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "5301d5323451a5d58d8a6d97b8aeecc018f452c42ddd5ac53d9848cfcaea4128"
+          "value": "900c79f53e5e318691012a8875b8b5d0d57a8731737c7dd4c52f408b89114ee7"
         }
       ]
     },
@@ -7925,7 +7925,7 @@
       ]
     },
     {
-      "ref": "pkg:npm/%40tinyedge/cli@0.1.2",
+      "ref": "pkg:npm/%40tinyedge/cli@0.1.3",
       "dependsOn": [
         "pkg:npm/%40earendil-works/pi-tui@0.84.2",
         "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",

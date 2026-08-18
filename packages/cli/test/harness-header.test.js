@@ -4,6 +4,7 @@ import test from 'node:test'
 import { visibleWidth } from '@earendil-works/pi-tui'
 
 import { createHarnessHeader, summarizeDeviceInventory } from '../src/harness/header.js'
+import { VERSION } from '../src/version.js'
 
 test('device inventory groups pairing records into concise product families', () => {
   const groups = summarizeDeviceInventory({
@@ -47,6 +48,7 @@ test('Harness header renders TinyEdge identity and honest device totals', () => 
     }),
   })(null, { fg: (_style, value) => value })
   const lines = component.render(90)
+  assert.match(lines.join('\n'), new RegExp(`TinyEdge v${VERSION.replaceAll('.', '\\.')}`))
   assert.match(lines.join('\n'), /TinyEdge account connected/)
   assert.match(lines.join('\n'), /Device family\s+Available\s+Paired/)
   assert.match(lines.join('\n'), /NVIDIA Jetson\s+1\+\?\s+2/)
@@ -65,6 +67,7 @@ test('Harness header never renders wider than a narrow terminal', () => {
   for (const width of [0, 1, 8, 16, 23]) {
     assert.ok(component.render(width).every((line) => visibleWidth(line) <= width))
   }
+  assert.match(component.render(24).join('\n'), new RegExp(`TinyEdge v${VERSION.replaceAll('.', '\\.')}`))
 })
 
 test('compact Harness table keeps family counts visible', () => {

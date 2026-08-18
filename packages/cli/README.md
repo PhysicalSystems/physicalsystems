@@ -5,20 +5,20 @@ orchestration boundary. This scoped core is an importable library; the
 `tinyedge` facade is the sole owner of the user-facing command shim.
 
 Source-code availability is not registry evidence. Before using the commands
-below, require `npm view tinyedge@0.1.2 version --json` to return
-`"0.1.2"`.
+below, require `npm view tinyedge@0.1.3 version --json` to return
+`"0.1.3"`.
 
-Run the exact `0.1.2` facade without installing a persistent command:
+Run the exact `0.1.3` facade without installing a persistent command:
 
 ```powershell
-npx tinyedge@0.1.2
+npx tinyedge@0.1.3
 ```
 
 `npx` may cache package files, but it does not add a global `tinyedge` command.
 For a persistent command in new terminals, install the exact facade globally:
 
 ```powershell
-npm install --global tinyedge@0.1.2
+npm install --global tinyedge@0.1.3
 tinyedge
 ```
 

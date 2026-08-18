@@ -1,6 +1,6 @@
 {
   "name": "@tinyedge/pi",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "TinyEdge orchestration tools for an existing Pi installation",
   "type": "module",
   "files": [
@@ -16,7 +16,7 @@
     "extensions": ["./extensions/tinyedge.js"]
   },
   "dependencies": {
-    "@tinyedge/cli": "0.1.2"
+    "@tinyedge/cli": "0.1.3"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "0.84.2"

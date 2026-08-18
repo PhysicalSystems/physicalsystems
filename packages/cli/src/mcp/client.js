@@ -1,6 +1,7 @@
 import { redactSecrets, safeErrorMessage } from '../auth/redact.js'
 import { isLoopbackUrl } from '../config.js'
 import { DEFAULT_REQUEST_TIMEOUT_MS, fetchWithTimeout } from '../net/fetch.js'
+import { VERSION } from '../version.js'
 
 export const MCP_PROTOCOL_VERSION = '2025-11-25'
 export const SUPPORTED_MCP_PROTOCOL_VERSIONS = Object.freeze([MCP_PROTOCOL_VERSION])
@@ -51,7 +52,7 @@ export class RemoteMcpClient {
     getAccessToken,
     onUnauthorized,
     fetchImpl = fetch,
-    clientInfo = { name: '@tinyedge/cli', version: '0.1.2' },
+    clientInfo = { name: '@tinyedge/cli', version: VERSION },
     allowedTools,
     requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   }) {

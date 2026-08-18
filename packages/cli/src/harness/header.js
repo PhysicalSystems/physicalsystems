@@ -1,5 +1,7 @@
 import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui'
 
+import { VERSION, versionLabel } from '../version.js'
+
 function toolPayload(value) {
   if (value?.structuredContent && typeof value.structuredContent === 'object') {
     return value.structuredContent
@@ -120,12 +122,14 @@ function deviceRows(groups, width) {
   return rows
 }
 
-export function createHarnessHeader({ getState }) {
+export function createHarnessHeader({ getState, version = VERSION } = {}) {
+  const label = version === VERSION ? versionLabel : `TinyEdge v${version}`
   return (_tui, theme) => ({
     render(width) {
       const state = getState()
       const availableWidth = Math.max(0, width)
-      const logo = availableWidth >= 52 ? LOGO : ['TinyEdge Harness']
+      const wide = availableWidth >= 52
+      const logo = wide ? LOGO : [label]
       const connection = state.connected
         ? 'TinyEdge account connected'
         : state.connecting
@@ -136,6 +140,7 @@ export function createHarnessHeader({ getState }) {
         : 'Choose a model provider with /login'
       return [
         ...logo.map((line) => theme.fg('accent', fit(line, availableWidth))),
+        ...(wide ? [theme.fg('muted', fit(label, availableWidth))] : []),
         theme.fg('muted', fit(`${connection} · ${provider}`, availableWidth)),
         '',
         ...deviceRows(state.deviceGroups || [], availableWidth)

@@ -240,9 +240,9 @@ export const TARGETS = Object.freeze({
     key: 'cli',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: '5301d5323451a5d58d8a6d97b8aeecc018f452c42ddd5ac53d9848cfcaea4128',
+    shrinkwrapSha256: '900c79f53e5e318691012a8875b8b5d0d57a8731737c7dd4c52f408b89114ee7',
     rootName: '@tinyedge/cli',
-    rootVersion: '0.1.2',
+    rootVersion: '0.1.3',
     // Source and package-manifest approval are complete; public availability
     // remains gated by the protected stage-only release workflow and npm 2FA.
     rootLicense: 'Apache-2.0',
@@ -257,18 +257,18 @@ export const WRAPPER_TARGETS = Object.freeze({
     packageJsonPath: 'packages/npx/package.json',
     outputPath: 'packages/npx/SBOM.cdx.json',
     rootName: 'tinyedge',
-    rootVersion: '0.1.2',
+    rootVersion: '0.1.3',
     rootLicense: 'Apache-2.0',
-    cliVersion: '0.1.2',
+    cliVersion: '0.1.3',
   }),
   pi: Object.freeze({
     key: 'pi',
     packageJsonPath: 'packages/pi/package.json',
     outputPath: 'packages/pi/SBOM.cdx.json',
     rootName: '@tinyedge/pi',
-    rootVersion: '0.1.2',
+    rootVersion: '0.1.3',
     rootLicense: 'Apache-2.0',
-    cliVersion: '0.1.2',
+    cliVersion: '0.1.3',
     excludedOptionalPeer: EXCLUDED_PI_HOST_PEER,
   }),
 })
@@ -281,9 +281,9 @@ export const WORKSPACE_TARGET = Object.freeze({
   rootVersion: '0.0.0',
   rootLicense: 'Apache-2.0',
   packageRoots: Object.freeze([
-    Object.freeze({ name: 'tinyedge', version: '0.1.2', license: 'Apache-2.0', packageJsonPath: 'packages/npx/package.json' }),
-    Object.freeze({ name: '@tinyedge/pi', version: '0.1.2', license: 'Apache-2.0', packageJsonPath: 'packages/pi/package.json' }),
-    Object.freeze({ name: '@tinyedge/cli', version: '0.1.2', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
+    Object.freeze({ name: 'tinyedge', version: '0.1.3', license: 'Apache-2.0', packageJsonPath: 'packages/npx/package.json' }),
+    Object.freeze({ name: '@tinyedge/pi', version: '0.1.3', license: 'Apache-2.0', packageJsonPath: 'packages/pi/package.json' }),
+    Object.freeze({ name: '@tinyedge/cli', version: '0.1.3', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
     Object.freeze({ name: '@tinyedge/pi-runtime', version: '0.84.2-tinyedge.1', license: 'MIT', packageJsonPath: 'packages/pi-runtime/package.json' }),
   ]),
 })

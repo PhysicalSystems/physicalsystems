@@ -7,6 +7,7 @@ import {
   tinyEdgeSystemPrompt,
 } from '../chat/pi-session.js'
 import { READ_SCOPE } from '../config.js'
+import { createHarnessMode } from '../harness/interactive-mode.js'
 import { createTinyEdgePiExtension } from '../pi-extension.js'
 
 function extensionLoadErrors(services) {
@@ -119,7 +120,7 @@ async function runHarnessCommand({
     agentDir,
     sessionManager,
   })
-  const Mode = createMode || ((runtimeHost, options) => new sdk.InteractiveMode(runtimeHost, options))
+  const Mode = createMode || ((runtimeHost, options) => createHarnessMode(sdk, runtimeHost, options))
   let mode
   let runCompleted = false
   let primaryFailure

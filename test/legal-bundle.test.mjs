@@ -79,7 +79,7 @@ test('reviewed shrinkwrap graphs produce deterministic CycloneDX 1.6 output offl
     assert.equal(firstBom.dependencies.length, firstBom.components.length + 1)
     if (WRAPPER_TARGETS[target]) {
       const rootEdges = firstBom.dependencies.find(({ ref }) => ref === firstBom.metadata.component['bom-ref']).dependsOn
-      assert.deepEqual(rootEdges, ['pkg:npm/%40tinyedge/cli@0.1.2'])
+      assert.deepEqual(rootEdges, ['pkg:npm/%40tinyedge/cli@0.1.3'])
     }
   }
 })
@@ -95,9 +95,9 @@ test('workspace SBOM composes four package roots without duplicate identities or
   assert.equal(new Set(dependencyRefs).size, dependencyRefs.length)
 
   const expectedRoots = [
-    'pkg:npm/tinyedge@0.1.2',
-    'pkg:npm/%40tinyedge/pi@0.1.2',
-    'pkg:npm/%40tinyedge/cli@0.1.2',
+    'pkg:npm/tinyedge@0.1.3',
+    'pkg:npm/%40tinyedge/pi@0.1.3',
+    'pkg:npm/%40tinyedge/cli@0.1.3',
     'pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1',
   ].sort()
   const workspaceEdges = bom.dependencies.find(({ ref }) => ref === bom.metadata.component['bom-ref']).dependsOn
@@ -108,7 +108,7 @@ test('workspace SBOM composes four package roots without duplicate identities or
   const host = bom.components.find((component) => component['bom-ref'] === hostRef)
   assert.equal(host.scope, 'excluded')
   assert.ok(!bom.dependencies.some(({ dependsOn }) => dependsOn.includes(hostRef)))
-  const piRoot = bom.components.find((component) => component['bom-ref'] === 'pkg:npm/%40tinyedge/pi@0.1.2')
+  const piRoot = bom.components.find((component) => component['bom-ref'] === 'pkg:npm/%40tinyedge/pi@0.1.3')
   assert.ok(piRoot.properties.some(({ name, value }) =>
     name === 'tinyedge:wrapper:excluded-optional-peer'
       && value === `${EXCLUDED_PI_HOST_PEER.name}@${EXCLUDED_PI_HOST_PEER.version}`))

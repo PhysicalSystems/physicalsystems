@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { runCli } from '../src/cli.js'
 import { credentialStorageCheck, doctorCommand, nodeVersionSupported } from '../src/commands/doctor.js'
+import { VERSION } from '../src/version.js'
 
 function captureIo() {
   const out = []
@@ -13,7 +14,7 @@ function captureIo() {
 test('CLI reports its version without loading credentials', async () => {
   const capture = captureIo()
   assert.equal(await runCli(['--version'], { io: capture.io }), 0)
-  assert.deepEqual(capture.out, ['0.1.2'])
+  assert.deepEqual(capture.out, [VERSION])
 })
 
 test('bare tinyedge opens the native Harness while explicit help stays one-shot', async () => {
@@ -129,6 +130,11 @@ test('doctor treats absent login as a warning while validating discovery', async
     nodeVersion: '22.19.0',
   })
   assert.equal(result.ok, true)
+  assert.deepEqual(result.checks.find((check) => check.name === 'TinyEdge'), {
+    name: 'TinyEdge',
+    status: 'pass',
+    detail: VERSION,
+  })
   assert.equal(result.checks.find((check) => check.name === 'Credential storage').status, 'pass')
   assert.equal(result.checks.find((check) => check.name === 'Saved connection').status, 'warn')
 })
