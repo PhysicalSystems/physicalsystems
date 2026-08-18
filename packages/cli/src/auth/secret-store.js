@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+const DPAPI_PROCESS_TIMEOUT_MS = 30_000
+
 function execFileWithInput(executable, args, { input = '', ...options } = {}) {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -53,7 +55,12 @@ async function powershell(script, stdin, run = execFileWithInput) {
   const { stdout } = await run(
     'powershell.exe',
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-    { input: stdin, windowsHide: true, maxBuffer: 1024 * 1024, timeout: 10_000 },
+    {
+      input: stdin,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+      timeout: DPAPI_PROCESS_TIMEOUT_MS,
+    },
   )
   return String(stdout).trim()
 }
