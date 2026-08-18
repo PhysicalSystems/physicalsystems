@@ -10,9 +10,12 @@ optimization intelligence.
 
 The source is available under the licenses in this repository. TinyEdge-authored
 client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
-Version `0.1.2` is **not published to npm**. `NPM-RELEASE-PENDING.md` blocks the
-release workflow before it can build, stage, or publish, and `private: true` in
-all four package manifests independently refuses npm publication.
+Version `0.1.2` is **not published to npm**. Its four package manifests are
+release-ready, but TinyEdge policy authorizes staging only from the manual,
+main-only GitHub workflow, a protected `npm-release` environment, independent
+review, and npm stage-only trusted publishing. An npm owner technically retains
+interactive 2FA publication capability; that path is outside the approved
+release procedure. No repository lifecycle script publishes.
 
 The currently published `tinyedge@0.1.1` prints CLI help when invoked without a
 subcommand. It does not launch the native Harness in this repository. Until the
@@ -96,8 +99,10 @@ or private support route.
 
 ## npm release gate
 
-Package publication remains blocked until the no-code runtime namespace
-bootstrap, protected GitHub release environment, independent review, npm 2FA
-and trusted publishing, empty staging slots, hosted Windows x64/ARM64 checks,
-and clean-user live canaries all have current evidence. The detailed fail-closed
-procedure is in [packages/cli/RELEASE.md](packages/cli/RELEASE.md).
+The package manifests are publishable so the protected release workflow can
+pack and stage exact artifacts. Direct npm-owner publication remains a platform
+capability but is forbidden by TinyEdge release policy. The approved route
+requires independent environment review, npm staged-package inspection and 2FA
+approval, hosted Windows x64/ARM64 checks, and clean-user live canaries. The
+detailed fail-closed procedure is in
+[packages/cli/RELEASE.md](packages/cli/RELEASE.md).

@@ -1,7 +1,6 @@
 {
   "name": "@tinyedge/cli",
   "version": "0.1.2",
-  "private": true,
   "description": "Secure Pi-powered terminal client for TinyEdge orchestration",
   "type": "module",
   "exports": {

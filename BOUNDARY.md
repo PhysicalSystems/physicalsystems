@@ -36,6 +36,10 @@ compatibility runtime remains MIT, and every dependency retains its own
 license. The self-contained licenses, notices, trademark policy, SBOMs, and
 third-party evidence are part of the public audit surface.
 
-`NPM-RELEASE-PENDING.md` independently blocks package staging and publication.
-Changes to this boundary require public review and must not be bundled with an
-unrelated feature or release.
+Package manifests being publishable does not publish them. TinyEdge policy
+authorizes staging through the manual, main-only workflow, protected
+`npm-release` environment, and stage-only npm trusted publishers; public
+availability still requires npm 2FA approval. An npm owner may technically
+retain interactive publication capability, but that is not an approved release
+route. Changes to this boundary require public review and must not be bundled
+with an unrelated feature or release.

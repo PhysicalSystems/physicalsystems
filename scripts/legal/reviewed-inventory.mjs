@@ -240,11 +240,11 @@ export const TARGETS = Object.freeze({
     key: 'cli',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: 'f9bb03429acab53a0b7609b28b71a7ea485a3f76775f81534531688672a3cd27',
+    shrinkwrapSha256: 'bb28d35e2f949ec77d9cd11295ee13819e34b2676d7a481e20ddeb3073917d71',
     rootName: '@tinyedge/cli',
     rootVersion: '0.1.2',
-    // Source licensing is approved while the separate npm publication lock and
-    // private package flags intentionally remain in the current snapshot.
+    // Source and package-manifest approval are complete; public availability
+    // remains gated by the protected stage-only release workflow and npm 2FA.
     rootLicense: 'Apache-2.0',
     dependencyNodeCount: 128,
     runtimePackagePath: 'node_modules/@tinyedge/pi-runtime',

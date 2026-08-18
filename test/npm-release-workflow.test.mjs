@@ -20,8 +20,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const workflow = readFileSync(path.join(root, '.github/workflows/npm-release.yml'), 'utf8')
 const cliWorkflow = readFileSync(path.join(root, '.github/workflows/cli.yml'), 'utf8')
 const boundaryCheck = readFileSync(path.join(root, 'scripts/check-export-boundary.mjs'), 'utf8')
-const npmReleasePending = readFileSync(path.join(root, 'NPM-RELEASE-PENDING.md'), 'utf8')
 const rootReadme = readFileSync(path.join(root, 'README.md'), 'utf8')
+const dependencyGuide = readFileSync(path.join(root, 'DEPENDENCIES.md'), 'utf8')
+const reviewedInventorySource = readFileSync(path.join(root, 'scripts/legal/reviewed-inventory.mjs'), 'utf8')
 const provenance = JSON.parse(readFileSync(path.join(root, 'EXPORT-PROVENANCE.json'), 'utf8'))
 const rootPackage = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
 const apacheLicenseTemplate = readFileSync(path.join(root, 'scripts/legal/templates/Apache-2.0.txt'), 'utf8')
@@ -224,7 +225,7 @@ test('the npm release workflow is manual, main-only, protected, and tokenless', 
   assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN|NPM_TOKEN|secrets\./)
 })
 
-test('source licensing is operative while npm publication remains independently locked', () => {
+test('source licensing and npm publication approval are operative while workflow guards remain fail-closed', () => {
   const npmPendingGuard = workflow.indexOf(
     'Refuse release while npm publication approval is pending',
   )
@@ -247,9 +248,7 @@ test('source licensing is operative while npm publication remains independently 
   assert.match(workflow, /npm release pending/)
   assert.match(workflow, /License pending/)
   assert.equal(existsSync(path.join(root, 'LICENSE-PENDING.md')), false)
-  assert.match(npmReleasePending, /separate from the completed source-license decision/)
-  assert.match(npmReleasePending, /all four npm package\s+manifests must keep `"private": true`/)
-  assert.match(npmReleasePending, /Source licensing does not authorize npm publication/i)
+  assert.equal(existsSync(path.join(root, 'NPM-RELEASE-PENDING.md')), false)
   assert.equal(rootPackage.private, true)
   assert.equal(rootPackage.license, 'Apache-2.0')
   for (const packagePath of [
@@ -258,13 +257,13 @@ test('source licensing is operative while npm publication remains independently 
     'packages/pi/package.json',
   ]) {
     const manifest = JSON.parse(readFileSync(path.join(root, packagePath), 'utf8'))
-    assert.equal(manifest.private, true)
+    assert.notEqual(manifest.private, true)
     assert.equal(manifest.license, 'Apache-2.0')
     for (const legalFile of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'SBOM.cdx.json']) {
       assert.ok(manifest.files.includes(legalFile))
     }
   }
-  assert.equal(piRuntimePackage.private, true)
+  assert.notEqual(piRuntimePackage.private, true)
   assert.equal(piRuntimePackage.license, 'MIT')
 })
 
@@ -603,7 +602,7 @@ test('the published CLI carries the reviewed dependency closure', () => {
 test('the compatibility runtime is an exact MIT artifact without default native extras', () => {
   assert.equal(piRuntimePackage.name, '@tinyedge/pi-runtime')
   assert.equal(piRuntimePackage.version, '0.84.2-tinyedge.1')
-  assert.equal(piRuntimePackage.private, true)
+  assert.notEqual(piRuntimePackage.private, true)
   assert.equal(piRuntimePackage.license, 'MIT')
   assert.equal(piRuntimePackage.bin, undefined)
   assert.deepEqual(Object.keys(piRuntimePackage.devDependencies || {}), [])
@@ -629,7 +628,7 @@ test('the compatibility runtime is an exact MIT artifact without default native 
   }
   assert.equal(piRuntimePackage.files.includes('examples'), false)
   assert.match(piRuntimeReadme, /@tinyedge\/pi-runtime/)
-  assert.match(piRuntimeReadme, /candidate preparation[\s\S]{0,120}private: true/i)
+  assert.match(piRuntimeReadme, /manifest is publishable[\s\S]{0,180}protected workflow/i)
   assert.doesNotMatch(piRuntimeReadme, /remains\s+`?private:\s*true/i)
   assert.match(piRuntimeReadme, /source maps[\s\S]{0,100}npm[\s\S]{0,80}omits/i)
 
@@ -675,10 +674,18 @@ test('candidate documentation is truthful and the export boundary is executable'
   assert.match(rootReadme, /does not contain the TinyEdge hosted control/)
   assert.match(rootReadme, /DEVELOPMENT\.md/)
   assert.match(rootReadme, /source is available under the licenses in this repository/i)
-  assert.match(rootReadme, /NPM-RELEASE-PENDING\.md[\s\S]{0,140}private:\s*true/)
+  assert.match(rootReadme, /four package manifests are[\s\S]{0,80}release-ready/i)
+  assert.match(rootReadme, /TinyEdge policy authorizes staging[\s\S]{0,180}stage-only trusted publishing/i)
+  assert.match(rootReadme, /npm owner technically retains[\s\S]{0,160}outside the approved[\s\S]{0,30}release procedure/i)
+  assert.match(dependencyGuide, /TinyEdge policy[\s\S]{0,100}publishable release manifests[\s\S]{0,120}stage-only npm workflow/i)
+  assert.match(dependencyGuide, /npm owner may technically retain[\s\S]{0,160}outside the approved[\s\S]{0,30}procedure/i)
+  assert.doesNotMatch(dependencyGuide, /NPM-RELEASE-PENDING\.md[\s\S]{0,100}private:\s*true/i)
+  assert.match(reviewedInventorySource, /package-manifest approval[\s\S]{0,120}stage-only release workflow/i)
+  assert.doesNotMatch(reviewedInventorySource, /publication lock[\s\S]{0,100}private package flags/i)
   assert.match(boundaryCheck, /unexpected top-level export entry/)
   assert.match(boundaryCheck, /local user path leaked/)
   assert.match(boundaryCheck, /must remain private while npm publication is pending/)
+  assert.match(boundaryCheck, /must be publishable only after npm approval/)
   assert.match(boundaryCheck, /!licensePending \|\| npmReleasePending/)
   assert.match(workflow, /node scripts\/check-export-boundary\.mjs/)
   assert.match(cliWorkflow, /node scripts\/check-export-boundary\.mjs/)

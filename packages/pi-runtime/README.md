@@ -16,10 +16,11 @@ from being installed by default:
 Both are optional peers. Text-first SDK and Harness imports work without them.
 Without the native clipboard peer, addon-backed reads and clipboard-image
 access are unavailable, while copy can still use Pi's OS/terminal fallbacks.
-Photon-dependent image conversion is unavailable without its peer. During
-guarded candidate preparation, TinyEdge keeps the repository manifest
-`private: true`. An approved release removes that publication lock only after
-the legal, security, and public-release gates are complete.
+Photon-dependent image conversion is unavailable without its peer. The package
+manifest is publishable so TinyEdge's protected workflow can stage the exact
+reviewed artifact. Ordinary installs, tests, and repository lifecycle scripts
+do not publish it. An npm owner's separate interactive publication capability
+is not an approved release route.
 
 The public source tree retains Pi's upstream source maps for review. The npm
 artifact omits those maps because the built JavaScript and declarations do not

@@ -12,15 +12,19 @@ This is the canonical public source workspace for the TinyEdge edge client.
 - Treat `BOUNDARY.md` as the architectural rule. Use GitHub issues for public
   bugs and proposals, and never post private operational data there.
 
-## Licenses and publication lock
+## Licenses and publication boundary
 
 - Preserve Apache-2.0 for the three TinyEdge-authored packages and MIT for the
   Pi compatibility runtime, including its upstream provenance and notices.
-- Source availability and npm publication are separate transitions. Retain
-  `NPM-RELEASE-PENDING.md` and `private: true` in all four npm packages.
-- Remove the npm lock and four package private flags only in one separately
-  protected release change after every control in `packages/cli/RELEASE.md`
-  has current, independently reviewed evidence.
+- Source availability and npm publication are separate transitions. TinyEdge
+  policy authorizes the four publishable package manifests for the protected
+  release workflow; the root workspace remains private. A human npm owner may
+  retain interactive 2FA publication capability, but must not use it as an
+  alternate release path.
+- Preserve the manual, main-only, environment-reviewed, stage-only release
+  path in `packages/cli/RELEASE.md`. Never add a lifecycle publish script,
+  long-lived npm write token, direct-publish permission, or unreviewed release
+  route.
 - Do not stage, publish, promote, or create an installer from an ordinary code
   change. Do not advertise macOS, Linux, a public installer, or a clean-user
   npm route until exact end-to-end evidence exists.

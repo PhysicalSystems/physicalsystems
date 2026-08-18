@@ -48,25 +48,30 @@ Production deployment of the orchestration server, npm publication, and
 GitHub push are intentionally separate release actions. Building or testing
 this package must never perform any of them.
 
-## Source-license and npm-publication locks
+## Source-license and npm-publication approval
 
 The manual release workflow recognizes two independent repository locks and
-stops before its build job while either one exists. The source-license lock has
-now completed and is absent; the npm lock remains:
+stops before its build job while either one exists. Both approved cutovers are
+now complete and the files are absent:
 
 - `LICENSE-PENDING.md` protected the source-license decision. Its approved
   cutover removed it while installing the Apache-2.0 bundle for the three
   TinyEdge-authored packages and preserving MIT for the Pi runtime. The
   workflow retains its guard so an unresolved lock cannot be published.
-- `NPM-RELEASE-PENDING.md` protects package publication. The legal cutover must
-  retain it and `private: true` in all four npm packages. Remove this lock and
-  those four private flags only in the protected npm-release change after the
-  external controls below have current evidence.
+- `NPM-RELEASE-PENDING.md` protected package publication while the public repo,
+  namespace bootstrap, package ownership, staged-publisher identity, hosted
+  architecture evidence, and review controls were established. Its approved
+  cutover removed it and the four release-package `private` flags together.
+  The root workspace remains private.
 
-Source licensing therefore does not make an npm artifact buildable, stageable,
-or publishable by itself. Reintroducing the source lock beside the operative
-license, or removing the npm lock while source licensing is unresolved, is an
-invalid state rejected by executable checks.
+Publishable manifests do not make an npm artifact public by themselves. The
+workflow retains both guards so either lock can fail closed if reintroduced,
+and executable checks reject a lock/manifest mismatch. The protected, manual
+stage workflow is the only automated route authorized by TinyEdge policy; npm
+still requires separate 2FA approval before staged bytes become public. An npm
+owner technically retains interactive 2FA publication capability, but using it
+for the real candidate would bypass the approved evidence and review path and
+is prohibited by this release policy.
 
 ## One-time runtime package bootstrap
 
