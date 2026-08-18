@@ -21,10 +21,11 @@ This is the canonical public source workspace for the TinyEdge edge client.
   release workflow; the root workspace remains private. A human npm owner may
   retain interactive 2FA publication capability, but must not use it as an
   alternate release path.
-- Preserve the manual, main-only, environment-reviewed, stage-only release
-  path in `packages/cli/RELEASE.md`. Never add a lifecycle publish script,
-  long-lived npm write token, direct-publish permission, or unreviewed release
-  route.
+- Preserve the manual, main-only, protected-environment, stage-only release
+  path in `packages/cli/RELEASE.md`, including explicit founder authorization
+  for a solo release and required x64/ARM64 checks. Never add a lifecycle
+  publish script, long-lived npm write token, direct-publish permission, or an
+  undocumented release route.
 - Do not stage, publish, promote, or create an installer from an ordinary code
   change. Do not advertise macOS, Linux, a public installer, or a clean-user
   npm route until exact end-to-end evidence exists.
