@@ -372,6 +372,10 @@ test('staging fails closed on environment, provenance, and license policy', () =
     'RELEASE_REPOSITORY_PRIVATE: ${{ github.event.repository.private }}',
     stageJob,
   )
+  const sourceCheckout = workflow.indexOf(
+    'Check out the exact reviewed source for legal-file comparison',
+    stageJob,
+  )
   const licenseGuard = workflow.indexOf('Refuse unresolved package licenses before staging', stageJob)
   const bootstrapGuard = workflow.indexOf(
     'Require the runtime bootstrap and refuse published candidate versions',
@@ -382,11 +386,23 @@ test('staging fails closed on environment, provenance, and license policy', () =
   assert.ok(stageJob >= 0)
   assert.ok(policyGuard > stageJob)
   assert.ok(publicRepositoryGuard > policyGuard)
-  assert.ok(licenseGuard > publicRepositoryGuard)
+  assert.ok(sourceCheckout > publicRepositoryGuard)
+  assert.ok(licenseGuard > sourceCheckout)
   assert.ok(bootstrapGuard > licenseGuard)
   assert.ok(firstStagePublish > bootstrapGuard)
   assert.match(workflow, /"\$NPM_RELEASE_POLICY_VERSION" != "v1"/)
   assert.match(workflow, /"\$RELEASE_REPOSITORY_PRIVATE" != "false"/)
+  const stageBeforeCheckout = workflow.slice(stageJob, sourceCheckout)
+  assert.match(stageBeforeCheckout, /permissions:\s*\n\s+contents: read/)
+  assert.match(stageBeforeCheckout, /id-token: write/)
+  const stageBeforeLicense = workflow.slice(sourceCheckout, licenseGuard)
+  assert.match(
+    stageBeforeLicense,
+    /uses: actions\/checkout@[0-9a-f]{40}\s+#\s+v\d+\.\d+\.\d+/,
+  )
+  assert.match(stageBeforeLicense, /ref: \$\{\{ github\.sha \}\}/)
+  assert.match(stageBeforeLicense, /fetch-depth: 1/)
+  assert.match(stageBeforeLicense, /persist-credentials: false/)
   assert.match(workflow, /\['-xOf', path\.join\(directory, filename\), 'package\/package\.json'\]/)
   assert.match(workflow, /packedPackage\.private, true/)
   assert.match(workflow, /license: 'MIT'/)
