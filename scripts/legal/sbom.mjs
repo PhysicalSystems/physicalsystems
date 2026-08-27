@@ -8,7 +8,6 @@ import {
   APACHE_2_TEMPLATE,
   ARTIFACT_LICENSE_FILE_EVIDENCE,
   EXCLUDED_OPTIONAL_PEERS,
-  EXCLUDED_PI_HOST_PEER,
   MISSING_LICENSE_FILE_OVERRIDES,
   NOTICE_TEMPLATE,
   PI_RUNTIME_LICENSE,
@@ -21,7 +20,6 @@ import {
   TRADEMARK_POLICY_TEMPLATE,
   VENDORED_COMPONENTS,
   WORKSPACE_TARGET,
-  WRAPPER_TARGETS,
 } from './reviewed-inventory.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
@@ -628,7 +626,6 @@ export async function buildSbomFromSnapshot({
 export async function buildSbomForTarget(target, { root = repositoryRoot } = {}) {
   await verifyOperativeLegalBundle({ root })
   if (target === WORKSPACE_TARGET.key) return buildWorkspaceSbom({ root })
-  if (WRAPPER_TARGETS[target]) return buildWrapperSbom(WRAPPER_TARGETS[target], { root })
   const reviewedTarget = TARGETS[target]
   assert(reviewedTarget, `unknown SBOM target: ${target}`)
   const shrinkwrapText = await readFile(path.join(root, ...reviewedTarget.shrinkwrapPath.split('/')), 'utf8')
@@ -638,92 +635,6 @@ export async function buildSbomForTarget(target, { root = repositoryRoot } = {})
     expectedSha256: reviewedTarget.shrinkwrapSha256,
     root,
   })
-}
-
-async function buildWrapperSbom(wrapperTarget, { root }) {
-  const packageJsonPath = normalizeRelative(wrapperTarget.packageJsonPath)
-  const packageJsonText = await readFile(path.join(root, ...packageJsonPath.split('/')), 'utf8')
-  let manifest
-  try {
-    manifest = JSON.parse(packageJsonText)
-  } catch (error) {
-    throw new Error(`${wrapperTarget.packageJsonPath} is invalid JSON: ${error.message}`)
-  }
-  assert(manifest.name === wrapperTarget.rootName, `${wrapperTarget.key} wrapper name drifted`)
-  assert(manifest.version === wrapperTarget.rootVersion, `${wrapperTarget.key} wrapper version drifted`)
-  assert(manifest.license === wrapperTarget.rootLicense, `${wrapperTarget.key} wrapper release-lock license drifted`)
-  assert(manifest.dependencies?.['@tinyedge/cli'] === wrapperTarget.cliVersion, `${wrapperTarget.key} wrapper must pin @tinyedge/cli@${wrapperTarget.cliVersion}`)
-  assert(Object.keys(manifest.dependencies).length === 1, `${wrapperTarget.key} wrapper has dependencies outside the composed CLI graph`)
-  if (wrapperTarget.excludedOptionalPeer) {
-    const peerName = wrapperTarget.excludedOptionalPeer.name
-    const peerVersion = wrapperTarget.excludedOptionalPeer.version
-    assert(manifest.peerDependencies?.[peerName] === peerVersion, `${wrapperTarget.key} optional peer declaration drifted`)
-    assert(manifest.peerDependenciesMeta?.[peerName]?.optional === true, `${wrapperTarget.key} existing-Pi host peer must remain optional`)
-  }
-
-  const cliBom = await buildSbomForTarget('cli', { root })
-  const cliRef = cliBom.metadata.component['bom-ref']
-  const cliComponent = {
-    ...clone(cliBom.metadata.component),
-    scope: 'required',
-    properties: [
-      ...cliBom.metadata.component.properties,
-      ...properties({
-        'tinyedge:composition:role': 'exact CLI graph root',
-        'tinyedge:composition:resolved': 'unpublished release candidate; registry SRI is unavailable while npm release lock is present',
-      }),
-    ].sort((left, right) => left.name.localeCompare(right.name)),
-  }
-  const rootRef = npmPurl(wrapperTarget.rootName, wrapperTarget.rootVersion)
-  const rootSplitName = splitPackageName(wrapperTarget.rootName)
-  const rootLicenses = allowedLicenses.has(wrapperTarget.rootLicense)
-    ? licensesFor([wrapperTarget.rootLicense])
-    : [{ license: { name: wrapperTarget.rootLicense } }]
-  const wrapperComponents = [...cliBom.components, cliComponent]
-  const wrapperDependencies = [...cliBom.dependencies, { ref: rootRef, dependsOn: [cliRef] }]
-  if (wrapperTarget.excludedOptionalPeer) {
-    const component = inventoryComponent({
-      ...wrapperTarget.excludedOptionalPeer,
-      purlType: 'npm',
-      scope: 'excluded',
-      note: wrapperTarget.excludedOptionalPeer.reason,
-    }, 'optional-peer')
-    wrapperComponents.push(component)
-    wrapperDependencies.push({ ref: component['bom-ref'], dependsOn: [] })
-  }
-  return {
-    bomFormat: 'CycloneDX',
-    specVersion: '1.6',
-    version: 1,
-    metadata: {
-      component: {
-        type: 'library',
-        'bom-ref': rootRef,
-        ...(rootSplitName.group ? { group: rootSplitName.group } : {}),
-        name: rootSplitName.name,
-        version: wrapperTarget.rootVersion,
-        licenses: rootLicenses,
-        purl: rootRef,
-        properties: properties({
-          'tinyedge:release:root-integrity-override': 'npm package root is an unpublished release candidate without registry resolved/integrity metadata',
-          'tinyedge:release:source-license-state': wrapperTarget.rootLicense,
-          'tinyedge:sbom:package-json-path': wrapperTarget.packageJsonPath,
-          'tinyedge:sbom:package-json-sha256': sha256(packageJsonText),
-          'tinyedge:wrapper:excluded-optional-peer': wrapperTarget.excludedOptionalPeer
-            ? `${wrapperTarget.excludedOptionalPeer.name}@${wrapperTarget.excludedOptionalPeer.version}`
-            : undefined,
-        }),
-      },
-      properties: [
-        ...cliBom.metadata.properties,
-        ...properties({
-          'tinyedge:sbom:composition': `${wrapperTarget.rootName}@${wrapperTarget.rootVersion} -> @tinyedge/cli@${wrapperTarget.cliVersion}`,
-        }),
-      ].sort((left, right) => left.name.localeCompare(right.name)),
-    },
-    components: stableSortComponents(wrapperComponents),
-    dependencies: stableSortDependencies(wrapperDependencies),
-  }
 }
 
 async function buildWorkspaceSbom({ root }) {
@@ -741,9 +652,9 @@ async function buildWorkspaceSbom({ root }) {
   assert(workspaceManifest.version === WORKSPACE_TARGET.rootVersion, 'workspace root version drifted')
   assert(workspaceManifest.license === WORKSPACE_TARGET.rootLicense, 'workspace root release-lock license drifted')
 
-  const cliBom = await buildSbomForTarget('cli', { root })
-  const components = clone(cliBom.components)
-  const dependencies = clone(cliBom.dependencies)
+  const tinyedgeBom = await buildSbomForTarget('tinyedge', { root })
+  const components = clone(tinyedgeBom.components)
+  const dependencies = clone(tinyedgeBom.dependencies)
   const componentsByRef = new Map(components.map((component) => [component['bom-ref'], component]))
   const packageRootRefs = []
   for (const packageRoot of WORKSPACE_TARGET.packageRoots) {
@@ -757,9 +668,6 @@ async function buildWorkspaceSbom({ root }) {
       'tinyedge:workspace:package-json-path': packageRoot.packageJsonPath,
       'tinyedge:workspace:package-json-sha256': sha256(text),
       'tinyedge:workspace:package-root': true,
-      'tinyedge:wrapper:excluded-optional-peer': packageRoot.name === '@tinyedge/pi'
-        ? `${EXCLUDED_PI_HOST_PEER.name}@${EXCLUDED_PI_HOST_PEER.version}`
-        : undefined,
     })
     const existing = componentsByRef.get(ref)
     if (existing) {
@@ -768,11 +676,11 @@ async function buildWorkspaceSbom({ root }) {
       continue
     }
     let component
-    if (packageRoot.name === '@tinyedge/cli') {
+    if (packageRoot.name === 'tinyedge') {
       component = {
-        ...clone(cliBom.metadata.component),
+        ...clone(tinyedgeBom.metadata.component),
         scope: 'required',
-        properties: [...cliBom.metadata.component.properties, ...workspaceProperties]
+        properties: [...tinyedgeBom.metadata.component.properties, ...workspaceProperties]
           .sort((left, right) => left.name.localeCompare(right.name)),
       }
     } else {
@@ -801,21 +709,6 @@ async function buildWorkspaceSbom({ root }) {
     componentsByRef.set(ref, component)
   }
 
-  const cliRef = npmPurl('@tinyedge/cli', '0.1.3')
-  const npxRef = npmPurl('tinyedge', '0.1.3')
-  const piRef = npmPurl('@tinyedge/pi', '0.1.3')
-  dependencies.push({ ref: npxRef, dependsOn: [cliRef] })
-  dependencies.push({ ref: piRef, dependsOn: [cliRef] })
-  const hostPeer = inventoryComponent({
-    ...EXCLUDED_PI_HOST_PEER,
-    purlType: 'npm',
-    scope: 'excluded',
-    note: EXCLUDED_PI_HOST_PEER.reason,
-  }, 'optional-peer')
-  assert(!componentsByRef.has(hostPeer['bom-ref']), 'workspace host peer collides with installed CLI graph')
-  components.push(hostPeer)
-  dependencies.push({ ref: hostPeer['bom-ref'], dependsOn: [] })
-
   const rootRef = npmPurl(WORKSPACE_TARGET.rootName, WORKSPACE_TARGET.rootVersion)
   dependencies.push({ ref: rootRef, dependsOn: packageRootRefs })
   const sortedComponents = stableSortComponents(components)
@@ -823,7 +716,6 @@ async function buildWorkspaceSbom({ root }) {
   const componentRefs = new Set(sortedComponents.map((component) => component['bom-ref']))
   assert(componentRefs.size === sortedComponents.length, 'workspace SBOM contains duplicate component bom-refs')
   assert(new Set(sortedDependencies.map(({ ref }) => ref)).size === sortedDependencies.length, 'workspace SBOM contains duplicate dependency records')
-  assert(!sortedDependencies.some(({ dependsOn }) => dependsOn.includes(hostPeer['bom-ref'])), 'excluded existing-Pi host must not be an install edge')
   for (const dependency of sortedDependencies) {
     assert(dependency.ref === rootRef || componentRefs.has(dependency.ref), `workspace dependency has unknown ref ${dependency.ref}`)
     for (const ref of dependency.dependsOn) assert(componentRefs.has(ref), `workspace dependency references unknown component ${ref}`)
@@ -848,9 +740,9 @@ async function buildWorkspaceSbom({ root }) {
         }),
       },
       properties: [
-        ...cliBom.metadata.properties,
+        ...tinyedgeBom.metadata.properties,
         ...properties({
-          'tinyedge:sbom:composition': `${WORKSPACE_TARGET.rootName}@${WORKSPACE_TARGET.rootVersion} -> four explicit TinyEdge package roots`,
+          'tinyedge:sbom:composition': `${WORKSPACE_TARGET.rootName}@${WORKSPACE_TARGET.rootVersion} -> tinyedge plus its audited compatibility runtime`,
         }),
       ].sort((left, right) => left.name.localeCompare(right.name)),
     },
@@ -940,10 +832,10 @@ export async function verifyOperativeLegalBundle({ root = repositoryRoot } = {})
     assert(actualSha256 === reviewedFile.sha256, `${reviewedFile.path} drifted: expected ${reviewedFile.sha256}, got ${actualSha256}`)
   }
 
-  for (const relativePath of ['LICENSE', 'packages/cli/LICENSE', 'packages/npx/LICENSE', 'packages/pi/LICENSE']) {
+  for (const relativePath of ['LICENSE', 'packages/cli/LICENSE']) {
     assertExactBytes(await readRequired(root, relativePath), canonical.apache, relativePath)
   }
-  for (const relativePath of ['NOTICE', 'packages/cli/NOTICE', 'packages/npx/NOTICE', 'packages/pi/NOTICE']) {
+  for (const relativePath of ['NOTICE', 'packages/cli/NOTICE']) {
     assertExactBytes(await readRequired(root, relativePath), canonical.notice, relativePath)
   }
   assertExactBytes(await readRequired(root, 'packages/pi-runtime/NOTICE'), canonical.runtimeNotice, 'packages/pi-runtime/NOTICE')
@@ -951,8 +843,6 @@ export async function verifyOperativeLegalBundle({ root = repositoryRoot } = {})
   for (const relativePath of [
     'THIRD_PARTY_NOTICES.md',
     'packages/cli/THIRD_PARTY_NOTICES.md',
-    'packages/npx/THIRD_PARTY_NOTICES.md',
-    'packages/pi/THIRD_PARTY_NOTICES.md',
     'packages/pi-runtime/THIRD_PARTY_NOTICES.md',
   ]) {
     assertExactBytes(await readRequired(root, relativePath), canonical.thirdParty, relativePath)
@@ -998,7 +888,7 @@ export async function verifyOperativeLegalBundle({ root = repositoryRoot } = {})
   const workspaceManifest = await manifestFor('package.json')
   assert(workspaceManifest.license === 'Apache-2.0', 'workspace package must declare Apache-2.0')
   assert(workspaceManifest.private === true, 'workspace must remain private')
-  for (const relativePath of ['packages/cli/package.json', 'packages/npx/package.json', 'packages/pi/package.json']) {
+  for (const relativePath of ['packages/cli/package.json']) {
     const manifest = await manifestFor(relativePath)
     assert(manifest.license === 'Apache-2.0', `${relativePath} must declare Apache-2.0`)
     if (npmPublicationLocked) {
@@ -1058,7 +948,7 @@ export async function verifyReviewedInputs(options = {}) {
 export async function writeSboms({ root = repositoryRoot } = {}) {
   const result = {}
   for (const target of SBOM_TARGET_KEYS) {
-    const reviewedTarget = TARGETS[target] ?? WRAPPER_TARGETS[target] ?? WORKSPACE_TARGET
+    const reviewedTarget = TARGETS[target] ?? WORKSPACE_TARGET
     const serialized = serializeSbom(await buildSbomForTarget(target, { root }))
     const outputPath = path.join(root, ...reviewedTarget.outputPath.split('/'))
     await writeFile(outputPath, serialized, 'utf8')
@@ -1070,7 +960,7 @@ export async function writeSboms({ root = repositoryRoot } = {}) {
 export async function checkSboms({ root = repositoryRoot } = {}) {
   const result = {}
   for (const target of SBOM_TARGET_KEYS) {
-    const reviewedTarget = TARGETS[target] ?? WRAPPER_TARGETS[target] ?? WORKSPACE_TARGET
+    const reviewedTarget = TARGETS[target] ?? WORKSPACE_TARGET
     const expected = serializeSbom(await buildSbomForTarget(target, { root }))
     const outputPath = path.join(root, ...reviewedTarget.outputPath.split('/'))
     let actual
@@ -1109,7 +999,7 @@ async function main(argv) {
     process.stdout.write(serializeSbom(await buildSbomForTarget(target)))
     return
   }
-  throw new Error('usage: node scripts/legal/sbom.mjs [--verify|--write|--check|--stdout <pi-runtime|cli>]')
+  throw new Error('usage: node scripts/legal/sbom.mjs [--verify|--write|--check|--stdout <pi-runtime|tinyedge>]')
 }
 
 const isMain = process.argv[1]

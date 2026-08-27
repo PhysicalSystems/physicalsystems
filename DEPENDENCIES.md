@@ -7,20 +7,25 @@ generated CycloneDX 1.6 documents are:
 - `SBOM.cdx.json`
 - `packages/pi-runtime/SBOM.cdx.json`
 - `packages/cli/SBOM.cdx.json`
-- `packages/pi/SBOM.cdx.json`
-- `packages/npx/SBOM.cdx.json`
 
 Run `npm run generate:sbom` only when intentionally regenerating those files,
-then review the diff. `npm run check:legal` reproduces all five documents without
+then review the diff. `npm run check:legal` reproduces all three documents without
 network access and rejects any drift.
 
 ## Current default-install closure
 
-The Pi compatibility runtime has 127 locked dependency artifacts. The CLI adds
-the runtime itself for 128 locked dependency records. The Pi add-on and npm
-facade SBOMs compose their package roots over that exact CLI graph. Every
-installed record has an exact version, registry URL, SRI integrity, and one of
-these reviewed license identifiers:
+The Pi compatibility runtime has 127 locked dependency artifacts. The
+`tinyedge` package adds the runtime itself for 128 locked dependency records.
+Every installed record has an exact version, registry URL, SRI integrity, and
+one of these reviewed license identifiers:
+
+`tinyedge` physically bundles this complete reviewed closure. This is a
+correctness boundary, not an optimization: npm 12 ignores a dependency
+package's shrinkwrap, so relying on the shrinkwrap alone can resolve a
+different graph. Release verification installs only the packed `tinyedge`
+tarball in offline mode with empty caches under npm 11.19.0 and npm 12.0.2 on
+Windows x64 and ARM64, then compares every installed name/version identity with
+the reviewed lock.
 
 | License | Runtime artifacts |
 | --- | ---: |
@@ -47,7 +52,7 @@ The current automation proves the locked graph, declared license identifiers,
 SRI metadata, reviewed vendored-file hashes, native-helper hashes, optional
 peer exclusion, and operative legal-file bytes. A complete artifact rescan
 found named top-level legal files (including accepted suffix variants) in 116
-of the 128 CLI dependency records.
+of the 128 `tinyedge` dependency records.
 
 Twelve exact artifacts lack a named LICENSE, LICENCE, COPYING, or NOTICE file.
 Their version-, URL-, integrity-, license-, evidence-, limitation-, and
@@ -70,8 +75,8 @@ the limitation. Approval applies only to its exact URL and SRI and does not
 claim that the candidate source commit originated the publication.
 
 The operative root Apache-2.0 license grants the source license. TinyEdge policy
-authorizes the four publishable release manifests through the protected,
-main-only, stage-only npm workflow. An npm owner may technically retain an
-interactive 2FA publication capability, but that path is outside the approved
-procedure. SBOM presence does not independently authorize staging, public
-approval, promotion, or a repository-visibility change.
+authorizes the one publishable `tinyedge` candidate through the protected,
+main-only direct OIDC workflow to `preview`. An npm owner may technically
+retain interactive 2FA publication capability, but that path is outside the
+approved procedure. SBOM presence does not independently authorize
+publication, promotion, or a repository-visibility change.

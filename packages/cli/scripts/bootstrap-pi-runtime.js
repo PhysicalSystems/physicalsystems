@@ -93,7 +93,13 @@ function runtimePackageEntry(runtimeLock, runtimeIntegrity) {
 
 export function buildCliConsumerLock({ manifest, runtimeLock, runtimeIntegrity }) {
   const root = {}
-  for (const key of ['name', 'version', 'license', 'os', 'dependencies', 'bin', 'engines']) {
+  for (const key of ['name', 'version']) {
+    if (manifest[key] !== undefined) root[key] = structuredClone(manifest[key])
+  }
+  if (manifest.bundleDependencies === true) {
+    root.bundleDependencies = Object.keys(manifest.dependencies || {})
+  }
+  for (const key of ['license', 'bin', 'os', 'dependencies', 'engines']) {
     if (manifest[key] !== undefined) root[key] = structuredClone(manifest[key])
   }
 
@@ -129,8 +135,18 @@ export function validateCliRuntimeContract({
 }) {
   assert.equal(shrinkwrapText, packageLockText, 'CLI package-lock and shrinkwrap must be byte-identical')
   assert.equal(manifest.dependencies?.[RUNTIME_NAME], RUNTIME_VERSION)
+  assert.equal(
+    manifest.bundleDependencies,
+    true,
+    'CLI manifest must set bundleDependencies=true',
+  )
   assert.equal(manifest.dependencies?.['@earendil-works/pi-coding-agent'], undefined)
   assert.equal(lock.packages?.['']?.dependencies?.[RUNTIME_NAME], RUNTIME_VERSION)
+  assert.deepEqual(
+    [...lock.packages?.['']?.bundleDependencies || []].sort(),
+    Object.keys(manifest.dependencies || {}).sort(),
+    'CLI lock must mark every direct dependency for bundling',
+  )
 
   const runtime = lock.packages?.[`node_modules/${RUNTIME_NAME}`]
   assert.ok(runtime, `CLI lock is missing ${RUNTIME_NAME}`)

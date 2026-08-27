@@ -23,7 +23,6 @@ import {
   APACHE_2_TEMPLATE,
   ARTIFACT_LICENSE_FILE_EVIDENCE,
   EXCLUDED_OPTIONAL_PEERS,
-  EXCLUDED_PI_HOST_PEER,
   MISSING_LICENSE_FILE_OVERRIDES,
   NOTICE_TEMPLATE,
   PI_RUNTIME_NOTICE_TEMPLATE,
@@ -34,7 +33,6 @@ import {
   TRADEMARK_POLICY_TEMPLATE,
   VENDORED_COMPONENTS,
   WORKSPACE_TARGET,
-  WRAPPER_TARGETS,
 } from '../scripts/legal/reviewed-inventory.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -72,19 +70,14 @@ test('reviewed shrinkwrap graphs produce deterministic CycloneDX 1.6 output offl
     assert.equal(firstBom.specVersion, '1.6')
     assert.equal(firstBom.version, 1)
     const installedNodes = target === WORKSPACE_TARGET.key
-      ? TARGETS.cli.dependencyNodeCount + 4
-      : TARGETS[target]?.dependencyNodeCount
-        ?? TARGETS.cli.dependencyNodeCount + 1 + (WRAPPER_TARGETS[target].excludedOptionalPeer ? 1 : 0)
+      ? TARGETS.tinyedge.dependencyNodeCount + 1
+      : TARGETS[target].dependencyNodeCount
     assert.equal(firstBom.components.length, installedNodes + VENDORED_COMPONENTS.length + PI_TUI_NATIVE_FILES.length + EXCLUDED_OPTIONAL_PEERS.length)
     assert.equal(firstBom.dependencies.length, firstBom.components.length + 1)
-    if (WRAPPER_TARGETS[target]) {
-      const rootEdges = firstBom.dependencies.find(({ ref }) => ref === firstBom.metadata.component['bom-ref']).dependsOn
-      assert.deepEqual(rootEdges, ['pkg:npm/%40tinyedge/cli@0.1.3'])
-    }
   }
 })
 
-test('workspace SBOM composes four package roots without duplicate identities or host install edges', async () => {
+test('workspace SBOM composes tinyedge and its runtime without duplicate identities', async () => {
   const bom = await buildSbomForTarget('workspace', { root })
   assert.equal(bom.metadata.component.name, 'tinyedge-edge-workspace')
   assert.equal(bom.metadata.component.version, '0.0.0')
@@ -95,23 +88,12 @@ test('workspace SBOM composes four package roots without duplicate identities or
   assert.equal(new Set(dependencyRefs).size, dependencyRefs.length)
 
   const expectedRoots = [
-    'pkg:npm/tinyedge@0.1.3',
-    'pkg:npm/%40tinyedge/pi@0.1.3',
-    'pkg:npm/%40tinyedge/cli@0.1.3',
+    'pkg:npm/tinyedge@0.1.4',
     'pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1',
   ].sort()
   const workspaceEdges = bom.dependencies.find(({ ref }) => ref === bom.metadata.component['bom-ref']).dependsOn
   assert.deepEqual(workspaceEdges, expectedRoots)
   for (const ref of expectedRoots) assert.equal(componentRefs.filter((candidate) => candidate === ref).length, 1)
-
-  const hostRef = 'pkg:npm/%40earendil-works/pi-coding-agent@0.84.2'
-  const host = bom.components.find((component) => component['bom-ref'] === hostRef)
-  assert.equal(host.scope, 'excluded')
-  assert.ok(!bom.dependencies.some(({ dependsOn }) => dependsOn.includes(hostRef)))
-  const piRoot = bom.components.find((component) => component['bom-ref'] === 'pkg:npm/%40tinyedge/pi@0.1.3')
-  assert.ok(piRoot.properties.some(({ name, value }) =>
-    name === 'tinyedge:wrapper:excluded-optional-peer'
-      && value === `${EXCLUDED_PI_HOST_PEER.name}@${EXCLUDED_PI_HOST_PEER.version}`))
 })
 
 test('Apache 2.0 remains a byte-exact approved canonical source', async () => {
@@ -507,21 +489,26 @@ test('clipboard and Photon are explicitly excluded metadata, never default insta
   }
 })
 
-test('the existing-Pi host is recorded as excluded and never becomes an add-on install edge', async () => {
-  const bom = await buildSbomForTarget('pi', { root })
-  const rootRef = bom.metadata.component['bom-ref']
-  const rootEdges = bom.dependencies.find(({ ref }) => ref === rootRef).dependsOn
-  const component = bom.components.find((candidate) =>
-    componentFullName(candidate) === EXCLUDED_PI_HOST_PEER.name
-      && candidate.version === EXCLUDED_PI_HOST_PEER.version)
-  assert.ok(component)
-  assert.equal(component.scope, 'excluded')
-  assert.ok(component.hashes.some(({ alg }) => alg === 'SHA-512'))
-  assert.ok(component.properties.some(({ name, value }) =>
-    name === 'tinyedge:review:status' && value === 'excluded-optional-peer'))
-  assert.ok(!rootEdges.includes(component['bom-ref']))
-  assert.deepEqual(
-    bom.dependencies.find(({ ref }) => ref === component['bom-ref']).dependsOn,
-    [],
-  )
+test('legacy facade and existing-Pi package sources are frozen and excluded from active SBOM targets', async () => {
+  assert.equal(SBOM_TARGET_KEYS.includes('npx'), false)
+  assert.equal(SBOM_TARGET_KEYS.includes('pi'), false)
+  for (const [relativePath, sbomPath, expectedRef] of [
+    ['packages/npx/package.json', 'packages/npx/SBOM.cdx.json', 'pkg:npm/tinyedge@0.1.3'],
+    ['packages/pi/package.json', 'packages/pi/SBOM.cdx.json', 'pkg:npm/%40tinyedge/pi@0.1.3'],
+  ]) {
+    const manifestBytes = await readFile(path.join(root, relativePath))
+    const manifest = JSON.parse(manifestBytes.toString('utf8'))
+    assert.equal(manifest.version, '0.1.3')
+    assert.equal(manifest.private, true)
+    const sbom = JSON.parse(await readFile(path.join(root, sbomPath), 'utf8'))
+    assert.equal(sbom.metadata.component['bom-ref'], expectedRef)
+    assert.ok(sbom.metadata.component.properties.some(
+      ({ name, value }) => name === 'tinyedge:sbom:package-json-sha256'
+        && value === createHash('sha256').update(manifestBytes).digest('hex'),
+    ))
+    assert.ok(sbom.metadata.component.properties.some(
+      ({ name, value }) => name === 'tinyedge:release:root-integrity-override'
+        && /historical 0\.1\.3 release record/.test(value),
+    ))
+  }
 })

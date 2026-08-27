@@ -50,17 +50,12 @@ const runtimeBootstrapRegistryErratum = readFileSync(
   path.join(root, 'scripts/npm-bootstrap/REGISTRY-ERRATUM.md'),
   'utf8',
 )
-const releasePackages = [
-  cliPackage,
+const legacyPackages = [
   JSON.parse(readFileSync(path.join(root, 'packages/npx/package.json'), 'utf8')),
   JSON.parse(readFileSync(path.join(root, 'packages/pi/package.json'), 'utf8')),
-  piRuntimePackage,
 ]
-const packedReadmes = [
-  readFileSync(path.join(root, 'packages/npx/README.md'), 'utf8'),
-  readFileSync(path.join(root, 'packages/cli/README.md'), 'utf8'),
-  readFileSync(path.join(root, 'packages/pi/README.md'), 'utf8'),
-]
+const releasePackages = [cliPackage, piRuntimePackage]
+const packedReadme = readFileSync(path.join(root, 'packages/cli/README.md'), 'utf8')
 
 function writeFixtureFile(fixtureRoot, relative, contents) {
   const absolute = path.join(fixtureRoot, relative)
@@ -119,9 +114,11 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
   }, null, 2) + '\n')
   const tinyedgePackages = ['cli', 'npx', 'pi']
   for (const packageName of tinyedgePackages) {
+    const frozen = packageName !== 'cli'
     const legalFiles = ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'SBOM.cdx.json']
     writeFixtureFile(fixtureRoot, `packages/${packageName}/package.json`, JSON.stringify({
-      private: npmReleaseIsPending,
+      version: frozen ? '0.1.3' : '0.1.4',
+      private: frozen || npmReleaseIsPending,
       license: licenseIsPending ? 'UNLICENSED' : 'Apache-2.0',
       repository,
       bugs,
@@ -236,13 +233,13 @@ test('source licensing and npm publication approval are operative while workflow
     'Refuse every repository, event, or ref except TinyEdge main',
   )
   const buildJob = workflow.indexOf('\n  build:')
-  const firstStagePublish = workflow.indexOf('npm stage publish')
+  const firstPublish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.4.tgz"')
 
   assert.ok(npmPendingGuard >= 0)
   assert.ok(licensePendingGuard > npmPendingGuard)
   assert.ok(licensePendingGuard < releaseContextGuard)
   assert.ok(releaseContextGuard < buildJob)
-  assert.ok(buildJob < firstStagePublish)
+  assert.ok(buildJob < firstPublish)
   assert.match(workflow, /if \[\[ -e NPM-RELEASE-PENDING\.md \]\]/)
   assert.match(workflow, /if \[\[ -e LICENSE-PENDING\.md \]\]/)
   assert.match(workflow, /npm release pending/)
@@ -251,17 +248,17 @@ test('source licensing and npm publication approval are operative while workflow
   assert.equal(existsSync(path.join(root, 'NPM-RELEASE-PENDING.md')), false)
   assert.equal(rootPackage.private, true)
   assert.equal(rootPackage.license, 'Apache-2.0')
-  for (const packagePath of [
-    'packages/cli/package.json',
-    'packages/npx/package.json',
-    'packages/pi/package.json',
-  ]) {
+  for (const packagePath of ['packages/cli/package.json']) {
     const manifest = JSON.parse(readFileSync(path.join(root, packagePath), 'utf8'))
     assert.notEqual(manifest.private, true)
     assert.equal(manifest.license, 'Apache-2.0')
     for (const legalFile of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'SBOM.cdx.json']) {
       assert.ok(manifest.files.includes(legalFile))
     }
+  }
+  for (const manifest of legacyPackages) {
+    assert.equal(manifest.version, '0.1.3')
+    assert.equal(manifest.private, true)
   }
   assert.notEqual(piRuntimePackage.private, true)
   assert.equal(piRuntimePackage.license, 'MIT')
@@ -362,47 +359,59 @@ test('every release action is pinned to an immutable commit', () => {
   }
 })
 
-test('staging fails closed on environment, provenance, and license policy', () => {
-  const stageJob = workflow.indexOf('\n  stage:')
+test('direct preview publishing fails closed on environment, provenance, and license policy', () => {
+  const publishJob = workflow.indexOf('\n  publish:')
   const policyGuard = workflow.indexOf(
     'NPM_RELEASE_POLICY_VERSION: ${{ vars.NPM_RELEASE_POLICY_VERSION }}',
-    stageJob,
+    publishJob,
   )
   const publicRepositoryGuard = workflow.indexOf(
     'RELEASE_REPOSITORY_PRIVATE: ${{ github.event.repository.private }}',
-    stageJob,
+    publishJob,
   )
   const sourceCheckout = workflow.indexOf(
     'Check out the exact reviewed source for legal-file comparison',
-    stageJob,
+    publishJob,
   )
-  const licenseGuard = workflow.indexOf('Refuse unresolved package licenses before staging', stageJob)
+  const environmentGuard = workflow.indexOf(
+    'Recheck public visibility and protected release-environment rules',
+    sourceCheckout,
+  )
+  const licenseGuard = workflow.indexOf('Refuse unresolved package licenses before publishing', publishJob)
   const bootstrapGuard = workflow.indexOf(
-    'Require the runtime bootstrap, published runtime, and unpublished TinyEdge candidates',
-    stageJob,
+    'Require the published runtime and an unpublished TinyEdge candidate',
+    publishJob,
   )
-  const firstStagePublish = workflow.indexOf('npm stage publish', stageJob)
+  const firstPublish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.4.tgz"', publishJob)
 
-  assert.ok(stageJob >= 0)
-  assert.ok(policyGuard > stageJob)
+  assert.ok(publishJob >= 0)
+  assert.ok(policyGuard > publishJob)
   assert.ok(publicRepositoryGuard > policyGuard)
   assert.ok(sourceCheckout > publicRepositoryGuard)
-  assert.ok(licenseGuard > sourceCheckout)
+  assert.ok(environmentGuard > sourceCheckout)
+  assert.ok(licenseGuard > environmentGuard)
   assert.ok(bootstrapGuard > licenseGuard)
-  assert.ok(firstStagePublish > bootstrapGuard)
-  assert.match(workflow, /"\$NPM_RELEASE_POLICY_VERSION" != "v1"/)
+  assert.ok(firstPublish > bootstrapGuard)
+  assert.match(workflow, /"\$NPM_RELEASE_POLICY_VERSION" != "v2-direct-preview"/)
   assert.match(workflow, /"\$RELEASE_REPOSITORY_PRIVATE" != "false"/)
-  const stageBeforeCheckout = workflow.slice(stageJob, sourceCheckout)
-  assert.match(stageBeforeCheckout, /permissions:\s*\n\s+contents: read/)
-  assert.match(stageBeforeCheckout, /id-token: write/)
-  const stageBeforeLicense = workflow.slice(sourceCheckout, licenseGuard)
+  assert.match(workflow, /environments\/npm-release/)
+  assert.match(workflow, /type === 'required_reviewers'/)
+  assert.match(workflow, /reviewerRule\?\.reviewers\?\.length >= 1/)
+  assert.match(workflow, /environment\.can_admins_bypass/)
+  assert.match(workflow, /deployment-branch-policies\?per_page=100/)
+  assert.match(workflow, /policies\.total_count,[\s\S]{0,30}1/)
+  assert.match(workflow, /\[\{ name: 'main', type: 'branch' \}\]/)
+  const publishBeforeCheckout = workflow.slice(publishJob, sourceCheckout)
+  assert.match(publishBeforeCheckout, /permissions:\s*\n\s+contents: read/)
+  assert.match(publishBeforeCheckout, /id-token: write/)
+  const publishBeforeLicense = workflow.slice(sourceCheckout, licenseGuard)
   assert.match(
-    stageBeforeLicense,
+    publishBeforeLicense,
     /uses: actions\/checkout@[0-9a-f]{40}\s+#\s+v\d+\.\d+\.\d+/,
   )
-  assert.match(stageBeforeLicense, /ref: \$\{\{ github\.sha \}\}/)
-  assert.match(stageBeforeLicense, /fetch-depth: 1/)
-  assert.match(stageBeforeLicense, /persist-credentials: false/)
+  assert.match(publishBeforeLicense, /ref: \$\{\{ github\.sha \}\}/)
+  assert.match(publishBeforeLicense, /fetch-depth: 1/)
+  assert.match(publishBeforeLicense, /persist-credentials: false/)
   assert.match(workflow, /\['-xOf', path\.join\(directory, filename\), 'package\/package\.json'\]/)
   assert.match(workflow, /packedPackage\.private, true/)
   assert.match(workflow, /license: 'MIT'/)
@@ -411,15 +420,14 @@ test('staging fails closed on environment, provenance, and license policy', () =
   assert.match(workflow, /\['LICENSE', 'NOTICE', 'SBOM\.cdx\.json', 'UPSTREAM\.md', 'THIRD_PARTY_NOTICES\.md', 'UPSTREAM_README\.md'\]/)
   assert.match(workflow, /packed \$\{legalFile\} must match the reviewed source bytes/)
   assert.match(workflow, /readFileSync\(path\.join\(sourceDirectory, legalFile\)\)/)
+  assert.match(workflow, /maxBuffer: 64 \* 1024 \* 1024/)
   for (const filename of [
     'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz',
-    'tinyedge-cli-0.1.3.tgz',
-    'tinyedge-pi-0.1.3.tgz',
-    'tinyedge-0.1.3.tgz',
+    'tinyedge-0.1.4.tgz',
   ]) {
-    assert.match(workflow.slice(licenseGuard, firstStagePublish), new RegExp(filename.replaceAll('.', '\\.')))
+    assert.match(workflow.slice(licenseGuard, firstPublish), new RegExp(filename.replaceAll('.', '\\.')))
   }
-  assert.doesNotMatch(workflow.slice(0, stageJob), /UNLICENSED/)
+  assert.doesNotMatch(workflow.slice(0, publishJob), /UNLICENSED/)
   assert.doesNotMatch(packageChecker, /must declare its intended release license/)
   assert.doesNotMatch(workflow, /workflow_dispatch:\s*\n\s+inputs:/)
   assert.doesNotMatch(
@@ -427,15 +435,17 @@ test('staging fails closed on environment, provenance, and license policy', () =
     /allow-private|license-override|policy-override|acknowledge-private|acknowledge-provenance/i,
   )
 
-  assert.match(releaseGuide, /NPM_RELEASE_POLICY_VERSION` to `v1`/)
+  assert.match(releaseGuide, /NPM_RELEASE_POLICY_VERSION` to `v2-direct-preview`/)
   assert.match(releaseGuide, /canonical source repository is public before dispatch/)
+  assert.match(releaseGuide, /Remove the obsolete trusted-publisher grants/)
+  assert.match(releaseGuide, /exact deployment branch `main`/)
   assert.match(releaseGuide, /use `UNLICENSED`/)
   assert.match(releaseGuide, /Local packing and pull-request x64\/arm64 checks remain available/)
 })
 
-test('a published runtime is reused and only unpublished TinyEdge candidates are staged', () => {
+test('a published runtime is reused and only one unpublished TinyEdge candidate is published', () => {
   const bootstrapGuard = workflow.indexOf(
-    'Require the runtime bootstrap, published runtime, and unpublished TinyEdge candidates',
+    'Require the published runtime and an unpublished TinyEdge candidate',
   )
   const packageExistence = workflow.indexOf(
     "npm view '@tinyedge/pi-runtime@0.0.0' name version license publishConfig",
@@ -450,30 +460,36 @@ test('a published runtime is reused and only unpublished TinyEdge candidates are
     bootstrapTag,
   )
   const candidateE404 = workflow.indexOf(
-    'check_unpublished \'@tinyedge/cli\' "$RELEASE_VERSION" cli',
+    'check_unpublished \'tinyedge\' "$RELEASE_VERSION" tinyedge',
     bootstrapTag,
   )
-  const runtimeStage = workflow.indexOf(
-    'npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"',
+  const tinyedgeTags = workflow.indexOf(
+    'npm view tinyedge dist-tags --json',
+    bootstrapGuard,
   )
-  const cliStage = workflow.indexOf(
-    'npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.3.tgz"',
+  const runtimePublish = workflow.indexOf(
+    'npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"',
+  )
+  const tinyedgePublish = workflow.indexOf(
+    'npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.4.tgz"',
     candidateE404,
   )
 
   assert.ok(bootstrapGuard >= 0)
   assert.ok(packageExistence > bootstrapGuard)
   assert.ok(bootstrapTag > packageExistence)
+  assert.ok(tinyedgeTags > bootstrapGuard)
+  assert.ok(candidateE404 > tinyedgeTags)
   assert.ok(publishedRuntime > bootstrapTag)
-  assert.ok(candidateE404 > bootstrapTag)
-  assert.equal(runtimeStage, -1)
-  assert.ok(cliStage > publishedRuntime)
-  assert.match(workflow, /npm staged publishing cannot create a brand-new package/)
+  assert.equal(runtimePublish, -1)
+  assert.ok(tinyedgePublish > publishedRuntime)
   assert.match(workflow, /tags\.bootstrap,\s*'0\.0\.0'/)
   assert.match(workflow, /tags\.latest,\s*process\.env\.PI_RUNTIME_VERSION/)
   assert.match(workflow, /tags\.preview,\s*process\.env\.PI_RUNTIME_VERSION/)
   assert.match(workflow, /packed runtime tarball must match the already-published registry artifact/)
-  assert.match(workflow, /this release reuses it and must not restage it/)
+  assert.match(workflow, /tags\.latest, '0\.1\.3'/)
+  assert.match(workflow, /tags\.preview, '0\.1\.3'/)
+  assert.match(workflow, /this release reuses it and must not republish it/)
   assert.match(workflow, /PI_RUNTIME_BOOTSTRAP_INTEGRITY: \$\{\{ vars\.PI_RUNTIME_BOOTSTRAP_INTEGRITY \}\}/)
   assert.match(workflow, /PI_RUNTIME_BOOTSTRAP_SHASUM: \$\{\{ vars\.PI_RUNTIME_BOOTSTRAP_SHASUM \}\}/)
   assert.match(workflow, /metadata\.dist\?\.integrity, process\.env\.PI_RUNTIME_BOOTSTRAP_INTEGRITY/)
@@ -487,8 +503,8 @@ test('a published runtime is reused and only unpublished TinyEdge candidates are
   assert.match(workflow, /\['LICENSE', 'README\.md', 'package\.json'\]/)
   assert.match(workflow, /bootstrap must not declare \$\{field\}/)
   assert.match(workflow, /namespace bootstrap must contain only its license/)
-  assert.match(workflow, /this workflow never direct-publishes the runtime/i)
-  assert.match(workflow, /Automatic provenance applies to these staged candidate artifacts/)
+  assert.match(workflow, /this workflow[\s\S]{0,100}never republishes it/i)
+  assert.match(workflow, /Automatic provenance applies to tinyedge@0\.1\.4/)
 
   assert.match(releaseGuide, /cannot create a brand-new package/)
   assert.match(releaseGuide, /minimal `@tinyedge\/pi-runtime@0\.0\.0` tarball/)
@@ -498,10 +514,11 @@ test('a published runtime is reused and only unpublished TinyEdge candidates are
   assert.match(releaseGuide, /npx --yes npm@11\.19\.0 publish PATH_TO_TARBALL --tag bootstrap --access public --registry=https:\/\/registry\.npmjs\.org\//)
   assert.match(releaseGuide, /unauthenticated clean environment/)
   assert.match(releaseGuide, /publish it interactively with 2FA under the `bootstrap` tag/)
-  assert.match(releaseGuide, /both `bootstrap` and `latest` to resolve only to these exact inert/)
-  assert.match(releaseGuide, /inert bootstrap below was completed before the first audited runtime stage/)
-  assert.match(releaseGuide, /does not receive this workflow's automatic provenance/)
-  assert.match(releaseGuide, /Automatic\s+provenance applies later to the real staged candidate built from the public/)
+  assert.match(releaseGuide, /both `bootstrap` and `latest` to resolve only to these[\s\S]{0,30}exact inert/)
+  assert.match(releaseGuide, /inert bootstrap below[\s\S]{0,30}was completed before the first audited runtime[\s\S]{0,20}release/)
+  assert.match(releaseGuide, /does not receive this workflow's[\s\S]{0,20}automatic[\s\S]{0,20}provenance/)
+  assert.match(releaseGuide, /Automatic\s+provenance applies to the real candidate built from the public/)
+  assert.match(releaseGuide, /both `latest` and `preview` still resolve to `tinyedge@0\.1\.3`/)
 })
 
 test('the reviewed runtime namespace bootstrap is inert and reproducible from source', () => {
@@ -545,45 +562,52 @@ test('the reviewed runtime namespace bootstrap is inert and reproducible from so
   assert.match(runtimeBootstrapRegistryErratum, /d5ad1e7bbd5b82e04211dbf6b81750cdd90a0380/)
 })
 
-test('one Windows candidate is reused for x64, arm64, and ordered staging', () => {
+test('one Windows candidate is reused for x64, arm64, npm 11/12, and direct preview publishing', () => {
   assert.match(workflow, /run release:pack --/)
   assert.match(workflow, /run release:verify --/)
   assert.match(workflow, /runner: windows-latest/)
   assert.match(workflow, /runner: windows-11-arm/)
-  assert.match(workflow, /RELEASE_VERSION: 0\.1\.3/)
+  assert.match(workflow, /npm-version: 11\.19\.0/)
+  assert.match(workflow, /npm-version: 12\.0\.2/)
+  assert.match(workflow, /node-version: 24\.15\.0/)
+  assert.match(workflow, /RELEASE_VERSION: 0\.1\.4/)
   assert.match(workflow, /PI_RUNTIME_VERSION: 0\.84\.2-tinyedge\.1/)
   assert.match(workflow, /node -p 'process\.arch'/)
   assert.match(workflow, /processArchitecture = \(node -p 'process\.arch'\)\.Trim\(\)/)
 
-  const cli = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const pi = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  const facade = workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
-  assert.ok(cli >= 0)
-  assert.ok(cli < pi)
-  assert.ok(pi < facade)
+  const publish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.4.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  assert.ok(publish >= 0)
   assert.equal(
-    workflow.indexOf('npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"'),
+    workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"'),
     -1,
   )
 
-  const directPublish = /npm\s+publish(?:\s|$)/m
-  assert.doesNotMatch(workflow, directPublish)
+  assert.doesNotMatch(workflow, /npm\s+stage\s+publish/)
   assert.doesNotMatch(workflow, /--tag\s+latest/)
-  const stageCommands = workflow.match(/^\s*npm stage publish[^\n]+/gm) || []
-  assert.equal(stageCommands.length, 3)
-  for (const command of stageCommands) {
-    assert.match(command, /npm stage publish "\.\/\$RELEASE_ARTIFACT_DIRECTORY\//)
-    assert.doesNotMatch(command, /npm stage publish "\$RELEASE_ARTIFACT_DIRECTORY\//)
+  const publishCommands = workflow.match(/^\s*npm publish[^\n]+/gm) || []
+  assert.equal(publishCommands.length, 1)
+  for (const command of publishCommands) {
+    assert.match(command, /npm publish "\.\/\$RELEASE_ARTIFACT_DIRECTORY\//)
+    assert.doesNotMatch(command, /npm publish "\$RELEASE_ARTIFACT_DIRECTORY\//)
     assert.match(
       command,
       /--registry="\$NPM_REGISTRY" --provenance --tag preview --access public/,
     )
   }
-  const liveVisibility = workflow.indexOf('Recheck live public GitHub visibility')
+  const liveVisibility = workflow.indexOf('Recheck public visibility and protected release-environment rules')
   assert.ok(liveVisibility >= 0)
-  assert.ok(liveVisibility < cli)
+  assert.ok(liveVisibility < publish)
   assert.match(workflow, /repository\.private, false/)
   assert.match(workflow, /repository\.visibility, 'public'/)
+  assert.match(workflow, /github\.run_attempt/)
+  assert.match(workflow, /npm audit signatures/)
+  assert.match(workflow, /npm install --ignore-scripts --force --no-audit --no-fund/)
+  assert.doesNotMatch(workflow, /npm install --package-lock-only/)
+  assert.match(workflow, /verification_succeeded=false/)
+  assert.match(workflow, /Registry convergence failed/)
+  assert.match(workflow, /publishing preview must not move latest/)
+  assert.match(workflow, /preview must resolve to 0\.1\.4/)
+  assert.match(workflow, /SLSA v1 provenance predicate/)
   assert.match(workflow, /manifest-sha256: \$\{\{ steps\.candidate\.outputs\.manifest-sha256 \}\}/)
   assert.match(workflow, /EXPECTED_MANIFEST_SHA256: \$\{\{ needs\.build\.outputs\.manifest-sha256 \}\}/)
   assert.match(workflow, /downloaded release manifest must match the trusted build-job digest/)
@@ -592,41 +616,56 @@ test('one Windows candidate is reused for x64, arm64, and ordered staging', () =
 })
 
 test('release verification uses real npm lifecycle and Windows command shims', () => {
-  const facadePackage = releasePackages.find(({ name }) => name === 'tinyedge')
-  assert.equal(cliPackage.bin, undefined)
-  assert.deepEqual(facadePackage.bin, { tinyedge: 'bin/tinyedge.js' })
+  assert.deepEqual(cliPackage.bin, { tinyedge: 'bin/tinyedge.js' })
+  assert.equal(cliPackage.dependencies['@tinyedge/cli'], undefined)
+  assert.equal(cliPackage.bundleDependencies, true)
   assert.doesNotMatch(packageChecker, /'install',\s*'--ignore-scripts'/)
   assert.doesNotMatch(workflow, /npm ci --prefix packages\/cli/)
-  assert.match(workflow, /Bootstrap checks from the locally packed runtime/)
+  assert.match(workflow, /Bootstrap the reviewed dependency tree from the locally packed runtime/)
+  assert.ok(
+    workflow.indexOf('run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli')
+      < workflow.indexOf('run release:pack -- $artifactDirectory'),
+    'the reviewed dependency tree must be installed before npm pack bundles it',
+  )
   assert.match(packageChecker, /function npmFileSpec\(file\)/)
   assert.match(packageChecker, /file:\$\{path\.resolve\(file\)\.replaceAll\('\\\\', '\/'\)\}/)
-  assert.match(packageChecker, /candidateArtifacts\.map\(\(\{ name, file \}\) => \[name, npmFileSpec\(file\)\]\)/)
-  assert.match(packageChecker, /verification must consume the locally packed runtime tarball/)
+  assert.match(packageChecker, /const localDependencies = \{ tinyedge: npmFileSpec\(tinyedgeArtifact\.file\) \}/)
+  assert.match(packageChecker, /verification must reproduce the advertised one-package install/)
+  assert.match(packageChecker, /'--offline'/)
+  assert.match(packageChecker, /local-npm-cache/)
+  assert.match(packageChecker, /global-npm-cache/)
+  assert.match(packageChecker, /'node_modules\/@tinyedge\/pi-runtime'/)
   assert.match(packageChecker, /'node_modules', '\.bin', 'tinyedge\.cmd'/)
-  assert.match(packageChecker, /assertWindowsShimTargets\(localShim, localFacadeEntry/)
-  assert.match(packageChecker, /assertWindowsShimTargets\(globalShim, globalFacadeEntry/)
-  assert.match(packageChecker, /\[localFacadeEntry, '--version'\]/)
-  assert.match(packageChecker, /\[globalFacadeEntry, '--version'\]/)
+  assert.match(packageChecker, /assertWindowsShimTargets\(localShim, localEntry/)
+  assert.match(packageChecker, /assertWindowsShimTargets\(globalShim, globalEntry/)
+  assert.match(packageChecker, /\[localEntry, '--version'\]/)
+  assert.match(packageChecker, /\[globalEntry, '--version'\]/)
   assert.match(packageChecker, /'--global',\s*'--prefix'/)
   assert.match(packageChecker, /path\.join\(globalPrefix, 'tinyedge\.cmd'\)/)
 })
 
-test('the published CLI carries the reviewed dependency closure', () => {
+test('the published tinyedge package carries the reviewed dependency closure', () => {
   assert.equal(cliShrinkwrap, cliPackageLock)
+  assert.equal(cliPackage.bundleDependencies, true)
   assert.ok(cliPackage.files.includes('npm-shrinkwrap.json'))
   assert.equal(cliPackage.files.includes('RELEASE.md'), false)
   assert.match(packageChecker, /REVIEWED_PI_VERSION = '0\.84\.2'/)
   assert.match(packageChecker, /PI_RUNTIME_VERSION = '0\.84\.2-tinyedge\.1'/)
   assert.match(packageChecker, /RELEASE_NPM_VERSION = '11\.19\.0'/)
-  assert.match(packageChecker, /release package verification requires npm/)
+  assert.match(packageChecker, /CONSUMER_NPM_VERSIONS = new Set\(\[RELEASE_NPM_VERSION, '12\.0\.2'\]\)/)
+  assert.match(packageChecker, /release packaging requires npm/)
+  assert.match(packageChecker, /consumer verification requires one of npm/)
+  assert.match(packageChecker, /the tinyedge tarball must bundle direct dependency/)
+  assert.match(packageChecker, /npm pack must account for every top-level bundled dependency/)
+  assert.match(packageChecker, /exactly the reviewed name\/version dependency identities/)
   assert.match(packageChecker, /FORBIDDEN_RUNTIME_PACKAGES/)
   assert.match(packageChecker, /@silvia-odwyer\/photon-node/)
   assert.match(packageChecker, /@mariozechner\/clipboard/)
   assert.match(packageChecker, /isForbiddenInstalledPackage/)
   assert.doesNotMatch(packageChecker, /missing Pi clipboard loader/)
   assert.match(packageChecker, /peerDependenciesMeta/)
-  assert.match(packageChecker, /the Pi add-on must depend on the exact core version/)
-  assert.match(packageChecker, /the CLI tarball must contain its reviewed npm-shrinkwrap\.json/)
+  assert.match(packageChecker, /tinyedge must own its command directly/)
+  assert.match(packageChecker, /the tinyedge tarball must contain its reviewed npm-shrinkwrap\.json/)
   assert.match(packageChecker, /the internal release checklist must not be published/)
   assert.match(packageChecker, /packed \$\{legalFile\} must match the reviewed source bytes/)
   assert.match(packageChecker, /ignore LICENSE-MIT bytes drifted/)
@@ -703,20 +742,25 @@ test('the clean export uses only the standalone repository identity', () => {
 
 test('released documentation is truthful and the export boundary is executable', () => {
   assert.match(rootReadme, /Version `0\.1\.3` is published to npm under both `latest` and `preview`/)
-  assert.match(rootReadme, /npx --yes tinyedge/)
-  assert.match(rootReadme, /does not install a[\s\S]{0,20}persistent command/)
+  assert.match(rootReadme, /npm install --global tinyedge/)
+  assert.match(rootReadme, /npx --yes tinyedge@latest[\s\S]{0,80}does not install[\s\S]{0,30}persistent command/)
   assert.match(rootReadme, /supported release and source-development targets are Windows x64 and native/)
   assert.match(rootReadme, /does not contain the TinyEdge hosted control/)
   assert.match(rootReadme, /DEVELOPMENT\.md/)
   assert.match(rootReadme, /source is available under the licenses in this repository/i)
-  assert.match(rootReadme, /published through the protected, stage-only workflow/i)
+  assert.match(rootReadme, /protected workflow directly publishes one OIDC-authenticated[\s\S]{0,80}to `preview`/i)
   assert.match(releaseGuide, /Released state on 2026-08-18/)
   assert.match(releaseGuide, /restore exposure in reverse order/)
+  assert.match(releaseGuide, /npm audit signatures/)
+  assert.match(releaseGuide, /npm install --ignore-scripts --no-audit --no-fund tinyedge@0\.1\.4/)
+  assert.match(releaseGuide, /Remove the obsolete trusted-publisher grants/)
+  assert.match(dependencyGuide, /npm 12 ignores a dependency[\s\S]{0,30}package's shrinkwrap/)
+  assert.match(dependencyGuide, /empty caches under npm 11\.19\.0 and npm 12\.0\.2/)
   assert.match(runtimeBootstrapRegistryErratum, /`bootstrap` remains pinned[\s\S]{0,160}`preview` and `latest` both resolve/)
-  assert.match(dependencyGuide, /TinyEdge policy[\s\S]{0,100}publishable release manifests[\s\S]{0,120}stage-only npm workflow/i)
-  assert.match(dependencyGuide, /npm owner may technically retain[\s\S]{0,160}outside the approved[\s\S]{0,30}procedure/i)
+  assert.match(dependencyGuide, /TinyEdge policy[\s\S]{0,100}one publishable `tinyedge` candidate[\s\S]{0,120}direct OIDC workflow to `preview`/i)
+  assert.match(dependencyGuide, /npm owner may technically[\s\S]{0,40}retain[\s\S]{0,160}outside the[\s\S]{0,30}approved procedure/i)
   assert.doesNotMatch(dependencyGuide, /NPM-RELEASE-PENDING\.md[\s\S]{0,100}private:\s*true/i)
-  assert.match(reviewedInventorySource, /package-manifest approval[\s\S]{0,120}stage-only release workflow/i)
+  assert.match(reviewedInventorySource, /Direct publication is limited to preview[\s\S]{0,120}protected OIDC[\s\S]{0,40}workflow/i)
   assert.doesNotMatch(reviewedInventorySource, /publication lock[\s\S]{0,100}private package flags/i)
   assert.match(boundaryCheck, /unexpected top-level export entry/)
   assert.match(boundaryCheck, /local user path leaked/)
@@ -727,26 +771,16 @@ test('released documentation is truthful and the export boundary is executable',
   assert.match(cliWorkflow, /node scripts\/check-export-boundary\.mjs/)
 })
 
-test('packed READMEs remain truthful when the exact 0.1.3 artifacts are public', () => {
-  for (const readme of packedReadmes) {
-    assert.match(readme, /0\.1\.1/)
-    assert.doesNotMatch(
-      readme,
-      /0\.1\.3[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
-    )
-    assert.doesNotMatch(
-      readme,
-      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.3/i,
-    )
-  }
-  assert.match(packedReadmes[0], /npx tinyedge@0\.1\.3/)
-  assert.match(packedReadmes[0], /npm view tinyedge@0\.1\.3 version --json/)
-  assert.match(packedReadmes[0], /npm install --global tinyedge@0\.1\.3/)
-  assert.match(packedReadmes[1], /npx tinyedge@0\.1\.3/)
-  assert.match(packedReadmes[1], /npm view tinyedge@0\.1\.3 version --json/)
-  assert.match(packedReadmes[1], /npm install --global tinyedge@0\.1\.3/)
-  assert.match(packedReadmes[2], /pi install npm:@tinyedge\/pi@0\.1\.3/)
-  assert.match(packedReadmes[2], /npm view @tinyedge\/pi@0\.1\.3 version --json/)
+test('the packed README describes the one-package 0.1.4 release', () => {
+  assert.match(packedReadme, /0\.1\.3/)
+  assert.doesNotMatch(
+    packedReadme,
+    /0\.1\.4[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+  )
+  assert.match(packedReadme, /npx tinyedge@0\.1\.4/)
+  assert.match(packedReadme, /npm view tinyedge@0\.1\.4 version --json/)
+  assert.match(packedReadme, /npm install --global tinyedge@0\.1\.4/)
+  assert.match(packedReadme, /one package contains the[\s\S]{0,100}client library, Pi extension, and user-facing command shim/i)
 })
 
 test('pull-request CI covers release-workflow changes and its regression test', () => {

@@ -1,5 +1,11 @@
 # `@tinyedge/pi`
 
+This directory retains the `0.1.3` implementation record. Its current
+`private` marker prevents accidental republication; the exact public artifact
+remains immutable in npm and repository history. Existing
+`@tinyedge/pi@0.1.3` installs remain available, but ordinary Harness releases
+now update only `tinyedge`.
+
 TinyEdge orchestration tools for people who already use Pi.
 
 `@tinyedge/pi@0.1.3` is the Windows preview package for an existing Pi

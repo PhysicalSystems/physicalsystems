@@ -20,7 +20,8 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
 const NPM_CLI = process.env.npm_execpath
 const RELEASE_NPM_VERSION = '11.19.0'
-const TINYEDGE_VERSION = '0.1.3'
+const CONSUMER_NPM_VERSIONS = new Set([RELEASE_NPM_VERSION, '12.0.2'])
+const TINYEDGE_VERSION = '0.1.4'
 const PI_RUNTIME_VERSION = '0.84.2-tinyedge.1'
 const PACKAGES = [
   {
@@ -29,9 +30,11 @@ const PACKAGES = [
     name: '@tinyedge/pi-runtime',
     version: PI_RUNTIME_VERSION,
   },
-  { key: 'cli', directory: 'packages/cli', name: '@tinyedge/cli' },
-  { key: 'pi', directory: 'packages/pi', name: '@tinyedge/pi' },
-  { key: 'facade', directory: 'packages/npx', name: 'tinyedge' },
+  { key: 'tinyedge', directory: 'packages/cli', name: 'tinyedge' },
+]
+const FROZEN_PACKAGES = [
+  { directory: 'packages/npx', name: 'tinyedge', version: '0.1.3' },
+  { directory: 'packages/pi', name: '@tinyedge/pi', version: '0.1.3' },
 ]
 const REVIEWED_PI_VERSION = '0.84.2'
 const REVIEWED_PI_HOST_PACKAGE = '@earendil-works/pi-coding-agent'
@@ -111,7 +114,8 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd || REPOSITORY_ROOT,
     encoding: 'utf8',
-    env: { ...process.env, NO_COLOR: '1' },
+    env: { ...process.env, NO_COLOR: '1', ...options.env },
+    maxBuffer: options.maxBuffer || 64 * 1024 * 1024,
     timeout: options.timeout || 300_000,
     windowsHide: true,
   })
@@ -129,7 +133,8 @@ function run(command, args, options = {}) {
 function runBuffer(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd || REPOSITORY_ROOT,
-    env: { ...process.env, NO_COLOR: '1' },
+    env: { ...process.env, NO_COLOR: '1', ...options.env },
+    maxBuffer: options.maxBuffer || 64 * 1024 * 1024,
     timeout: options.timeout || 300_000,
     windowsHide: true,
   })
@@ -164,7 +169,7 @@ function assertWindowsShimTargets(shim, target, source) {
   const relativeTarget = path.relative(path.dirname(shim), target).replaceAll('\\', '/').toLowerCase()
   assert.ok(
     normalizedShim.includes(relativeTarget),
-    `${source} must target the packed tinyedge facade entry (${relativeTarget})`,
+    `${source} must target the packed tinyedge entry (${relativeTarget})`,
   )
 }
 
@@ -179,6 +184,39 @@ function findFiles(directory, predicate, result = []) {
     else if (predicate(file)) result.push(file)
   }
   return result
+}
+
+function collectInstalledPackages(nodeModules, result = []) {
+  for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === '.bin') continue
+    if (entry.name.startsWith('@')) {
+      collectInstalledPackages(path.join(nodeModules, entry.name), result)
+      continue
+    }
+    const packageDirectory = path.join(nodeModules, entry.name)
+    const packageJson = path.join(packageDirectory, 'package.json')
+    if (!existsSync(packageJson)) continue
+    result.push({ directory: packageDirectory, metadata: readJson(packageJson) })
+    const nestedNodeModules = path.join(packageDirectory, 'node_modules')
+    if (existsSync(nestedNodeModules)) collectInstalledPackages(nestedNodeModules, result)
+  }
+  return result
+}
+
+function packageVersionIdentities(packages) {
+  return [...new Set(packages
+    .filter(({ name, version }) => name && version && name !== 'tinyedge')
+    .map(({ name, version }) => `${name}@${version}`))]
+    .sort()
+}
+
+function reviewedVersionIdentities(lock) {
+  return packageVersionIdentities(Object.entries(lock.packages || {})
+    .filter(([packagePath]) => packagePath)
+    .map(([packagePath, metadata]) => ({
+      name: packageNameFromLockPath(packagePath),
+      version: metadata.version,
+    })))
 }
 
 function sha256(file) {
@@ -284,10 +322,15 @@ function validatePiRuntimeProvenance(directory, metadata) {
 }
 
 function assertReviewedClosure(lock, source, expectedRuntimeIntegrity) {
-  assert.equal(lock.name, '@tinyedge/cli', `${source} must describe @tinyedge/cli`)
+  assert.equal(lock.name, 'tinyedge', `${source} must describe tinyedge`)
   assert.equal(lock.lockfileVersion, 3, `${source} must use lockfileVersion 3`)
   assert.equal(lock.version, TINYEDGE_VERSION, `${source} must describe TinyEdge ${TINYEDGE_VERSION}`)
   assert.equal(lock.packages?.['']?.version, lock.version, `${source} root version must match`)
+  assert.deepEqual(
+    [...lock.packages?.['']?.bundleDependencies || []].sort(),
+    Object.keys(lock.packages?.['']?.dependencies || {}).sort(),
+    `${source} must mark every direct runtime dependency for bundling`,
+  )
   assert.equal(
     lock.packages?.['']?.dependencies?.['@tinyedge/pi-runtime'],
     PI_RUNTIME_VERSION,
@@ -391,20 +434,20 @@ function validateReviewedShrinkwrap(expectedRuntimeIntegrity) {
   )
 }
 
-function assertInstalledReviewedClosure(nodeModules, source) {
+function assertInstalledReviewedClosure(nodeModules, source, reviewedLock) {
   const versions = new Map()
   const ignoreLicenseFiles = []
-  for (const packageFile of findFiles(nodeModules, (file) => path.basename(file) === 'package.json')) {
-    let metadata
-    try {
-      metadata = readJson(packageFile)
-    } catch {
-      continue
-    }
+  const installedPackages = collectInstalledPackages(nodeModules)
+  assert.deepEqual(
+    packageVersionIdentities(installedPackages.map(({ metadata }) => metadata)),
+    reviewedVersionIdentities(reviewedLock),
+    `${source} must contain exactly the reviewed name/version dependency identities`,
+  )
+  for (const { directory, metadata } of installedPackages) {
     const name = metadata.name
     if (name === 'ignore') {
       assert.equal(metadata.version, '7.0.5', `${source} must retain ignore@7.0.5`)
-      ignoreLicenseFiles.push(path.join(path.dirname(packageFile), IGNORE_LICENSE_EVIDENCE.file))
+      ignoreLicenseFiles.push(path.join(directory, IGNORE_LICENSE_EVIDENCE.file))
     }
     if (!name?.startsWith('@earendil-works/pi-')
       && name !== '@tinyedge/pi-runtime'
@@ -425,7 +468,7 @@ function assertInstalledReviewedClosure(nodeModules, source) {
   assert.deepEqual(
     [...versions.get('@tinyedge/pi-runtime') || []],
     [PI_RUNTIME_VERSION],
-    `${source} must use the locally packed compatibility runtime`,
+    `${source} must use the bundled compatibility runtime`,
   )
   for (const name of versions.keys()) {
     assert.equal(
@@ -476,47 +519,49 @@ function validateSourceLegalBundle(packages) {
 
 function validatePackageContracts(packages) {
   const runtime = packages.find(({ key }) => key === 'pi-runtime')
-  const tinyedgePackages = packages.filter(({ key }) => key !== 'pi-runtime')
-  const cli = packages.find(({ key }) => key === 'cli').metadata
-  const facade = packages.find(({ key }) => key === 'facade').metadata
-  const versions = new Set(tinyedgePackages.map(({ metadata }) => metadata.version))
-  assert.equal(versions.size, 1, 'all release packages must use the same exact version')
-  const [version] = versions
+  const tinyedge = packages.find(({ key }) => key === 'tinyedge').metadata
+  const version = tinyedge.version
   assert.equal(version, TINYEDGE_VERSION)
   validateSourceLegalBundle(packages)
   validatePiRuntimeProvenance(runtime.directory, runtime.metadata)
   assert.equal(
-    cli.dependencies['@tinyedge/pi-runtime'],
+    tinyedge.dependencies['@tinyedge/pi-runtime'],
     PI_RUNTIME_VERSION,
-    'the CLI must depend on the exact compatibility runtime',
+    'tinyedge must depend on the exact compatibility runtime',
   )
-  assert.equal(
-    facade.dependencies['@tinyedge/cli'],
-    version,
-    'the facade must depend on the exact core version',
-  )
-  assert.equal(cli.bin, undefined, 'the core library must not compete for the facade command')
   assert.deepEqual(
-    facade.bin,
+    tinyedge.bin,
     { tinyedge: 'bin/tinyedge.js' },
-    'the facade must be the sole owner of the tinyedge command',
+    'tinyedge must own its command directly',
+  )
+  assert.deepEqual(
+    tinyedge.exports,
+    {
+      '.': './src/index.js',
+      './run': './src/cli.js',
+      './pi-extension': './src/pi-extension.js',
+    },
+    'tinyedge must carry the former core import surface in the same artifact',
   )
   assert.equal(
-    packages.find(({ key }) => key === 'pi').metadata.dependencies['@tinyedge/cli'],
-    version,
-    'the Pi add-on must depend on the exact core version',
+    tinyedge.bundleDependencies,
+    true,
+    'tinyedge must bundle its reviewed dependency closure for npm 12 consumers',
   )
-  const piAddon = packages.find(({ key }) => key === 'pi').metadata
-  assertOptionalPeer(piAddon, REVIEWED_PI_HOST_PACKAGE, REVIEWED_PI_VERSION, '@tinyedge/pi')
-  for (const { metadata } of tinyedgePackages) {
-    assert.equal(metadata.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
-    assert.deepEqual(
-      metadata.publishConfig,
-      { access: 'public' },
-      `${metadata.name} publishConfig must not redirect registry or authentication`,
-    )
-    assert.deepEqual(metadata.os, ['win32'])
-    assert.match(metadata.engines?.node || '', />=22\.19\.0/)
+  assert.equal(tinyedge.dependencies['@tinyedge/cli'], undefined)
+  assert.equal(tinyedge.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
+  assert.deepEqual(
+    tinyedge.publishConfig,
+    { access: 'public' },
+    'tinyedge publishConfig must not redirect registry or authentication',
+  )
+  assert.deepEqual(tinyedge.os, ['win32'])
+  assert.match(tinyedge.engines?.node || '', />=22\.19\.0/)
+  for (const frozen of FROZEN_PACKAGES) {
+    const metadata = readJson(path.join(REPOSITORY_ROOT, frozen.directory, 'package.json'))
+    assert.equal(metadata.name, frozen.name)
+    assert.equal(metadata.version, frozen.version)
+    assert.equal(metadata.private, true, `${frozen.name}@${frozen.version} must remain frozen source`)
   }
   assert.equal(runtime.metadata.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
   assert.deepEqual(
@@ -540,45 +585,43 @@ function validateReleaseReadmes(packages) {
   for (const { key, directory, metadata } of packages) {
     if (key === 'pi-runtime') continue
     const readme = readFileSync(path.join(directory, 'README.md'), 'utf8')
-    const registryPackage = key === 'pi' ? metadata.name : 'tinyedge'
     assert.match(
       readme,
-      new RegExp(`npm view ${registryPackage.replace('/', '\\/')}@0\\.1\\.3 version --json`),
+      /npm view tinyedge@0\.1\.4 version --json/,
       `${metadata.name} README must make exact registry availability independently verifiable`,
     )
     assert.doesNotMatch(
       readme,
-      /0\.1\.3[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
-      `${metadata.name} README must not describe its own 0.1.3 artifact as pre-publication`,
+      /0\.1\.4[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+      `${metadata.name} README must not describe its own 0.1.4 artifact as pre-publication`,
     )
     assert.doesNotMatch(
       readme,
-      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.3/i,
-      `${metadata.name} README must not describe its own 0.1.3 artifact as pre-publication`,
+      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.4/i,
+      `${metadata.name} README must not describe its own 0.1.4 artifact as pre-publication`,
     )
-    assert.match(readme, /0\.1\.1/, `${metadata.name} README must retain the historical distinction`)
+    assert.match(readme, /0\.1\.3/, `${metadata.name} README must retain the package-migration distinction`)
     assert.match(
       readme,
       /(?:did not|do not|does not)[\s\S]{0,160}(?:validate|exercise)[\s\S]{0,80}(?:OAuth|login|live|production)/i,
       `${metadata.name} README must preserve the live-validation boundary`,
     )
-    if (key === 'pi') {
-      assert.match(readme, /pi install npm:@tinyedge\/pi@0\.1\.3/)
-    } else {
-      assert.match(readme, /npx tinyedge@0\.1\.3/)
-      assert.match(readme, /npm install --global tinyedge@0\.1\.3/)
-      assert.match(
-        readme,
-        /npx[\s\S]{0,100}does not[\s\S]{0,80}(?:global|persistent)/i,
-        `${metadata.name} README must distinguish npx from a persistent install`,
-      )
-    }
+    assert.match(readme, /npx tinyedge@0\.1\.4/)
+    assert.match(readme, /npm install --global tinyedge@0\.1\.4/)
+    assert.match(
+      readme,
+      /npx[\s\S]{0,100}does not[\s\S]{0,80}(?:global|persistent)/i,
+      `${metadata.name} README must distinguish npx from a persistent install`,
+    )
   }
 }
 
 function assertSafePackList(name, files) {
-  const forbiddenPath = /(^|\/)(?:test|tests|fixtures?|sessions?|\.npmrc|\.env)(?:\/|$)|\.map$/i
-  const offending = files.map(({ path: file }) => file).find((file) => forbiddenPath.test(file))
+  const packedPaths = files.map(({ path: file }) => file)
+  const sensitivePath = /(^|\/)(?:\.npmrc|\.env)(?:\/|$)/i
+  const firstPartyForbiddenPath = /(^|\/)(?:test|tests|fixtures?|sessions?)(?:\/|$)|\.map$/i
+  const offending = packedPaths.find((file) => sensitivePath.test(file)
+    || (!file.startsWith('node_modules/') && firstPartyForbiddenPath.test(file)))
   assert.equal(offending, undefined, `${name} packed forbidden release file ${offending}`)
 }
 
@@ -656,8 +699,8 @@ function packRelease(outputDirectory) {
   let runtimeIntegrity
   let reviewedShrinkwrapValidated = false
   const artifacts = packages.map(({ key, directory, metadata, version: fixedVersion }) => {
-    if (key === 'cli') {
-      assert.ok(runtimeIntegrity, 'the compatibility runtime must be packed before the CLI')
+    if (key === 'tinyedge') {
+      assert.ok(runtimeIntegrity, 'the compatibility runtime must be packed before tinyedge')
       validateReviewedShrinkwrap(runtimeIntegrity)
       reviewedShrinkwrapValidated = true
     }
@@ -673,15 +716,44 @@ function packRelease(outputDirectory) {
     assert.equal(result.name, metadata.name)
     assert.equal(result.version, artifactVersion)
     assertSafePackList(metadata.name, result.files)
-    if (key === 'cli') {
+    if (key === 'tinyedge') {
+      const bundledNames = [...result.bundled || []].sort()
+      for (const dependency of Object.keys(metadata.dependencies || {})) {
+        assert.ok(
+          bundledNames.includes(dependency),
+          `the tinyedge tarball must bundle direct dependency ${dependency}`,
+        )
+      }
+      const bundleRoots = [...new Set(result.files
+        .map(({ path: file }) => file)
+        .filter((file) => file.startsWith('node_modules/'))
+        .map((file) => {
+          const [, first, second] = file.split('/')
+          return first.startsWith('@') ? `${first}/${second}` : first
+        }))].sort()
+      assert.deepEqual(
+        bundleRoots,
+        bundledNames,
+        'npm pack must account for every top-level bundled dependency',
+      )
+      const reviewedLock = readJson(path.join(directory, 'npm-shrinkwrap.json'))
+      const reviewedNames = new Set(Object.keys(reviewedLock.packages || {})
+        .filter(Boolean)
+        .map(packageNameFromLockPath))
+      const unexpectedBundle = bundledNames.find((name) => !reviewedNames.has(name))
+      assert.equal(
+        unexpectedBundle,
+        undefined,
+        `the tinyedge tarball contains unexpected bundled dependency ${unexpectedBundle}`,
+      )
       assert.ok(
         result.files.some(({ path: file }) => /(^|\/)npm-shrinkwrap\.json$/.test(file)),
-        'the CLI tarball must contain its reviewed npm-shrinkwrap.json',
+        'the tinyedge tarball must contain its reviewed npm-shrinkwrap.json',
       )
       assert.equal(
         result.files.some(({ path: file }) => /(^|\/)RELEASE\.md$/i.test(file)),
         false,
-        'the internal release checklist must not be published in the CLI tarball',
+        'the internal release checklist must not be published in the tinyedge tarball',
       )
     }
     const file = path.join(outputDirectory, result.filename)
@@ -738,13 +810,13 @@ async function verifyRelease(artifactDirectory) {
     assert.equal(sha512Integrity(file), artifact.integrity, `integrity mismatch for ${artifact.filename}`)
     return { ...artifact, file }
   })
-  const tarballs = candidateArtifacts.map(({ file }) => file)
-
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-verify-'))
   try {
-    const localDependencies = Object.fromEntries(
-      candidateArtifacts.map(({ name, file }) => [name, npmFileSpec(file)]),
-    )
+    const tinyedgeArtifact = candidateArtifacts.find(({ key }) => key === 'tinyedge')
+    const runtimeArtifact = candidateArtifacts.find(({ key }) => key === 'pi-runtime')
+    assert.ok(tinyedgeArtifact, 'the release manifest is missing the tinyedge artifact')
+    assert.ok(runtimeArtifact, 'the release manifest is missing the compatibility runtime artifact')
+    const localDependencies = { tinyedge: npmFileSpec(tinyedgeArtifact.file) }
     writeFileSync(
       path.join(temporaryRoot, 'package.json'),
       `${JSON.stringify({
@@ -757,51 +829,60 @@ async function verifyRelease(artifactDirectory) {
     )
     runNpm([
       'install',
+      '--offline',
       '--no-audit',
       '--no-fund',
-    ], { cwd: temporaryRoot })
+    ], {
+      cwd: temporaryRoot,
+      env: { npm_config_cache: path.join(temporaryRoot, 'local-npm-cache') },
+    })
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/tinyedge/package.json'))
-    const installedCore = readJson(path.join(temporaryRoot, 'node_modules/@tinyedge/cli/package.json'))
-    const installedPi = readJson(path.join(temporaryRoot, 'node_modules/@tinyedge/pi/package.json'))
-    const installedRuntimeDirectory = path.join(temporaryRoot, 'node_modules/@tinyedge/pi-runtime')
+    const installedTinyEdgeDirectory = path.join(temporaryRoot, 'node_modules/tinyedge')
+    const installedRuntimeDirectory = path.join(
+      installedTinyEdgeDirectory,
+      'node_modules/@tinyedge/pi-runtime',
+    )
     const installedRuntime = readJson(path.join(installedRuntimeDirectory, 'package.json'))
     assert.equal(installed.version, manifest.version)
-    assert.equal(installedCore.version, manifest.version)
-    assert.equal(installedPi.version, manifest.version)
+    assert.equal(installed.name, 'tinyedge')
+    assert.equal(installed.dependencies?.['@tinyedge/cli'], undefined)
     assert.equal(installedRuntime.version, PI_RUNTIME_VERSION)
     validatePiRuntimeProvenance(installedRuntimeDirectory, installedRuntime)
 
     const verificationLock = readJson(path.join(temporaryRoot, 'package-lock.json'))
-    assert.equal(
-      verificationLock.packages?.['']?.dependencies?.['@tinyedge/pi-runtime'],
-      localDependencies['@tinyedge/pi-runtime'],
-      'verification must consume the locally packed runtime tarball, not the npm registry',
+    assert.deepEqual(
+      verificationLock.packages?.['']?.dependencies,
+      localDependencies,
+      'verification must reproduce the advertised one-package install',
     )
 
-    const installedCoreDirectory = path.join(temporaryRoot, 'node_modules/@tinyedge/cli')
-    const installedShrinkwrap = path.join(installedCoreDirectory, 'npm-shrinkwrap.json')
-    assert.ok(existsSync(installedShrinkwrap), 'the installed CLI is missing npm-shrinkwrap.json')
-    const runtimeArtifact = candidateArtifacts.find(({ key }) => key === 'pi-runtime')
+    const installedShrinkwrap = path.join(installedTinyEdgeDirectory, 'npm-shrinkwrap.json')
+    assert.ok(existsSync(installedShrinkwrap), 'the installed tinyedge package is missing npm-shrinkwrap.json')
+    const reviewedLock = readJson(installedShrinkwrap)
     assertReviewedClosure(
-      readJson(installedShrinkwrap),
-      'local installed CLI shrinkwrap',
+      reviewedLock,
+      'local installed tinyedge shrinkwrap',
       runtimeArtifact.integrity,
     )
-    assertInstalledReviewedClosure(path.join(temporaryRoot, 'node_modules'), 'local consumer install')
+    assertInstalledReviewedClosure(
+      path.join(temporaryRoot, 'node_modules'),
+      'local consumer install',
+      reviewedLock,
+    )
 
     const localShim = path.join(temporaryRoot, 'node_modules', '.bin', 'tinyedge.cmd')
-    const localFacadeEntry = path.join(temporaryRoot, 'node_modules/tinyedge/bin/tinyedge.js')
+    const localEntry = path.join(temporaryRoot, 'node_modules/tinyedge/bin/tinyedge.js')
     assert.ok(existsSync(localShim), 'npm did not create the local tinyedge command shim')
-    assert.ok(existsSync(localFacadeEntry), 'the local install is missing the packed facade entry')
-    assertWindowsShimTargets(localShim, localFacadeEntry, 'local npm command shim')
+    assert.ok(existsSync(localEntry), 'the local install is missing the packed tinyedge entry')
+    assertWindowsShimTargets(localShim, localEntry, 'local npm command shim')
     assert.equal(
-      run(process.execPath, [localFacadeEntry, '--version'], {
+      run(process.execPath, [localEntry, '--version'], {
         cwd: temporaryRoot,
         timeout: 120_000,
       }),
       manifest.version,
-      'the packed local facade entry must execute the reviewed CLI',
+      'the packed local tinyedge entry must execute the reviewed client',
     )
     const reportedVersion = runWindowsShim(localShim, ['--version'], {
       cwd: temporaryRoot,
@@ -815,47 +896,55 @@ async function verifyRelease(artifactDirectory) {
       '--global',
       '--prefix',
       globalPrefix,
+      '--offline',
       '--no-audit',
       '--no-fund',
-      ...tarballs,
-    ], { cwd: temporaryRoot })
+      tinyedgeArtifact.file,
+    ], {
+      cwd: temporaryRoot,
+      env: { npm_config_cache: path.join(temporaryRoot, 'global-npm-cache') },
+    })
     const globalShim = path.join(globalPrefix, 'tinyedge.cmd')
-    const globalFacadeEntry = path.join(globalPrefix, 'node_modules/tinyedge/bin/tinyedge.js')
+    const globalEntry = path.join(globalPrefix, 'node_modules/tinyedge/bin/tinyedge.js')
     assert.ok(existsSync(globalShim), 'npm did not create the global tinyedge command shim')
-    assert.ok(existsSync(globalFacadeEntry), 'the global install is missing the packed facade entry')
-    assertWindowsShimTargets(globalShim, globalFacadeEntry, 'global npm command shim')
+    assert.ok(existsSync(globalEntry), 'the global install is missing the packed tinyedge entry')
+    assertWindowsShimTargets(globalShim, globalEntry, 'global npm command shim')
     assert.equal(
-      run(process.execPath, [globalFacadeEntry, '--version'], {
+      run(process.execPath, [globalEntry, '--version'], {
         cwd: temporaryRoot,
         timeout: 120_000,
       }),
       manifest.version,
-      'the packed global facade entry must execute the reviewed CLI',
+      'the packed global tinyedge entry must execute the reviewed client',
     )
     const globalReportedVersion = runWindowsShim(globalShim, ['--version'], {
       cwd: temporaryRoot,
       timeout: 120_000,
     })
     assert.equal(globalReportedVersion, manifest.version)
-    const globalCoreDirectory = path.join(globalPrefix, 'node_modules/@tinyedge/cli')
-    const globalShrinkwrap = path.join(globalCoreDirectory, 'npm-shrinkwrap.json')
-    assert.ok(existsSync(globalShrinkwrap), 'the global CLI is missing npm-shrinkwrap.json')
+    const globalTinyEdgeDirectory = path.join(globalPrefix, 'node_modules/tinyedge')
+    const globalShrinkwrap = path.join(globalTinyEdgeDirectory, 'npm-shrinkwrap.json')
+    assert.ok(existsSync(globalShrinkwrap), 'the global tinyedge package is missing npm-shrinkwrap.json')
     assertReviewedClosure(
       readJson(globalShrinkwrap),
-      'global installed CLI shrinkwrap',
+      'global installed tinyedge shrinkwrap',
       runtimeArtifact.integrity,
     )
     assertInstalledReviewedClosure(
       path.join(globalPrefix, 'node_modules'),
       'global consumer install',
+      readJson(globalShrinkwrap),
     )
-    const globalRuntimeDirectory = path.join(globalPrefix, 'node_modules/@tinyedge/pi-runtime')
+    const globalRuntimeDirectory = path.join(
+      globalTinyEdgeDirectory,
+      'node_modules/@tinyedge/pi-runtime',
+    )
     validatePiRuntimeProvenance(
       globalRuntimeDirectory,
       readJson(path.join(globalRuntimeDirectory, 'package.json')),
     )
 
-    const coreEntry = path.join(temporaryRoot, 'node_modules/@tinyedge/cli/src/cli.js')
+    const coreEntry = path.join(temporaryRoot, 'node_modules/tinyedge/src/cli.js')
     const defaultDispatchCheck = `
       const { runCli } = await import(${JSON.stringify(pathToFileURL(coreEntry).href)});
       let harnessStarted = false;
@@ -874,11 +963,11 @@ async function verifyRelease(artifactDirectory) {
       timeout: 120_000,
     })
 
-    const piEntry = path.join(temporaryRoot, 'node_modules/@tinyedge/pi/extensions/tinyedge.js')
+    const piEntry = path.join(temporaryRoot, 'node_modules/tinyedge/src/pi-extension.js')
     const piImportCheck = `
       const extension = await import(${JSON.stringify(pathToFileURL(piEntry).href)});
       if (typeof extension.default !== 'function') {
-        throw new Error('the packed Pi extension is not callable');
+        throw new Error('the packed TinyEdge Pi extension is not callable');
       }
     `
     run(process.execPath, ['--input-type=module', '--eval', piImportCheck], {
@@ -914,7 +1003,7 @@ async function verifyRelease(artifactDirectory) {
   }
 
   console.log(
-    `Verified TinyEdge ${manifest.version} with local @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, normal-lifecycle local/global shims, facade, core, Pi add-on, native console helper, and bare Harness dispatch on ${process.arch}`,
+    `Verified TinyEdge ${manifest.version} as one offline-installable package with bundled @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, normal-lifecycle local/global shims, embedded client and Pi extension, native console helper, and bare Harness dispatch on ${process.arch}`,
   )
 }
 
@@ -924,11 +1013,19 @@ function usage() {
 
 const [mode, directoryArgument] = process.argv.slice(2)
 if (!['pack', 'verify', 'check'].includes(mode)) usage()
-assert.equal(
-  runNpm(['--version']),
-  RELEASE_NPM_VERSION,
-  `release package verification requires npm ${RELEASE_NPM_VERSION}`,
-)
+const npmVersion = runNpm(['--version'])
+if (mode === 'verify') {
+  assert.ok(
+    CONSUMER_NPM_VERSIONS.has(npmVersion),
+    `consumer verification requires one of npm ${[...CONSUMER_NPM_VERSIONS].join(', ')}`,
+  )
+} else {
+  assert.equal(
+    npmVersion,
+    RELEASE_NPM_VERSION,
+    `release packaging requires npm ${RELEASE_NPM_VERSION}`,
+  )
+}
 
 if (mode === 'check') {
   const temporaryArtifacts = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-pack-'))
