@@ -3,12 +3,17 @@ import test from 'node:test'
 
 import {
   buildCliConsumerLock,
+  NPM_BOOTSTRAP_TIMEOUT_MS,
   validateCliRuntimeContract,
 } from '../scripts/bootstrap-pi-runtime.js'
 
 const runtimeName = '@tinyedge/pi-runtime'
 const runtimeVersion = '0.84.2-tinyedge.1'
 const runtimeIntegrity = 'sha512-VGlue='
+
+test('Pi runtime bootstrap gives cold hosted-runner installs ten bounded minutes', () => {
+  assert.equal(NPM_BOOTSTRAP_TIMEOUT_MS, 600_000)
+})
 
 function fixtures() {
   const manifest = {

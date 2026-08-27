@@ -20,6 +20,7 @@ const RUNTIME_DIRECTORY = path.resolve(CLI_DIRECTORY, '../pi-runtime')
 const PINNED_NPM_VERSION = '11.19.0'
 const RUNTIME_NAME = '@tinyedge/pi-runtime'
 const RUNTIME_VERSION = '0.84.2-tinyedge.1'
+export const NPM_BOOTSTRAP_TIMEOUT_MS = 10 * 60_000
 const FORBIDDEN_RUNTIME_PACKAGES = Object.freeze([
   '@earendil-works/pi-coding-agent',
   '@silvia-odwyer/photon-node',
@@ -37,7 +38,7 @@ function runNpm(args, options = {}) {
     cwd: options.cwd || CLI_DIRECTORY,
     encoding: 'utf8',
     env: { ...process.env, NO_COLOR: '1' },
-    timeout: options.timeout || 300_000,
+    timeout: options.timeout ?? NPM_BOOTSTRAP_TIMEOUT_MS,
     windowsHide: true,
   })
   if (result.error) throw result.error
