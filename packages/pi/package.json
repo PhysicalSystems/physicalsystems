@@ -1,6 +1,7 @@
 {
   "name": "@tinyedge/pi",
   "version": "0.1.3",
+  "private": true,
   "description": "TinyEdge orchestration tools for an existing Pi installation",
   "type": "module",
   "files": [

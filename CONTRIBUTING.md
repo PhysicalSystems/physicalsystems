@@ -46,8 +46,7 @@ git diff --check
 ```
 
 The bootstrap installs the reviewed compatibility runtime from local source
-without consuming the published registry bytes. It does not publish or stage a
-package.
+without consuming the published registry bytes. It does not publish a package.
 
 ## Pull request expectations
 

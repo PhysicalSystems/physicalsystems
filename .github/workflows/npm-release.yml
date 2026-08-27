@@ -1,4 +1,4 @@
-name: Stage TinyEdge npm preview
+name: Publish TinyEdge npm preview
 
 on:
   workflow_dispatch:
@@ -7,20 +7,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: tinyedge-npm-preview-stage
+  group: tinyedge-npm-preview-publish
   cancel-in-progress: false
 
 env:
-  RELEASE_VERSION: 0.1.3
+  RELEASE_VERSION: 0.1.4
   PI_RUNTIME_VERSION: 0.84.2-tinyedge.1
   NODE_VERSION: 22.19.0
-  # Staged publishing requires npm 11.15.0 or newer. Keep the exact CLI fixed so
-  # release behavior cannot change between the build, verification, and stage jobs.
+  # Keep the exact packaging/publishing CLI fixed. Consumer verification also
+  # exercises the npm 12 behavior supported by current Node 24 releases.
   NPM_VERSION: 11.19.0
+  CONSUMER_NPM_VERSION: 12.0.2
   NPM_REGISTRY: https://registry.npmjs.org/
   NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
   RELEASE_ARTIFACT_DIRECTORY: release-artifacts
-  RELEASE_ARTIFACT_NAME: tinyedge-npm-0.1.3-${{ github.sha }}
+  RELEASE_ARTIFACT_NAME: tinyedge-npm-0.1.4-${{ github.sha }}-${{ github.run_attempt }}
 
 jobs:
   require-main:
@@ -37,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -e NPM-RELEASE-PENDING.md ]]; then
-            echo "::error title=npm release pending::NPM-RELEASE-PENDING.md is present; source licensing does not authorize building, staging, or publishing npm release packages"
+            echo "::error title=npm release pending::NPM-RELEASE-PENDING.md is present; source licensing does not authorize building or publishing npm release packages"
             exit 1
           fi
       - name: Refuse release while source licensing is pending
@@ -45,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -e LICENSE-PENDING.md ]]; then
-            echo "::error title=License pending::LICENSE-PENDING.md is present; this export candidate must not build, stage, or publish release packages"
+            echo "::error title=License pending::LICENSE-PENDING.md is present; this export candidate must not build or publish release packages"
             exit 1
           fi
       - name: Refuse every repository, event, or ref except TinyEdge main
@@ -76,7 +77,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           architecture: x64
           package-manager-cache: false
-      - name: Install the pinned staged-publishing npm CLI
+      - name: Install the pinned trusted-publishing npm CLI
         shell: pwsh
         run: |
           npm install --global "npm@$env:NPM_VERSION" --registry="$env:NPM_REGISTRY"
@@ -96,40 +97,38 @@ jobs:
           const root = process.env.GITHUB_WORKSPACE
           const expectedVersion = process.env.RELEASE_VERSION
           const expectedRuntimeVersion = process.env.PI_RUNTIME_VERSION
-          assert.equal(expectedVersion, '0.1.3')
+          assert.equal(expectedVersion, '0.1.4')
           assert.equal(expectedRuntimeVersion, '0.84.2-tinyedge.1')
 
           const readPackage = (directory) => JSON.parse(
             readFileSync(path.join(root, directory, 'package.json'), 'utf8'),
           )
-          const cli = readPackage('packages/cli')
-          const pi = readPackage('packages/pi')
-          const facade = readPackage('packages/npx')
+          const tinyedge = readPackage('packages/cli')
+          const legacyPi = readPackage('packages/pi')
+          const legacyFacade = readPackage('packages/npx')
           const runtime = readPackage('packages/pi-runtime')
 
-          assert.equal(cli.name, '@tinyedge/cli')
-          assert.equal(pi.name, '@tinyedge/pi')
-          assert.equal(facade.name, 'tinyedge')
+          assert.equal(tinyedge.name, 'tinyedge')
+          assert.equal(legacyPi.name, '@tinyedge/pi')
+          assert.equal(legacyFacade.name, 'tinyedge')
           assert.equal(runtime.name, '@tinyedge/pi-runtime')
-          assert.equal(cli.bin, undefined)
-          assert.deepEqual(facade.bin, { tinyedge: 'bin/tinyedge.js' })
+          assert.deepEqual(tinyedge.bin, { tinyedge: 'bin/tinyedge.js' })
           assert.equal(runtime.version, expectedRuntimeVersion)
           assert.equal(runtime.license, 'MIT')
           assert.equal(runtime.bin, undefined)
-          for (const candidate of [cli, pi, facade]) {
-            assert.equal(candidate.version, expectedVersion)
-            assert.deepEqual(candidate.os, ['win32'])
-            assert.equal(candidate.engines?.node, '>=22.19.0')
-            assert.equal(candidate.publishConfig?.access, 'public')
+          assert.equal(tinyedge.version, expectedVersion)
+          assert.deepEqual(tinyedge.os, ['win32'])
+          assert.equal(tinyedge.engines?.node, '>=22.19.0')
+          assert.equal(tinyedge.publishConfig?.access, 'public')
+          assert.equal(tinyedge.bundleDependencies, true)
+          for (const legacy of [legacyPi, legacyFacade]) {
+            assert.equal(legacy.version, '0.1.3')
+            assert.equal(legacy.private, true)
           }
           assert.equal(runtime.engines?.node, '>=22.19.0')
           assert.equal(runtime.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
-          assert.equal(cli.dependencies?.['@tinyedge/pi-runtime'], expectedRuntimeVersion)
-          assert.equal(pi.dependencies?.['@tinyedge/cli'], expectedVersion)
-          assert.equal(pi.peerDependencies?.['@earendil-works/pi-coding-agent'], '0.84.2')
-          assert.equal(pi.peerDependenciesMeta?.['@earendil-works/pi-coding-agent']?.optional, true)
-          assert.equal(pi.dependencies?.['@earendil-works/pi-coding-agent'], undefined)
-          assert.equal(facade.dependencies?.['@tinyedge/cli'], expectedVersion)
+          assert.equal(tinyedge.dependencies?.['@tinyedge/pi-runtime'], expectedRuntimeVersion)
+          assert.equal(tinyedge.dependencies?.['@tinyedge/cli'], undefined)
 
           const lock = JSON.parse(
             readFileSync(path.join(root, 'packages/cli/package-lock.json'), 'utf8'),
@@ -137,22 +136,23 @@ jobs:
           assert.equal(lock.version, expectedVersion)
           assert.equal(lock.packages?.['']?.version, expectedVersion)
           assert.equal(lock.packages?.['']?.dependencies?.['@tinyedge/pi-runtime'], expectedRuntimeVersion)
+          assert.deepEqual(
+            [...lock.packages?.['']?.bundleDependencies || []].sort(),
+            Object.keys(lock.packages?.['']?.dependencies || {}).sort(),
+          )
           '@ | node --input-type=module
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Pack the four exact local tarballs and SHA-256 manifest once
+      - name: Bootstrap the reviewed dependency tree from the locally packed runtime
+        shell: pwsh
+        run: |
+          $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
+          npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Pack the runtime and one bundled TinyEdge tarball with a SHA-256 manifest
         shell: pwsh
         run: |
           $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE $env:RELEASE_ARTIFACT_DIRECTORY
           npm --prefix packages/cli run release:pack -- $artifactDirectory
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Bootstrap checks from the locally packed runtime
-        shell: pwsh
-        run: |
-          $runtimeTarball = Join-Path $env:GITHUB_WORKSPACE "$env:RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-$env:PI_RUNTIME_VERSION.tgz"
-          if (-not (Test-Path -LiteralPath $runtimeTarball)) {
-            throw "Missing locally packed runtime $runtimeTarball"
-          }
-          npm --prefix packages/cli install --ignore-scripts --no-save --package-lock=false --no-audit --no-fund $runtimeTarball
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run package source and SDK checks
         shell: pwsh
@@ -189,7 +189,7 @@ jobs:
           retention-days: 30
 
   verify:
-    name: Verify the same tarballs on Windows ${{ matrix.architecture }}
+    name: Verify on Windows ${{ matrix.architecture }} with npm ${{ matrix.npm-version }}
     needs: build
     strategy:
       fail-fast: false
@@ -197,24 +197,36 @@ jobs:
         include:
           - architecture: x64
             runner: windows-latest
+            npm-version: 11.19.0
+            node-version: 22.19.0
+          - architecture: x64
+            runner: windows-latest
+            npm-version: 12.0.2
+            node-version: 24.15.0
           - architecture: arm64
             runner: windows-11-arm
+            npm-version: 11.19.0
+            node-version: 22.19.0
+          - architecture: arm64
+            runner: windows-11-arm
+            npm-version: 12.0.2
+            node-version: 24.15.0
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ matrix.node-version }}
           architecture: ${{ matrix.architecture }}
           package-manager-cache: false
-      - name: Install the pinned staged-publishing npm CLI
+      - name: Install the pinned consumer npm CLI
         shell: pwsh
         run: |
-          npm install --global "npm@$env:NPM_VERSION" --registry="$env:NPM_REGISTRY"
+          npm install --global "npm@${{ matrix.npm-version }}" --registry="$env:NPM_REGISTRY"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $actualVersion = (npm --version).Trim()
-          if ($actualVersion -ne $env:NPM_VERSION) {
-            throw "Expected npm $env:NPM_VERSION, received $actualVersion"
+          if ($actualVersion -ne '${{ matrix.npm-version }}') {
+            throw "Expected npm ${{ matrix.npm-version }}, received $actualVersion"
           }
           if ("$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)".ToLowerInvariant() -ne '${{ matrix.architecture }}') {
             throw "Expected the ${{ matrix.architecture }} runner architecture"
@@ -268,22 +280,22 @@ jobs:
             manifestSha256 = (Get-FileHash -LiteralPath (Join-Path $artifactDirectory 'release-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
             tarballs = @($tarballs)
           }
-          $evidencePath = Join-Path $evidenceDirectory "verification-${{ matrix.architecture }}.json"
+          $evidencePath = Join-Path $evidenceDirectory "verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}.json"
           $evidence | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $evidencePath -Encoding utf8
-          "## Windows ${{ matrix.architecture }} verification" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          "## Windows ${{ matrix.architecture }} / npm ${{ matrix.npm-version }} verification" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           '```json' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           Get-Content -Raw $evidencePath | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Upload architecture verification evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: tinyedge-npm-verification-${{ matrix.architecture }}-${{ github.sha }}
-          path: verification-evidence/verification-${{ matrix.architecture }}.json
+          name: tinyedge-npm-verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: verification-evidence/verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}.json
           if-no-files-found: error
           retention-days: 30
 
-  stage:
-    name: Stage 0.1.3 under preview with npm OIDC
+  publish:
+    name: Publish 0.1.4 to preview with npm OIDC
     needs:
       - build
       - verify
@@ -301,12 +313,12 @@ jobs:
           RELEASE_REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
         run: |
           set -euo pipefail
-          if [[ "$NPM_RELEASE_POLICY_VERSION" != "v1" ]]; then
-            echo "::error title=Unprotected release environment::The npm-release environment must provide NPM_RELEASE_POLICY_VERSION=v1"
+          if [[ "$NPM_RELEASE_POLICY_VERSION" != "v2-direct-preview" ]]; then
+            echo "::error title=Unprotected release environment::The npm-release environment must provide NPM_RELEASE_POLICY_VERSION=v2-direct-preview after the tinyedge trusted publisher allows npm publish"
             exit 1
           fi
           if [[ "$RELEASE_REPOSITORY_PRIVATE" != "false" ]]; then
-            echo "::error title=Private repository provenance unavailable::npm staging is disabled until the source repository is public"
+            echo "::error title=Private repository provenance unavailable::npm publishing is disabled until the source repository is public"
             exit 1
           fi
       - name: Check out the exact reviewed source for legal-file comparison
@@ -320,7 +332,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - name: Recheck live public GitHub visibility before requesting npm OIDC
+      - name: Recheck public visibility and protected release-environment rules
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -329,23 +341,64 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict'
 
-          const response = await fetch(
-            `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}`,
-            {
-              headers: {
-                Accept: 'application/vnd.github+json',
-                Authorization: `Bearer ${process.env.GH_TOKEN}`,
-                'X-GitHub-Api-Version': '2022-11-28',
-              },
-            },
-          )
-          assert.equal(response.ok, true, `GitHub visibility lookup failed with ${response.status}`)
-          const repository = await response.json()
+          const headers = {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${process.env.GH_TOKEN}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+          }
+          const get = async (pathname, description) => {
+            const response = await fetch(`${process.env.GITHUB_API_URL}${pathname}`, { headers })
+            assert.equal(response.ok, true, `${description} failed with ${response.status}`)
+            return response.json()
+          }
+          const repositoryPath = `/repos/${process.env.GITHUB_REPOSITORY}`
+          const repository = await get(repositoryPath, 'GitHub visibility lookup')
           assert.equal(repository.full_name, 'TinyEdgeAI/tinyedge-edge')
           assert.equal(repository.private, false, 'the release repository must still be public')
           assert.equal(repository.visibility, 'public', 'the release repository must still be public')
+
+          const environment = await get(
+            `${repositoryPath}/environments/npm-release`,
+            'npm-release environment lookup',
+          )
+          assert.equal(
+            environment.can_admins_bypass,
+            false,
+            'npm-release must disable administrator protection-rule bypass',
+          )
+          const reviewerRule = environment.protection_rules?.find(
+            ({ type }) => type === 'required_reviewers',
+          )
+          assert.ok(
+            reviewerRule?.reviewers?.length >= 1,
+            'npm-release must require at least one human reviewer',
+          )
+          assert.equal(
+            environment.deployment_branch_policy?.custom_branch_policies,
+            true,
+            'npm-release must use selected deployment branches',
+          )
+          assert.equal(
+            environment.deployment_branch_policy?.protected_branches,
+            false,
+            'npm-release must not inherit a broader protected-branches policy',
+          )
+          const policies = await get(
+            `${repositoryPath}/environments/npm-release/deployment-branch-policies?per_page=100`,
+            'npm-release deployment-branch policy lookup',
+          )
+          assert.equal(
+            policies.total_count,
+            1,
+            'npm-release must allow exactly one deployment ref',
+          )
+          assert.deepEqual(
+            policies.branch_policies?.map(({ name, type }) => ({ name, type })),
+            [{ name: 'main', type: 'branch' }],
+            'npm-release must allow only the exact main branch and no tags',
+          )
           NODE
-      - name: Install the pinned staged-publishing npm CLI
+      - name: Install the pinned trusted-publishing npm CLI
         shell: bash
         run: |
           set -euo pipefail
@@ -378,12 +431,10 @@ jobs:
           const manifest = JSON.parse(manifestBytes.toString('utf8'))
           const expected = [
             ['pi-runtime', '@tinyedge/pi-runtime', process.env.PI_RUNTIME_VERSION, 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz'],
-            ['cli', '@tinyedge/cli', process.env.RELEASE_VERSION, 'tinyedge-cli-0.1.3.tgz'],
-            ['pi', '@tinyedge/pi', process.env.RELEASE_VERSION, 'tinyedge-pi-0.1.3.tgz'],
-            ['facade', 'tinyedge', process.env.RELEASE_VERSION, 'tinyedge-0.1.3.tgz'],
+            ['tinyedge', 'tinyedge', process.env.RELEASE_VERSION, 'tinyedge-0.1.4.tgz'],
           ]
 
-          assert.equal(process.env.RELEASE_VERSION, '0.1.3')
+          assert.equal(process.env.RELEASE_VERSION, '0.1.4')
           assert.equal(process.env.PI_RUNTIME_VERSION, '0.84.2-tinyedge.1')
           assert.equal(manifest.schemaVersion, 1)
           assert.equal(manifest.version, process.env.RELEASE_VERSION)
@@ -406,7 +457,7 @@ jobs:
             assert.equal(integrity, artifact.integrity)
           }
           NODE
-      - name: Refuse unresolved package licenses before staging
+      - name: Refuse unresolved package licenses before publishing
         shell: bash
         run: |
           set -euo pipefail
@@ -427,9 +478,7 @@ jobs:
               legalFiles: ['LICENSE', 'NOTICE', 'SBOM.cdx.json', 'UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM_README.md'],
             },
             ...[
-              ['@tinyedge/cli', 'tinyedge-cli-0.1.3.tgz', 'packages/cli'],
-              ['@tinyedge/pi', 'tinyedge-pi-0.1.3.tgz', 'packages/pi'],
-              ['tinyedge', 'tinyedge-0.1.3.tgz', 'packages/npx'],
+              ['tinyedge', 'tinyedge-0.1.4.tgz', 'packages/cli'],
             ].map(([name, filename, sourceDirectory]) => ({
               name,
               version: process.env.RELEASE_VERSION,
@@ -448,7 +497,7 @@ jobs:
             ))
             assert.equal(packedPackage.name, name)
             assert.equal(packedPackage.version, version)
-            assert.notEqual(packedPackage.private, true, `${name} must be publishable before staging`)
+            assert.notEqual(packedPackage.private, true, `${name} must be publishable before publication`)
             assert.deepEqual(
               packedPackage.publishConfig,
               { access: 'public' },
@@ -462,7 +511,7 @@ jobs:
             const packedFiles = execFileSync(
               'tar',
               ['-tf', path.join(directory, filename)],
-              { encoding: 'utf8' },
+              { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
             ).split(/\r?\n/)
             for (const legalFile of legalFiles) {
               assert.ok(
@@ -555,7 +604,7 @@ jobs:
           const manifest = JSON.parse(
             execFileSync(
               'tar',
-              ['-xOf', path.join(directory, 'tinyedge-cli-0.1.3.tgz'), 'package/npm-shrinkwrap.json'],
+              ['-xOf', path.join(directory, 'tinyedge-0.1.4.tgz'), 'package/npm-shrinkwrap.json'],
               { encoding: 'utf8' },
             ),
           )
@@ -571,27 +620,36 @@ jobs:
           )
           assert.equal(lockedRuntime?.integrity, runtimeArtifact.integrity)
           NODE
-      - name: Require the runtime bootstrap, published runtime, and unpublished TinyEdge candidates
+      - name: Require the published runtime and an unpublished TinyEdge candidate
         shell: bash
         env:
           PI_RUNTIME_BOOTSTRAP_INTEGRITY: ${{ vars.PI_RUNTIME_BOOTSTRAP_INTEGRITY }}
           PI_RUNTIME_BOOTSTRAP_SHASUM: ${{ vars.PI_RUNTIME_BOOTSTRAP_SHASUM }}
         run: |
           set -euo pipefail
-          mkdir -p stage-evidence
+          mkdir -p publish-evidence
+          tinyedge_tags="$(npm view tinyedge dist-tags --json --registry="$NPM_REGISTRY" 2>&1)"
+          printf '%s\n' "$tinyedge_tags" | tee publish-evidence/tinyedge-dist-tags-before.json
+          TINYEDGE_TAGS_JSON="$tinyedge_tags" node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+
+          const tags = JSON.parse(process.env.TINYEDGE_TAGS_JSON)
+          assert.equal(tags.latest, '0.1.3', 'tinyedge latest must still resolve to the approved 0.1.3 release')
+          assert.equal(tags.preview, '0.1.3', 'tinyedge preview must start from the approved 0.1.3 release')
+          NODE
           if ! runtime_metadata="$(npm view '@tinyedge/pi-runtime@0.0.0' name version license publishConfig bin dependencies optionalDependencies peerDependencies peerDependenciesMeta devDependencies bundledDependencies bundleDependencies scripts dist --json --registry="$NPM_REGISTRY" 2>&1)"; then
-            printf '%s\n' "$runtime_metadata" | tee stage-evidence/pi-runtime-bootstrap-check.log
-            echo "::error title=Runtime package does not exist::npm staged publishing cannot create a brand-new package; publish the separately approved no-code @tinyedge/pi-runtime@0.0.0 bootstrap interactively with 2FA under the bootstrap tag first"
+            printf '%s\n' "$runtime_metadata" | tee publish-evidence/pi-runtime-bootstrap-check.log
+            echo "::error title=Runtime package does not exist::Publish the separately approved no-code @tinyedge/pi-runtime@0.0.0 bootstrap interactively with 2FA under the bootstrap tag first"
             exit 1
           fi
           runtime_tags="$(npm view '@tinyedge/pi-runtime' dist-tags --json --registry="$NPM_REGISTRY" 2>&1)"
-          mkdir -p stage-evidence/pi-runtime-bootstrap
-          runtime_pack="$(npm pack '@tinyedge/pi-runtime@0.0.0' --json --ignore-scripts --registry="$NPM_REGISTRY" --pack-destination stage-evidence/pi-runtime-bootstrap 2>&1)"
+          mkdir -p publish-evidence/pi-runtime-bootstrap
+          runtime_pack="$(npm pack '@tinyedge/pi-runtime@0.0.0' --json --ignore-scripts --registry="$NPM_REGISTRY" --pack-destination publish-evidence/pi-runtime-bootstrap 2>&1)"
           {
             printf 'metadata=%s\n' "$runtime_metadata"
             printf 'dist-tags=%s\n' "$runtime_tags"
             printf 'pack=%s\n' "$runtime_pack"
-          } | tee stage-evidence/pi-runtime-bootstrap-check.log
+          } | tee publish-evidence/pi-runtime-bootstrap-check.log
           RUNTIME_METADATA_JSON="$runtime_metadata" RUNTIME_TAGS_JSON="$runtime_tags" RUNTIME_PACK_JSON="$runtime_pack" \
             node --input-type=module <<'NODE'
           import assert from 'node:assert/strict'
@@ -658,7 +716,7 @@ jobs:
             'tar',
             [
               '-xOf',
-              path.resolve('stage-evidence/pi-runtime-bootstrap/tinyedge-pi-runtime-0.0.0.tgz'),
+              path.resolve('publish-evidence/pi-runtime-bootstrap/tinyedge-pi-runtime-0.0.0.tgz'),
               'package/package.json',
             ],
             { encoding: 'utf8' },
@@ -671,25 +729,23 @@ jobs:
             local slug="$3"
             local output
             if output="$(npm view "${package}@${version}" version --json --registry="$NPM_REGISTRY" 2>&1)"; then
-              printf '%s\n' "$output" | tee "stage-evidence/${slug}-published-check.log"
+              printf '%s\n' "$output" | tee "publish-evidence/${slug}-published-check.log"
               echo "::error title=Version already published::${package}@${version} already exists"
               return 1
             fi
-            printf '%s\n' "$output" | tee "stage-evidence/${slug}-published-check.log"
+            printf '%s\n' "$output" | tee "publish-evidence/${slug}-published-check.log"
             if ! grep -q 'E404' <<<"$output"; then
               echo "::error title=Registry preflight failed::Could not prove ${package}@${version} is unpublished"
               return 1
             fi
           }
-          check_unpublished '@tinyedge/cli' "$RELEASE_VERSION" cli
-          check_unpublished '@tinyedge/pi' "$RELEASE_VERSION" pi
-          check_unpublished 'tinyedge' "$RELEASE_VERSION" facade
+          check_unpublished 'tinyedge' "$RELEASE_VERSION" tinyedge
           if ! published_runtime="$(npm view "@tinyedge/pi-runtime@$PI_RUNTIME_VERSION" name version dist --json --registry="$NPM_REGISTRY" 2>&1)"; then
-            printf '%s\n' "$published_runtime" | tee stage-evidence/pi-runtime-published-check.log
-            echo "::error title=Audited runtime missing::@tinyedge/pi-runtime@$PI_RUNTIME_VERSION must already be published; this release reuses it and must not restage it"
+            printf '%s\n' "$published_runtime" | tee publish-evidence/pi-runtime-published-check.log
+            echo "::error title=Audited runtime missing::@tinyedge/pi-runtime@$PI_RUNTIME_VERSION must already be published; this release reuses it and must not republish it"
             exit 1
           fi
-          printf '%s\n' "$published_runtime" | tee stage-evidence/pi-runtime-published-check.log
+          printf '%s\n' "$published_runtime" | tee publish-evidence/pi-runtime-published-check.log
           PUBLISHED_RUNTIME_JSON="$published_runtime" node --input-type=module <<'NODE'
           import assert from 'node:assert/strict'
           import { createHash } from 'node:crypto'
@@ -710,52 +766,122 @@ jobs:
             'packed runtime tarball must match the already-published registry artifact',
           )
           NODE
-      - name: Stage @tinyedge/cli@0.1.3 under preview
+      - name: Publish tinyedge@0.1.4 directly to preview
         shell: bash
         run: |
           set -euo pipefail
-          npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-cli-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
-            | tee stage-evidence/cli-stage.log
-      - name: Stage @tinyedge/pi@0.1.3 under preview
+          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.4.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+            | tee publish-evidence/tinyedge-publish.log
+      - name: Verify preview isolation, registry bytes, and provenance signature
         shell: bash
         run: |
           set -euo pipefail
-          npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
-            | tee stage-evidence/pi-stage.log
-      - name: Stage tinyedge@0.1.3 under preview
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm stage publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
-            | tee stage-evidence/facade-stage.log
-      - name: Record staging evidence and the human approval boundary
+          cat > publish-evidence/verify-published-tinyedge.mjs <<'NODE'
+          import assert from 'node:assert/strict'
+          import { createHash } from 'node:crypto'
+          import { readFileSync } from 'node:fs'
+          import path from 'node:path'
+
+          const published = JSON.parse(process.env.PUBLISHED_TINYEDGE_JSON)
+          const tags = JSON.parse(process.env.PUBLISHED_TINYEDGE_TAGS_JSON)
+          const tarball = readFileSync(path.join(
+            process.env.RELEASE_ARTIFACT_DIRECTORY,
+            `tinyedge-${process.env.RELEASE_VERSION}.tgz`,
+          ))
+          assert.equal(published.name, 'tinyedge')
+          assert.equal(published.version, process.env.RELEASE_VERSION)
+          assert.equal(
+            published.dist?.integrity,
+            `sha512-${createHash('sha512').update(tarball).digest('base64')}`,
+            'registry integrity must match the approved tarball',
+          )
+          assert.equal(
+            published.dist?.shasum,
+            createHash('sha1').update(tarball).digest('hex'),
+            'registry shasum must match the approved tarball',
+          )
+          assert.match(
+            published.dist?.attestations?.url || '',
+            /\/npm\/v1\/attestations\/tinyedge@0\.1\.4$/,
+            'the registry must expose the npm provenance attestation',
+          )
+          assert.equal(
+            published.dist?.attestations?.provenance?.predicateType,
+            'https://slsa.dev/provenance/v1',
+            'the registry must expose an SLSA v1 provenance predicate',
+          )
+          assert.equal(tags.latest, '0.1.3', 'publishing preview must not move latest')
+          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.1.4')
+          NODE
+          mkdir -p publish-evidence/signature-audit
+          (
+            cd publish-evidence/signature-audit
+            npm init --yes >/dev/null
+          )
+          published_metadata=
+          published_tags=
+          verification_succeeded=false
+          for attempt in {1..12}; do
+            if published_metadata="$(npm view "tinyedge@$RELEASE_VERSION" name version dist --json --registry="$NPM_REGISTRY" 2>&1)" \
+              && published_tags="$(npm view tinyedge dist-tags --json --registry="$NPM_REGISTRY" 2>&1)" \
+              && PUBLISHED_TINYEDGE_JSON="$published_metadata" PUBLISHED_TINYEDGE_TAGS_JSON="$published_tags" \
+                node publish-evidence/verify-published-tinyedge.mjs 2>>publish-evidence/registry-convergence.log; then
+              printf '%s\n' "$published_metadata" > publish-evidence/tinyedge-registry-after.json
+              printf '%s\n' "$published_tags" > publish-evidence/tinyedge-dist-tags-after.json
+              if (
+                cd publish-evidence/signature-audit
+                rm -rf node_modules package-lock.json
+                npm install --ignore-scripts --force --no-audit --no-fund \
+                  "tinyedge@$RELEASE_VERSION" --registry="$NPM_REGISTRY" 2>&1 \
+                  | tee "../tinyedge-install-attempt-${attempt}.log" &&
+                npm audit signatures --registry="$NPM_REGISTRY" 2>&1 \
+                  | tee "../tinyedge-signature-audit-attempt-${attempt}.log"
+              ); then
+                verification_succeeded=true
+                break
+              fi
+            fi
+            {
+              printf 'attempt=%s\n' "$attempt"
+              printf 'metadata=%s\n' "$published_metadata"
+              printf 'dist-tags=%s\n' "$published_tags"
+            } >> publish-evidence/registry-convergence.log
+            sleep 10
+          done
+          if [[ "$verification_succeeded" != "true" ]]; then
+            echo "::error title=Registry convergence failed::Could not verify registry bytes, dist-tags, provenance metadata, and cryptographic signatures after 12 attempts"
+            exit 1
+          fi
+      - name: Record publication evidence and the protected approval boundary
         if: always()
         shell: bash
         env:
           SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact-digest }}
         run: |
           set -euo pipefail
-          mkdir -p stage-evidence
+          mkdir -p publish-evidence
           if [[ -f "$RELEASE_ARTIFACT_DIRECTORY/release-manifest.json" ]]; then
-            cp "$RELEASE_ARTIFACT_DIRECTORY/release-manifest.json" stage-evidence/release-manifest.json
+            cp "$RELEASE_ARTIFACT_DIRECTORY/release-manifest.json" publish-evidence/release-manifest.json
           fi
           {
-            echo "## npm staged-preview evidence"
+            echo "## npm direct-preview evidence"
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Candidate artifact: \`${{ needs.build.outputs.artifact-name }}\`"
             echo "- GitHub artifact digest: \`$SOURCE_ARTIFACT_DIGEST\`"
             echo "- Destination tag: \`preview\`"
-            echo "- No package is public until a maintainer inspects and approves each npm stage with 2FA."
-            echo "- @tinyedge/pi-runtime@$PI_RUNTIME_VERSION is already published; this workflow packs it for verification, matches the packed tarball to the live registry artifact, and does not restage it. The inert 0.0.0 bootstrap remains under the bootstrap tag. This workflow never direct-publishes the runtime."
-            echo "- Automatic provenance applies to these staged candidate artifacts from the public repository, not to the earlier interactive bootstrap publication."
-            echo "- Staging requires a protected-environment policy sentinel and a public repository eligible for npm's automatic provenance attestation."
-          } | tee stage-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload registry preflight and staging logs
+            echo "- The protected npm-release environment is the single pre-publication approval gate."
+            echo "- Registry integrity, dist-tags, SLSA provenance metadata, and npm's cryptographic signature audit were rechecked after publication."
+            echo "- @tinyedge/pi-runtime@$PI_RUNTIME_VERSION is already published; this workflow packs it for verification, matches the packed tarball to the live registry artifact, and never republishes it."
+            echo "- @tinyedge/cli@0.1.3 and @tinyedge/pi@0.1.3 remain immutable compatibility releases and are not part of this candidate."
+            echo "- Automatic provenance applies to tinyedge@0.1.4 from this public repository, not to the earlier interactive runtime bootstrap publication."
+            echo "- Promotion from preview to latest remains a separate manual maintainer action with npm 2FA."
+          } | tee publish-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload registry preflight and publication logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: tinyedge-npm-stage-evidence-${{ github.sha }}
-          path: stage-evidence
+          name: tinyedge-npm-publish-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          path: publish-evidence
           if-no-files-found: error
           retention-days: 30

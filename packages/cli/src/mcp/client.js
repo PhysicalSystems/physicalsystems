@@ -52,7 +52,7 @@ export class RemoteMcpClient {
     getAccessToken,
     onUnauthorized,
     fetchImpl = fetch,
-    clientInfo = { name: '@tinyedge/cli', version: VERSION },
+    clientInfo = { name: 'tinyedge', version: VERSION },
     allowedTools,
     requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   }) {

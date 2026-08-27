@@ -20,7 +20,7 @@
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
-          "value": "npm package root is an unpublished release candidate without registry resolved/integrity metadata"
+          "value": "historical 0.1.3 release record; registry integrity is documented in release evidence rather than this frozen SBOM"
         },
         {
           "name": "tinyedge:release:source-license-state",
@@ -32,7 +32,7 @@
         },
         {
           "name": "tinyedge:sbom:package-json-sha256",
-          "value": "bc29965d656c8753c96eeec2970bb9a3b3ff210107d21ee436c07d4f05838c4a"
+          "value": "db3373a25001cc905fc06c5e03012c87af9757aa69e847dc0b7e58f88b919f7b"
         },
         {
           "name": "tinyedge:wrapper:excluded-optional-peer",

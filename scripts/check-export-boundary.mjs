@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const expectedRepository = 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git'
 const expectedBugs = 'https://github.com/TinyEdgeAI/tinyedge-edge/issues'
-const tinyedgePackageFiles = [
-  'packages/cli/package.json',
+const tinyedgePackageFiles = ['packages/cli/package.json']
+const frozenPackageFiles = [
   'packages/npx/package.json',
   'packages/pi/package.json',
 ]
@@ -83,7 +83,7 @@ assert.deepEqual(
     .map((entry) => entry.name)
     .sort(),
   ['cli', 'npx', 'pi', 'pi-runtime'],
-  'the clean export must contain only the four reviewed npm package directories',
+  'the clean export must contain only the active package/runtime and two frozen 0.1.3 source directories',
 )
 
 const licensePending = existsSync(path.join(root, 'LICENSE-PENDING.md'))
@@ -112,7 +112,7 @@ assert.equal(
   licensePending ? 'UNLICENSED' : 'Apache-2.0',
   'workspace package license must match the source-license state',
 )
-for (const packageFile of [...tinyedgePackageFiles, runtimePackageFile]) {
+for (const packageFile of [...tinyedgePackageFiles, ...frozenPackageFiles, runtimePackageFile]) {
   const manifest = JSON.parse(readFileSync(path.join(root, packageFile), 'utf8'))
   assert.equal(manifest.repository?.url, expectedRepository, packageFile + ' repository identity')
   assert.equal(manifest.bugs?.url, expectedBugs, packageFile + ' issue tracker identity')
@@ -121,6 +121,11 @@ for (const packageFile of [...tinyedgePackageFiles, runtimePackageFile]) {
     /^https:\/\/github\.com\/TinyEdgeAI\/tinyedge-edge(?:\/tree\/main\/packages\/[^#]+)?#readme$/,
     packageFile + ' homepage identity',
   )
+}
+for (const packageFile of frozenPackageFiles) {
+  const manifest = JSON.parse(readFileSync(path.join(root, packageFile), 'utf8'))
+  assert.equal(manifest.version, '0.1.3', packageFile + ' must retain its immutable published version')
+  assert.equal(manifest.private, true, packageFile + ' is historical source and must not be republished')
 }
 for (const packageFile of tinyedgePackageFiles) {
   const manifest = JSON.parse(readFileSync(path.join(root, packageFile), 'utf8'))
