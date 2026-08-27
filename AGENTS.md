@@ -4,9 +4,10 @@ This is the canonical public source workspace for the TinyEdge edge client.
 
 ## Source boundary
 
-- Keep only the npm facade, CLI, Pi extension, audited Pi compatibility
-  runtime, public contracts, tests, release tooling, and documentation needed
-  to audit the device-side client.
+- Keep only the `tinyedge` command/client/extension package, audited Pi
+  compatibility runtime, frozen public-package source records, public
+  contracts, tests, release tooling, and documentation needed to audit the
+  device-side client.
 - Never copy or import hosted control-plane, database, scheduler, billing,
   rewards, production operations, fleet data, or optimizer-policy code.
 - Treat `BOUNDARY.md` as the architectural rule. Use GitHub issues for public
@@ -14,18 +15,20 @@ This is the canonical public source workspace for the TinyEdge edge client.
 
 ## Licenses and publication boundary
 
-- Preserve Apache-2.0 for the three TinyEdge-authored packages and MIT for the
-  Pi compatibility runtime, including its upstream provenance and notices.
+- Preserve Apache-2.0 for TinyEdge-authored code and MIT for the Pi
+  compatibility runtime, including its upstream provenance and notices.
 - Source availability and npm publication are separate transitions. TinyEdge
-  policy authorizes the four publishable package manifests for the protected
-  release workflow; the root workspace remains private. A human npm owner may
-  retain interactive 2FA publication capability, but must not use it as an
-  alternate release path.
-- Preserve the manual, main-only, protected-environment, stage-only release
-  path in `packages/cli/RELEASE.md`, including explicit founder authorization
-  for a solo release and required x64/ARM64 checks. Never add a lifecycle
-  publish script, long-lived npm write token, direct-publish permission, or an
-  undocumented release route.
+  policy authorizes one `tinyedge` candidate for the protected release
+  workflow; the root workspace and frozen 0.1.3 package records remain private.
+  A human npm owner may retain interactive 2FA publication capability, but
+  must not use it as an alternate release path.
+- Preserve the manual, main-only, protected-environment OIDC release path in
+  `packages/cli/RELEASE.md`, including explicit founder authorization for a
+  solo release and required x64/ARM64 checks under both pinned npm 11 and npm
+  12. Keep the complete reviewed dependency closure bundled in the prebuilt
+  `tinyedge` tarball. CI may direct-publish only that tarball to `preview`;
+  never add a lifecycle publish script, long-lived npm write token, CI
+  `latest` promotion, runtime republish, or undocumented release route.
 - Do not stage, publish, promote, or create an installer from an ordinary code
   change. Do not advertise macOS, Linux, a public installer, or a clean-user
   npm route until exact end-to-end evidence exists.

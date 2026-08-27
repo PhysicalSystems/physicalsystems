@@ -34,7 +34,7 @@ and disclosure plan. We do not promise a bounty or a particular response time.
 
 ## Scope
 
-Reports about the CLI, npm facade, Pi extension, compatibility runtime,
+Reports about the `tinyedge` client/command/extension package, compatibility runtime,
 packaging, OAuth client boundary, local credential storage, or release workflow
 belong here. Reports about a TinyEdge account, billing, or the hosted service
 should use the private support route described in [SUPPORT.md](SUPPORT.md).

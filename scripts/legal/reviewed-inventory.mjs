@@ -66,15 +66,6 @@ export const ARTIFACT_LICENSE_FILE_EVIDENCE = Object.freeze([
   }),
 ])
 
-export const EXCLUDED_PI_HOST_PEER = Object.freeze({
-  name: '@earendil-works/pi-coding-agent',
-  version: '0.84.2',
-  licenseIds: Object.freeze(['MIT']),
-  resolved: 'https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.84.2.tgz',
-  integrity: 'sha512-l4E+B7hgXKWddRo8bC/eSue2aWZjEgJ9xIpf5p0Og+lq8a2TArCwJ0HCoCPCgaBP/tN4zbYH/wOwvx9pJpeLCA==',
-  reason: 'Existing-Pi host is an optional peer and is not installed by the TinyEdge Pi add-on; a user-provided host has its own separately disclosed dependency closure.',
-})
-
 const approvedMissingLegalFileOverride = (record) => Object.freeze({
   ...record,
   missingArtifactLegalFiles: Object.freeze(['LICENSE', 'NOTICE', 'COPYING']),
@@ -236,40 +227,18 @@ export const TARGETS = Object.freeze({
     dependencyNodeCount: 127,
     runtimePackagePath: '',
   }),
-  cli: Object.freeze({
-    key: 'cli',
+  tinyedge: Object.freeze({
+    key: 'tinyedge',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: '900c79f53e5e318691012a8875b8b5d0d57a8731737c7dd4c52f408b89114ee7',
-    rootName: '@tinyedge/cli',
-    rootVersion: '0.1.3',
-    // Source and package-manifest approval are complete; public availability
-    // remains gated by the protected stage-only release workflow and npm 2FA.
+    shrinkwrapSha256: 'b762bc9110a8083371d3bd536bc618eeaafb397221641f50bce03289258d289e',
+    rootName: 'tinyedge',
+    rootVersion: '0.1.4',
+    // Direct publication is limited to preview through the protected OIDC
+    // workflow. Promotion to latest remains a separate maintainer action.
     rootLicense: 'Apache-2.0',
     dependencyNodeCount: 128,
     runtimePackagePath: 'node_modules/@tinyedge/pi-runtime',
-  }),
-})
-
-export const WRAPPER_TARGETS = Object.freeze({
-  npx: Object.freeze({
-    key: 'npx',
-    packageJsonPath: 'packages/npx/package.json',
-    outputPath: 'packages/npx/SBOM.cdx.json',
-    rootName: 'tinyedge',
-    rootVersion: '0.1.3',
-    rootLicense: 'Apache-2.0',
-    cliVersion: '0.1.3',
-  }),
-  pi: Object.freeze({
-    key: 'pi',
-    packageJsonPath: 'packages/pi/package.json',
-    outputPath: 'packages/pi/SBOM.cdx.json',
-    rootName: '@tinyedge/pi',
-    rootVersion: '0.1.3',
-    rootLicense: 'Apache-2.0',
-    cliVersion: '0.1.3',
-    excludedOptionalPeer: EXCLUDED_PI_HOST_PEER,
   }),
 })
 
@@ -281,16 +250,13 @@ export const WORKSPACE_TARGET = Object.freeze({
   rootVersion: '0.0.0',
   rootLicense: 'Apache-2.0',
   packageRoots: Object.freeze([
-    Object.freeze({ name: 'tinyedge', version: '0.1.3', license: 'Apache-2.0', packageJsonPath: 'packages/npx/package.json' }),
-    Object.freeze({ name: '@tinyedge/pi', version: '0.1.3', license: 'Apache-2.0', packageJsonPath: 'packages/pi/package.json' }),
-    Object.freeze({ name: '@tinyedge/cli', version: '0.1.3', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
+    Object.freeze({ name: 'tinyedge', version: '0.1.4', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
     Object.freeze({ name: '@tinyedge/pi-runtime', version: '0.84.2-tinyedge.1', license: 'MIT', packageJsonPath: 'packages/pi-runtime/package.json' }),
   ]),
 })
 
 export const SBOM_TARGET_KEYS = Object.freeze([
   ...Object.keys(TARGETS),
-  ...Object.keys(WRAPPER_TARGETS),
   WORKSPACE_TARGET.key,
 ])
 

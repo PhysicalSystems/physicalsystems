@@ -50,7 +50,7 @@
       },
       {
         "name": "tinyedge:sbom:composition",
-        "value": "tinyedge-edge-workspace@0.0.0 -> four explicit TinyEdge package roots"
+        "value": "tinyedge-edge-workspace@0.0.0 -> tinyedge plus its audited compatibility runtime"
       },
       {
         "name": "tinyedge:sbom:default-install",
@@ -2211,62 +2211,6 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/%40earendil-works/pi-coding-agent@0.84.2",
-      "group": "@earendil-works",
-      "name": "pi-coding-agent",
-      "version": "0.84.2",
-      "scope": "excluded",
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "97813e07b8605ca59d751a3c6c2fde4ae7b669666312027dc48a5fe69d0e83e96af1ad9302b0b02741c2a023c281a04ffed378cdb607ff03b0bf1f6926978b08"
-        }
-      ],
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "purl": "pkg:npm/%40earendil-works/pi-coding-agent@0.84.2",
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.84.2.tgz",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "97813e07b8605ca59d751a3c6c2fde4ae7b669666312027dc48a5fe69d0e83e96af1ad9302b0b02741c2a023c281a04ffed378cdb607ff03b0bf1f6926978b08"
-            }
-          ]
-        }
-      ],
-      "properties": [
-        {
-          "name": "tinyedge:distribution:kind",
-          "value": "optional-peer"
-        },
-        {
-          "name": "tinyedge:review:note",
-          "value": "Existing-Pi host is an optional peer and is not installed by the TinyEdge Pi add-on; a user-provided host has its own separately disclosed dependency closure."
-        },
-        {
-          "name": "tinyedge:review:status",
-          "value": "excluded-optional-peer"
-        },
-        {
-          "name": "tinyedge:source:integrity",
-          "value": "sha512-l4E+B7hgXKWddRo8bC/eSue2aWZjEgJ9xIpf5p0Og+lq8a2TArCwJ0HCoCPCgaBP/tN4zbYH/wOwvx9pJpeLCA=="
-        },
-        {
-          "name": "tinyedge:source:resolved",
-          "value": "https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.84.2.tgz"
-        }
-      ]
-    },
-    {
-      "type": "library",
       "bom-ref": "pkg:npm/%40earendil-works/pi-protocol@0.84.2",
       "group": "@earendil-works",
       "name": "pi-protocol",
@@ -3731,52 +3675,6 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/%40tinyedge/cli@0.1.3",
-      "group": "@tinyedge",
-      "name": "cli",
-      "version": "0.1.3",
-      "licenses": [
-        {
-          "license": {
-            "id": "Apache-2.0"
-          }
-        }
-      ],
-      "purl": "pkg:npm/%40tinyedge/cli@0.1.3",
-      "properties": [
-        {
-          "name": "tinyedge:release:root-integrity-override",
-          "value": "npm shrinkwrap root records do not carry registry resolved/integrity metadata"
-        },
-        {
-          "name": "tinyedge:release:source-license-state",
-          "value": "Apache-2.0"
-        },
-        {
-          "name": "tinyedge:sbom:shrinkwrap-path",
-          "value": "packages/cli/npm-shrinkwrap.json"
-        },
-        {
-          "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "900c79f53e5e318691012a8875b8b5d0d57a8731737c7dd4c52f408b89114ee7"
-        },
-        {
-          "name": "tinyedge:workspace:package-json-path",
-          "value": "packages/cli/package.json"
-        },
-        {
-          "name": "tinyedge:workspace:package-json-sha256",
-          "value": "cb6c11cfd69b8be719e88bec86dc687b19f7dc487c48f009f19f2b49c6d3fe84"
-        },
-        {
-          "name": "tinyedge:workspace:package-root",
-          "value": "true"
-        }
-      ],
-      "scope": "required"
-    },
-    {
-      "type": "library",
       "bom-ref": "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
       "group": "@tinyedge",
       "name": "pi-runtime",
@@ -3832,48 +3730,6 @@
         {
           "name": "tinyedge:workspace:package-root",
           "value": "true"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "bom-ref": "pkg:npm/%40tinyedge/pi@0.1.3",
-      "group": "@tinyedge",
-      "name": "pi",
-      "version": "0.1.3",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "Apache-2.0"
-          }
-        }
-      ],
-      "purl": "pkg:npm/%40tinyedge/pi@0.1.3",
-      "properties": [
-        {
-          "name": "tinyedge:release:root-integrity-override",
-          "value": "workspace package root is an unpublished release candidate without registry resolved/integrity metadata"
-        },
-        {
-          "name": "tinyedge:release:source-license-state",
-          "value": "Apache-2.0"
-        },
-        {
-          "name": "tinyedge:workspace:package-json-path",
-          "value": "packages/pi/package.json"
-        },
-        {
-          "name": "tinyedge:workspace:package-json-sha256",
-          "value": "bc29965d656c8753c96eeec2970bb9a3b3ff210107d21ee436c07d4f05838c4a"
-        },
-        {
-          "name": "tinyedge:workspace:package-root",
-          "value": "true"
-        },
-        {
-          "name": "tinyedge:wrapper:excluded-optional-peer",
-          "value": "@earendil-works/pi-coding-agent@0.84.2"
         }
       ]
     },
@@ -7026,10 +6882,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/tinyedge@0.1.3",
+      "bom-ref": "pkg:npm/tinyedge@0.1.4",
       "name": "tinyedge",
-      "version": "0.1.3",
-      "scope": "required",
+      "version": "0.1.4",
       "licenses": [
         {
           "license": {
@@ -7037,29 +6892,38 @@
           }
         }
       ],
-      "purl": "pkg:npm/tinyedge@0.1.3",
+      "purl": "pkg:npm/tinyedge@0.1.4",
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
-          "value": "workspace package root is an unpublished release candidate without registry resolved/integrity metadata"
+          "value": "npm shrinkwrap root records do not carry registry resolved/integrity metadata"
         },
         {
           "name": "tinyedge:release:source-license-state",
           "value": "Apache-2.0"
         },
         {
+          "name": "tinyedge:sbom:shrinkwrap-path",
+          "value": "packages/cli/npm-shrinkwrap.json"
+        },
+        {
+          "name": "tinyedge:sbom:shrinkwrap-sha256",
+          "value": "b762bc9110a8083371d3bd536bc618eeaafb397221641f50bce03289258d289e"
+        },
+        {
           "name": "tinyedge:workspace:package-json-path",
-          "value": "packages/npx/package.json"
+          "value": "packages/cli/package.json"
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "a79a42f61e2987aa656814329a1fd48c52e471dcc46b314a085f4805b8bad101"
+          "value": "8d938858b6d18a8bbf20fd787808643c212051e6686cdd2323c6906d040aaf9c"
         },
         {
           "name": "tinyedge:workspace:package-root",
           "value": "true"
         }
-      ]
+      ],
+      "scope": "required"
     },
     {
       "type": "library",
@@ -7967,10 +7831,6 @@
       ]
     },
     {
-      "ref": "pkg:npm/%40earendil-works/pi-coding-agent@0.84.2",
-      "dependsOn": []
-    },
-    {
       "ref": "pkg:npm/%40earendil-works/pi-protocol@0.84.2",
       "dependsOn": [
         "pkg:npm/typebox@1.3.7"
@@ -8121,14 +7981,6 @@
       ]
     },
     {
-      "ref": "pkg:npm/%40tinyedge/cli@0.1.3",
-      "dependsOn": [
-        "pkg:npm/%40earendil-works/pi-tui@0.84.2",
-        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
-        "pkg:npm/proper-lockfile@4.1.2"
-      ]
-    },
-    {
       "ref": "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
       "dependsOn": [
         "pkg:generic/ansi-regex@pi-snapshot-914cf1472e715297caa30db4b9535d534a9eb718",
@@ -8155,12 +8007,6 @@
         "pkg:npm/typebox@1.3.7",
         "pkg:npm/undici@8.9.0",
         "pkg:npm/yaml@2.9.0"
-      ]
-    },
-    {
-      "ref": "pkg:npm/%40tinyedge/pi@0.1.3",
-      "dependsOn": [
-        "pkg:npm/%40tinyedge/cli@0.1.3"
       ]
     },
     {
@@ -8520,16 +8366,16 @@
     {
       "ref": "pkg:npm/tinyedge-edge-workspace@0.0.0",
       "dependsOn": [
-        "pkg:npm/%40tinyedge/cli@0.1.3",
         "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
-        "pkg:npm/%40tinyedge/pi@0.1.3",
-        "pkg:npm/tinyedge@0.1.3"
+        "pkg:npm/tinyedge@0.1.4"
       ]
     },
     {
-      "ref": "pkg:npm/tinyedge@0.1.3",
+      "ref": "pkg:npm/tinyedge@0.1.4",
       "dependsOn": [
-        "pkg:npm/%40tinyedge/cli@0.1.3"
+        "pkg:npm/%40earendil-works/pi-tui@0.84.2",
+        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
+        "pkg:npm/proper-lockfile@4.1.2"
       ]
     },
     {

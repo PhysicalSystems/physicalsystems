@@ -20,6 +20,7 @@ const RUNTIME_DIRECTORY = path.resolve(CLI_DIRECTORY, '../pi-runtime')
 const PINNED_NPM_VERSION = '11.19.0'
 const RUNTIME_NAME = '@tinyedge/pi-runtime'
 const RUNTIME_VERSION = '0.84.2-tinyedge.1'
+export const NPM_BOOTSTRAP_TIMEOUT_MS = 10 * 60_000
 const FORBIDDEN_RUNTIME_PACKAGES = Object.freeze([
   '@earendil-works/pi-coding-agent',
   '@silvia-odwyer/photon-node',
@@ -37,7 +38,7 @@ function runNpm(args, options = {}) {
     cwd: options.cwd || CLI_DIRECTORY,
     encoding: 'utf8',
     env: { ...process.env, NO_COLOR: '1' },
-    timeout: options.timeout || 300_000,
+    timeout: options.timeout ?? NPM_BOOTSTRAP_TIMEOUT_MS,
     windowsHide: true,
   })
   if (result.error) throw result.error
@@ -93,7 +94,13 @@ function runtimePackageEntry(runtimeLock, runtimeIntegrity) {
 
 export function buildCliConsumerLock({ manifest, runtimeLock, runtimeIntegrity }) {
   const root = {}
-  for (const key of ['name', 'version', 'license', 'os', 'dependencies', 'bin', 'engines']) {
+  for (const key of ['name', 'version']) {
+    if (manifest[key] !== undefined) root[key] = structuredClone(manifest[key])
+  }
+  if (manifest.bundleDependencies === true) {
+    root.bundleDependencies = Object.keys(manifest.dependencies || {})
+  }
+  for (const key of ['license', 'bin', 'os', 'dependencies', 'engines']) {
     if (manifest[key] !== undefined) root[key] = structuredClone(manifest[key])
   }
 
@@ -129,8 +136,18 @@ export function validateCliRuntimeContract({
 }) {
   assert.equal(shrinkwrapText, packageLockText, 'CLI package-lock and shrinkwrap must be byte-identical')
   assert.equal(manifest.dependencies?.[RUNTIME_NAME], RUNTIME_VERSION)
+  assert.equal(
+    manifest.bundleDependencies,
+    true,
+    'CLI manifest must set bundleDependencies=true',
+  )
   assert.equal(manifest.dependencies?.['@earendil-works/pi-coding-agent'], undefined)
   assert.equal(lock.packages?.['']?.dependencies?.[RUNTIME_NAME], RUNTIME_VERSION)
+  assert.deepEqual(
+    [...lock.packages?.['']?.bundleDependencies || []].sort(),
+    Object.keys(manifest.dependencies || {}).sort(),
+    'CLI lock must mark every direct dependency for bundling',
+  )
 
   const runtime = lock.packages?.[`node_modules/${RUNTIME_NAME}`]
   assert.ok(runtime, `CLI lock is missing ${RUNTIME_NAME}`)

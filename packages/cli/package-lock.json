@@ -1,13 +1,21 @@
 {
-  "name": "@tinyedge/cli",
-  "version": "0.1.3",
+  "name": "tinyedge",
+  "version": "0.1.4",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
-      "name": "@tinyedge/cli",
-      "version": "0.1.3",
+      "name": "tinyedge",
+      "version": "0.1.4",
+      "bundleDependencies": [
+        "@earendil-works/pi-tui",
+        "@tinyedge/pi-runtime",
+        "proper-lockfile"
+      ],
       "license": "Apache-2.0",
+      "bin": {
+        "tinyedge": "bin/tinyedge.js"
+      },
       "os": [
         "win32"
       ],

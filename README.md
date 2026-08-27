@@ -1,7 +1,7 @@
 # TinyEdge Edge
 
 TinyEdge Edge is the public device-side source for the Windows TinyEdge
-command-line client, npm facade, Pi extension, and audited text-first Pi
+command-line client, embedded Pi extension, and audited text-first Pi
 compatibility runtime. It does not contain the TinyEdge hosted control plane,
 scheduler, billing system, fleet data, production operations, or private
 optimization intelligence.
@@ -11,27 +11,30 @@ optimization intelligence.
 The source is available under the licenses in this repository. TinyEdge-authored
 client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
 Version `0.1.3` is published to npm under both `latest` and `preview`. Its exact
-artifacts passed the protected staged-release workflow, native Windows x64 and
-ARM64 verification, npm signature and provenance checks, and a clean public
-registry canary. On Windows with Node.js 22.19.0 or newer, launch the native
-Harness with:
+artifacts passed native Windows x64 and ARM64 verification, npm signature and
+provenance checks, and a clean public registry canary. On Windows with Node.js
+22.19.0 or newer, install and launch the native Harness with:
 
 ```powershell
-npx --yes tinyedge
+npm install --global tinyedge
+tinyedge
 ```
 
-`npx` downloads and runs the command for that invocation; it does not install a
-persistent command. For a persistent command, use
-`npm install --global tinyedge@0.1.3`. The older `0.1.1` release remains public
-as historical registry evidence but is not the current Harness.
+`npx --yes tinyedge@latest` remains a one-shot alternative; it does not install
+a persistent command. The older `0.1.1` release remains public as historical
+registry evidence but is not the current Harness.
+
+The source tree is preparing `0.1.4`, which consolidates the command, client,
+and Pi extension into the single `tinyedge` artifact. The immutable
+`@tinyedge/cli@0.1.3` and `@tinyedge/pi@0.1.3` releases remain available for
+compatibility but are no longer ordinary release artifacts.
 
 ## Command ownership
 
 The npm client owns the product-level `tinyedge` command. TinyEdge's Python
 benchmark tooling uses `tinydevice`, so the two entry points do not compete for
-the same executable name. Prefer `npx --yes tinyedge` to avoid ambiguity with
-an unrelated executable already on
-`PATH`. In PowerShell, diagnose every matching command with:
+the same executable name. In PowerShell, diagnose an unrelated executable or
+stale global installation on `PATH` with:
 
 ```powershell
 Get-Command -All tinyedge
@@ -39,11 +42,12 @@ Get-Command -All tinyedge
 
 ## What is included
 
-- `tinyedge`: the command facade intended to own the `tinyedge` executable.
-- `@tinyedge/cli`: OAuth, credential, MCP, provider, and Harness client logic.
-- `@tinyedge/pi`: TinyEdge tools for an existing Pi installation.
-- `@tinyedge/pi-runtime`: the audited MIT Pi compatibility runtime used by the
-  text-first Harness.
+- `tinyedge`: the command, OAuth, credential, MCP, provider, Harness, and Pi
+  extension logic in one package.
+- `@tinyedge/pi-runtime`: the separately versioned audited MIT Pi compatibility
+  runtime, bundled into `tinyedge` so the one-package install retains the
+  reviewed graph under npm 11 and npm 12.
+- Frozen `0.1.3` facade and existing-Pi source records for compatibility.
 - Deterministic package, legal, dependency, SBOM, and release checks.
 
 The supported release and source-development targets are Windows x64 and native
@@ -96,9 +100,9 @@ or private support route.
 
 ## npm release gate
 
-The `0.1.3` packages were published through the protected, stage-only workflow
-after founder authorization, npm staged-package inspection and 2FA approval,
-hosted Windows x64/ARM64 checks, and clean-user live canaries. Direct npm-owner
-publication remains a platform capability but is forbidden by TinyEdge release
-policy. Future releases retain the same fail-closed procedure in
+The `0.1.3` packages were published through npm staged publishing. Starting
+with `0.1.4`, the protected workflow directly publishes one OIDC-authenticated
+`tinyedge` artifact to `preview` after the `npm-release` environment approval.
+It never changes `latest`, republishes the audited runtime, or uses a long-lived
+npm token. Canary-approved promotion remains a separate maintainer action in
 [packages/cli/RELEASE.md](packages/cli/RELEASE.md).

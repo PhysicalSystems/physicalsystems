@@ -1,39 +1,45 @@
-# `@tinyedge/cli`
+# `tinyedge`
 
 A Windows preview of the Pi-powered terminal client for TinyEdge's remote
-orchestration boundary. This scoped core is an importable library; the
-`tinyedge` facade is the sole owner of the user-facing command shim.
+orchestration boundary. Starting with `0.1.4`, this one package contains the
+client library, Pi extension, and user-facing command shim. Ordinary Harness
+releases no longer require matching `@tinyedge/cli` and `@tinyedge/pi`
+publications.
 
 Source-code availability is not registry evidence. Before using the commands
-below, require `npm view tinyedge@0.1.3 version --json` to return
-`"0.1.3"`.
+below, require `npm view tinyedge@0.1.4 version --json` to return
+`"0.1.4"`.
 
-Run the exact `0.1.3` facade without installing a persistent command:
+Run the exact `0.1.4` package without installing a persistent command:
 
 ```powershell
-npx tinyedge@0.1.3
+npx tinyedge@0.1.4
 ```
 
 `npx` may cache package files, but it does not add a global `tinyedge` command.
-For a persistent command in new terminals, install the exact facade globally:
+For a persistent command in new terminals, install the exact package globally:
 
 ```powershell
-npm install --global tinyedge@0.1.3
+npm install --global tinyedge@0.1.4
 tinyedge
 ```
 
 Unversioned commands follow npm's current dist-tags and are not evidence for a
-specific release. Historical release evidence captured 2026-08-17 confirmed
-that bare `0.1.1` prints help instead of opening the native Harness; that audit
-did not exercise its production login or chat paths.
+specific release. The `0.1.3` release used separate `tinyedge`,
+`@tinyedge/cli`, and `@tinyedge/pi` artifacts; those immutable versions remain
+available for compatibility but are not part of the `0.1.4` release graph.
+Historical package checks did not validate production OAuth, login, or live
+MCP execution.
 
 The chat command depends on the exact MIT-licensed
 `@tinyedge/pi-runtime@0.84.2-tinyedge.1` compatibility package derived from
-the reviewed Pi 0.84.2 artifact. Its text-first default install excludes the
-optional native clipboard and Photon/WASM image-processing peers. Every Pi
-built-in tool is disabled. Ambient extensions, context files, skills,
-templates, and themes are disabled too. Pi can call only a fixed TinyEdge MCP
-allowlist selected from the scopes explicitly granted at login.
+the reviewed Pi 0.84.2 artifact. The complete locked closure is bundled inside
+`tinyedge` so npm 11 and npm 12 install the same reviewed bytes from the one
+user-facing package. Its text-first default install excludes the optional
+native clipboard and Photon/WASM image-processing peers. Every Pi built-in tool
+is disabled. Ambient extensions, context files, skills, templates, and themes
+are disabled too. Pi can call only a fixed TinyEdge MCP allowlist selected from
+the scopes explicitly granted at login.
 Run- and task-specific tools accept only exact IDs returned by discovery in the
 same chat. It cannot access a shell, filesystem, SSH, or credentials. Every
 consequential operation remains subject to TinyEdge's immutable plan,

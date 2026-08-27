@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   buildCliConsumerLock,
+  NPM_BOOTSTRAP_TIMEOUT_MS,
   validateCliRuntimeContract,
 } from '../scripts/bootstrap-pi-runtime.js'
 
@@ -10,14 +11,19 @@ const runtimeName = '@tinyedge/pi-runtime'
 const runtimeVersion = '0.84.2-tinyedge.1'
 const runtimeIntegrity = 'sha512-VGlue='
 
+test('Pi runtime bootstrap gives cold hosted-runner installs ten bounded minutes', () => {
+  assert.equal(NPM_BOOTSTRAP_TIMEOUT_MS, 600_000)
+})
+
 function fixtures() {
   const manifest = {
-    name: '@tinyedge/cli',
-    version: '0.1.2',
+    name: 'tinyedge',
+    version: '0.1.4',
     license: 'Apache-2.0',
     dependencies: {
       [runtimeName]: runtimeVersion,
     },
+    bundleDependencies: true,
   }
   const runtimeLock = {
     name: runtimeName,
@@ -58,6 +64,16 @@ function validateFixture(fixture) {
 
 test('Pi runtime bootstrap accepts the exact canonical reviewed closure', () => {
   assert.doesNotThrow(() => validateFixture(fixtures()))
+})
+
+test('Pi runtime bootstrap requires every direct dependency to be bundled', () => {
+  const unbundled = fixtures()
+  delete unbundled.manifest.bundleDependencies
+  assert.throws(() => validateFixture(unbundled), /bundleDependencies/)
+
+  const incompleteLock = fixtures()
+  incompleteLock.lock.packages[''].bundleDependencies = []
+  assert.throws(() => validateFixture(incompleteLock), /mark every direct dependency for bundling/)
 })
 
 test('Pi runtime bootstrap rejects local resolutions and banned native packages', () => {

@@ -1,6 +1,10 @@
 # TinyEdge Harness
 
 `tinyedge@0.1.3` is the Windows preview facade for the native TinyEdge Harness.
+This directory retains the `0.1.3` implementation record. Its current
+`private` marker prevents accidental republication; the exact public artifact
+remains immutable in npm and repository history. Starting with `0.1.4`, the
+complete Harness ships directly from `packages/cli` as one `tinyedge` artifact.
 It requires Node.js 22.19 or newer and delegates to the same exact version of
 `@tinyedge/cli`; the facade does not create a separate client or security
 boundary. The facade is the sole package that installs the `tinyedge` command;

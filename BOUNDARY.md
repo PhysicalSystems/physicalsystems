@@ -5,9 +5,9 @@ the canonical public source for the device-side edge client.
 
 ## Public source
 
-- The `tinyedge` npm facade.
-- The TinyEdge CLI and its local credential, OAuth, MCP, and Harness boundaries.
-- The Pi extension and stable client/plugin contracts.
+- The `tinyedge` npm package: command, local credential, OAuth, MCP, Harness,
+  Pi extension, stable client/plugin contracts, and the bundled reviewed
+  dependency closure required for deterministic npm 11/npm 12 installs.
 - The audited MIT Pi compatibility runtime used by the text-first Harness,
   with optional native Clipboard and image-processing peers absent by default.
 - Tests, packaging checks, security expectations, and reproducible release CI
@@ -37,9 +37,10 @@ license. The self-contained licenses, notices, trademark policy, SBOMs, and
 third-party evidence are part of the public audit surface.
 
 Package manifests being publishable does not publish them. TinyEdge policy
-authorizes staging through the manual, main-only workflow, protected
-`npm-release` environment, and stage-only npm trusted publishers; public
-availability still requires npm 2FA approval. An npm owner may technically
-retain interactive publication capability, but that is not an approved release
-route. Changes to this boundary require public review and must not be bundled
-with an unrelated feature or release.
+authorizes direct OIDC publication of the one `tinyedge` candidate to
+`preview` through the manual, main-only workflow and protected `npm-release`
+environment. CI cannot change `latest` or republish the compatibility runtime;
+promotion remains a separate maintainer action with npm 2FA. An npm owner may
+technically retain interactive publication capability, but that is not an
+approved release route. Changes to this boundary require public review and
+must not be bundled with an unrelated feature or release.
