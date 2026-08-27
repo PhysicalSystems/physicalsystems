@@ -109,6 +109,7 @@ const REVIEWED_RUNTIME_LICENSES = new Set([
   'ISC',
   'MIT',
 ])
+const NPM_INSTALL_TIMEOUT_MS = 10 * 60_000
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -835,6 +836,7 @@ async function verifyRelease(artifactDirectory) {
     ], {
       cwd: temporaryRoot,
       env: { npm_config_cache: path.join(temporaryRoot, 'local-npm-cache') },
+      timeout: NPM_INSTALL_TIMEOUT_MS,
     })
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/tinyedge/package.json'))
@@ -903,6 +905,7 @@ async function verifyRelease(artifactDirectory) {
     ], {
       cwd: temporaryRoot,
       env: { npm_config_cache: path.join(temporaryRoot, 'global-npm-cache') },
+      timeout: NPM_INSTALL_TIMEOUT_MS,
     })
     const globalShim = path.join(globalPrefix, 'tinyedge.cmd')
     const globalEntry = path.join(globalPrefix, 'node_modules/tinyedge/bin/tinyedge.js')

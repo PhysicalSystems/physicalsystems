@@ -642,6 +642,8 @@ test('release verification uses real npm lifecycle and Windows command shims', (
   assert.match(packageChecker, /\[globalEntry, '--version'\]/)
   assert.match(packageChecker, /'--global',\s*'--prefix'/)
   assert.match(packageChecker, /path\.join\(globalPrefix, 'tinyedge\.cmd'\)/)
+  assert.match(packageChecker, /const NPM_INSTALL_TIMEOUT_MS = 10 \* 60_000/)
+  assert.equal((packageChecker.match(/timeout: NPM_INSTALL_TIMEOUT_MS/g) || []).length, 2)
 })
 
 test('the published tinyedge package carries the reviewed dependency closure', () => {
