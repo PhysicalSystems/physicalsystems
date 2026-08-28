@@ -7,8 +7,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const expectedRepository = 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git'
-const expectedBugs = 'https://github.com/TinyEdgeAI/tinyedge-edge/issues'
+const expectedRepository = 'git+https://github.com/PhysicalSystems/tinyedge-edge.git'
+const expectedBugs = 'https://github.com/PhysicalSystems/tinyedge-edge/issues'
+const frozenRepository = 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git'
+const frozenBugs = 'https://github.com/TinyEdgeAI/tinyedge-edge/issues'
 const tinyedgePackageFiles = ['packages/cli/package.json']
 const frozenPackageFiles = [
   'packages/npx/package.json',
@@ -104,7 +106,7 @@ assert.equal(workspaceManifest.repository?.url, expectedRepository, 'workspace r
 assert.equal(workspaceManifest.bugs?.url, expectedBugs, 'workspace issue tracker identity')
 assert.equal(
   workspaceManifest.homepage,
-  'https://github.com/TinyEdgeAI/tinyedge-edge#readme',
+  'https://github.com/PhysicalSystems/tinyedge-edge#readme',
   'workspace homepage identity',
 )
 assert.equal(
@@ -112,18 +114,25 @@ assert.equal(
   licensePending ? 'UNLICENSED' : 'Apache-2.0',
   'workspace package license must match the source-license state',
 )
-for (const packageFile of [...tinyedgePackageFiles, ...frozenPackageFiles, runtimePackageFile]) {
+for (const packageFile of [...tinyedgePackageFiles, runtimePackageFile]) {
   const manifest = JSON.parse(readFileSync(path.join(root, packageFile), 'utf8'))
   assert.equal(manifest.repository?.url, expectedRepository, packageFile + ' repository identity')
   assert.equal(manifest.bugs?.url, expectedBugs, packageFile + ' issue tracker identity')
   assert.match(
     manifest.homepage || '',
-    /^https:\/\/github\.com\/TinyEdgeAI\/tinyedge-edge(?:\/tree\/main\/packages\/[^#]+)?#readme$/,
+    /^https:\/\/github\.com\/PhysicalSystems\/tinyedge-edge(?:\/tree\/main\/packages\/[^#]+)?#readme$/,
     packageFile + ' homepage identity',
   )
 }
 for (const packageFile of frozenPackageFiles) {
   const manifest = JSON.parse(readFileSync(path.join(root, packageFile), 'utf8'))
+  assert.equal(manifest.repository?.url, frozenRepository, packageFile + ' frozen repository identity')
+  assert.equal(manifest.bugs?.url, frozenBugs, packageFile + ' frozen issue tracker identity')
+  assert.match(
+    manifest.homepage || '',
+    /^https:\/\/github\.com\/TinyEdgeAI\/tinyedge-edge(?:\/tree\/main\/packages\/[^#]+)?#readme$/,
+    packageFile + ' frozen homepage identity',
+  )
   assert.equal(manifest.version, '0.1.3', packageFile + ' must retain its immutable published version')
   assert.equal(manifest.private, true, packageFile + ' is historical source and must not be republished')
 }
@@ -226,7 +235,7 @@ const provenance = JSON.parse(readFileSync(path.join(root, 'EXPORT-PROVENANCE.js
 assert.equal(provenance.schemaVersion, 2)
 assert.equal(provenance.exportKind, 'public-clean-root-snapshot')
 assert.equal(provenance.source, undefined, 'public provenance must not disclose the private source record')
-assert.equal(provenance.destination?.repository, 'https://github.com/TinyEdgeAI/tinyedge-edge.git')
+assert.equal(provenance.destination?.repository, 'https://github.com/PhysicalSystems/tinyedge-edge.git')
 assert.equal(provenance.destination?.status, 'public-canonical')
 for (const forbiddenField of ['branchAtExport', 'sourceCommitTimestamp', 'gitObject']) {
   assert.ok(

@@ -20,7 +20,7 @@ or newer. macOS and Linux are not currently supported.
 
 Do not disclose a suspected vulnerability in a public issue, discussion,
 pull request, or chat transcript. Use GitHub's
-[private vulnerability reporting](https://github.com/TinyEdgeAI/tinyedge-edge/security/advisories/new).
+[private vulnerability reporting](https://github.com/PhysicalSystems/tinyedge-edge/security/advisories/new).
 If that route is unavailable, email <lienert@tinyedge.ai> with `[SECURITY]` in
 the subject and only the minimum information needed to establish contact.
 

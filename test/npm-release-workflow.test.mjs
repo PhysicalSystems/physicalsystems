@@ -92,7 +92,7 @@ function refreshFixtureProvenance(fixtureRoot) {
     schemaVersion: 2,
     exportKind: 'public-clean-root-snapshot',
     destination: {
-      repository: 'https://github.com/TinyEdgeAI/tinyedge-edge.git',
+      repository: 'https://github.com/PhysicalSystems/tinyedge-edge.git',
       status: 'public-canonical',
     },
     candidatePayload: {
@@ -103,14 +103,16 @@ function refreshFixtureProvenance(fixtureRoot) {
 }
 
 function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPending }) {
-  const repository = { url: 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git' }
-  const bugs = { url: 'https://github.com/TinyEdgeAI/tinyedge-edge/issues' }
+  const repository = { url: 'git+https://github.com/PhysicalSystems/tinyedge-edge.git' }
+  const bugs = { url: 'https://github.com/PhysicalSystems/tinyedge-edge/issues' }
+  const frozenRepository = { url: 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git' }
+  const frozenBugs = { url: 'https://github.com/TinyEdgeAI/tinyedge-edge/issues' }
   writeFixtureFile(fixtureRoot, 'package.json', JSON.stringify({
     private: true,
     license: licenseIsPending ? 'UNLICENSED' : 'Apache-2.0',
     repository,
     bugs,
-    homepage: 'https://github.com/TinyEdgeAI/tinyedge-edge#readme',
+    homepage: 'https://github.com/PhysicalSystems/tinyedge-edge#readme',
   }, null, 2) + '\n')
   const tinyedgePackages = ['cli', 'npx', 'pi']
   for (const packageName of tinyedgePackages) {
@@ -120,9 +122,9 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
       version: frozen ? '0.1.3' : '0.1.4',
       private: frozen || npmReleaseIsPending,
       license: licenseIsPending ? 'UNLICENSED' : 'Apache-2.0',
-      repository,
-      bugs,
-      homepage: `https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/${packageName}#readme`,
+      repository: frozen ? frozenRepository : repository,
+      bugs: frozen ? frozenBugs : bugs,
+      homepage: `https://github.com/${frozen ? 'TinyEdgeAI' : 'PhysicalSystems'}/tinyedge-edge/tree/main/packages/${packageName}#readme`,
       files: licenseIsPending ? [] : legalFiles,
     }, null, 2) + '\n')
     for (const legalFile of legalFiles) {
@@ -148,7 +150,7 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
     license: 'MIT',
     repository,
     bugs,
-    homepage: 'https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi-runtime#readme',
+    homepage: 'https://github.com/PhysicalSystems/tinyedge-edge/tree/main/packages/pi-runtime#readme',
     files: runtimeLegalFiles,
   }, null, 2) + '\n')
   for (const legalFile of runtimeLegalFiles) {
@@ -172,7 +174,7 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
       license: 'MIT',
       repository,
       bugs,
-      homepage: 'https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi-runtime#readme',
+      homepage: 'https://github.com/PhysicalSystems/tinyedge-edge/tree/main/packages/pi-runtime#readme',
       files: runtimeLegalFiles,
     }, null, 2) + '\n')
   }
@@ -720,22 +722,22 @@ test('the compatibility runtime is an exact MIT artifact without default native 
 })
 
 test('the clean export uses only the standalone repository identity', () => {
-  const expectedRepository = 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git'
-  const expectedBugs = 'https://github.com/TinyEdgeAI/tinyedge-edge/issues'
+  const expectedRepository = 'git+https://github.com/PhysicalSystems/tinyedge-edge.git'
+  const expectedBugs = 'https://github.com/PhysicalSystems/tinyedge-edge/issues'
   for (const manifest of releasePackages) {
     assert.equal(manifest.repository.url, expectedRepository)
     assert.equal(manifest.bugs.url, expectedBugs)
     assert.deepEqual(manifest.publishConfig, { access: 'public' })
   }
-  assert.match(workflow, /GITHUB_REPOSITORY" = "TinyEdgeAI\/tinyedge-edge"/)
+  assert.match(workflow, /GITHUB_REPOSITORY" = "PhysicalSystems\/tinyedge-edge"/)
   assert.match(releaseGuide, /repository `tinyedge-edge`/)
-  assert.match(packageChecker, /TinyEdgeAI\/tinyedge-edge\.git/)
+  assert.match(packageChecker, /PhysicalSystems\/tinyedge-edge\.git/)
   assert.equal(provenance.source, undefined)
   assert.equal(provenance.schemaVersion, 2)
   assert.equal(provenance.exportKind, 'public-clean-root-snapshot')
   assert.equal(
     provenance.destination.repository,
-    'https://github.com/TinyEdgeAI/tinyedge-edge.git',
+    'https://github.com/PhysicalSystems/tinyedge-edge.git',
   )
   assert.equal(provenance.destination.status, 'public-canonical')
   assert.match(provenance.candidatePayload.canonicalization, /normalize CRLF or CR to LF/)
