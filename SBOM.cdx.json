@@ -27,7 +27,7 @@
         },
         {
           "name": "tinyedge:sbom:package-json-sha256",
-          "value": "1739ad6dcd2f7684e16306f3c4f4c7201b00bbfa785c67845315d3757cdcca7e"
+          "value": "29e193dfcd01ebd64b8f7dbc34eeb0980e52d4292d88be8e7441c6f3c6809f22"
         }
       ]
     },
@@ -3725,7 +3725,7 @@
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "79014a89f8c6c576263ee7e70a31b6fd5a57917ca062fe6ceb837076196cc990"
+          "value": "5d61d98e38cc73ba3a0b31aa904f685146c52f01bfd4c50674b6528393a827a3"
         },
         {
           "name": "tinyedge:workspace:package-root",
@@ -6916,7 +6916,7 @@
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "e124048852885d488df3710d8b4b0a9afe49e177a2c0b715b1e692670aed041b"
+          "value": "0877d4a9b9eb68c9bbc6bd27af824b18b53928ae838532b2028e7f213720c957"
         },
         {
           "name": "tinyedge:workspace:package-root",
