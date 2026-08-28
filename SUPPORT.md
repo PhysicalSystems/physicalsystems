@@ -2,7 +2,7 @@
 
 ## Bugs and feature requests
 
-Search the [GitHub issue tracker](https://github.com/TinyEdgeAI/tinyedge-edge/issues)
+Search the [GitHub issue tracker](https://github.com/PhysicalSystems/tinyedge-edge/issues)
 before opening a new issue. Include the TinyEdge command and version, Node.js
 version, Windows version, CPU architecture, expected behavior, actual behavior,
 and a minimal reproduction.

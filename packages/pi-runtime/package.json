@@ -91,12 +91,12 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/TinyEdgeAI/tinyedge-edge.git",
+		"url": "git+https://github.com/PhysicalSystems/tinyedge-edge.git",
 		"directory": "packages/pi-runtime"
 	},
-	"homepage": "https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi-runtime#readme",
+	"homepage": "https://github.com/PhysicalSystems/tinyedge-edge/tree/main/packages/pi-runtime#readme",
 	"bugs": {
-		"url": "https://github.com/TinyEdgeAI/tinyedge-edge/issues"
+		"url": "https://github.com/PhysicalSystems/tinyedge-edge/issues"
 	},
 	"publishConfig": {
 		"access": "public"

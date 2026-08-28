@@ -15,7 +15,7 @@ alternative to the published npm release. It does not change npm's `latest` or
 ## Clone and verify
 
 ```powershell
-git clone https://github.com/TinyEdgeAI/tinyedge-edge.git
+git clone https://github.com/PhysicalSystems/tinyedge-edge.git
 cd tinyedge-edge
 npx --yes npm@11.19.0 --prefix packages/cli run bootstrap:pi-runtime -- --cache "$env:TEMP\tinyedge-pi-runtime-cache" --install-cli
 npm test

@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$GITHUB_REPOSITORY" = "TinyEdgeAI/tinyedge-edge"
+          test "$GITHUB_REPOSITORY" = "PhysicalSystems/tinyedge-edge"
           test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
           test "$GITHUB_REF_TYPE" = "branch"
           test "$GITHUB_REF" = "refs/heads/main"
@@ -126,7 +126,7 @@ jobs:
             assert.equal(legacy.private, true)
           }
           assert.equal(runtime.engines?.node, '>=22.19.0')
-          assert.equal(runtime.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
+          assert.equal(runtime.repository?.url, 'git+https://github.com/PhysicalSystems/tinyedge-edge.git')
           assert.equal(tinyedge.dependencies?.['@tinyedge/pi-runtime'], expectedRuntimeVersion)
           assert.equal(tinyedge.dependencies?.['@tinyedge/cli'], undefined)
 
@@ -353,7 +353,7 @@ jobs:
           }
           const repositoryPath = `/repos/${process.env.GITHUB_REPOSITORY}`
           const repository = await get(repositoryPath, 'GitHub visibility lookup')
-          assert.equal(repository.full_name, 'TinyEdgeAI/tinyedge-edge')
+          assert.equal(repository.full_name, 'PhysicalSystems/tinyedge-edge')
           assert.equal(repository.private, false, 'the release repository must still be public')
           assert.equal(repository.visibility, 'public', 'the release repository must still be public')
 
