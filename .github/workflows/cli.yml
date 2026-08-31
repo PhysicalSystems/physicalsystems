@@ -53,10 +53,6 @@ jobs:
         run: |
           $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
           npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
-      - name: Install experimental Linux source dependencies
-        if: matrix.platform == 'linux'
-        shell: bash
-        run: npm --prefix packages/cli ci --force --no-audit --no-fund
       - name: Exercise experimental Linux Secret Service adapter
         if: matrix.platform == 'linux'
         shell: bash
@@ -71,7 +67,12 @@ jobs:
             TINYEDGE_LINUX_SECRET_SERVICE_CANARY=1 node --test packages/cli/test/linux-secret-service-canary.test.js
           '
       - run: npm run check:legal
+        if: matrix.platform == 'windows'
+      - name: Verify experimental Linux source SBOM metadata
+        if: matrix.platform == 'linux'
+        run: node scripts/legal/sbom.mjs --check
       - run: npm --prefix packages/cli run check:pi-sdk
+        if: matrix.platform == 'windows'
       - run: npm --prefix packages/cli run check
       - run: npm --prefix packages/cli test
         if: matrix.platform == 'windows'
