@@ -17,7 +17,12 @@ import {
 } from '../src/auth/oauth.js'
 import { redactSecrets, redactText } from '../src/auth/redact.js'
 import { createTokenStore } from '../src/auth/token-store.js'
-import { createMemorySecretStore, createWindowsDpapiSecretStore } from '../src/auth/secret-store.js'
+import {
+  createLinuxSecretServiceSecretStore,
+  createMemorySecretStore,
+  createNativeSecretStore,
+  createWindowsDpapiSecretStore,
+} from '../src/auth/secret-store.js'
 import { loginCommand, validateGrantedScopes } from '../src/commands/login.js'
 import { logoutCommand } from '../src/commands/logout.js'
 
@@ -217,6 +222,113 @@ test('Windows DPAPI integration closes child stdin and round-trips an encrypted 
 
   await secrets.delete('oauth')
   assert.equal(await secrets.read('oauth'), null)
+})
+
+test('Linux Secret Service adapter uses stable attributes and keeps secrets off argv', async () => {
+  const values = new Map()
+  const calls = []
+  const run = async (executable, args, options) => {
+    calls.push({ executable, args: [...args], options: { ...options } })
+    const name = args.at(-1)
+    if (args[0] === 'store') {
+      values.set(name, options.input)
+      return { stdout: '', stderr: '' }
+    }
+    if (args[0] === 'lookup' && values.has(name)) {
+      return { stdout: values.get(name), stderr: '' }
+    }
+    if (args[0] === 'clear') {
+      values.delete(name)
+      return { stdout: '', stderr: '' }
+    }
+    const error = new Error('not found')
+    error.code = 1
+    error.tinyedgeStderrPresent = false
+    throw error
+  }
+  const secrets = createLinuxSecretServiceSecretStore({ run })
+  const value = 'access-secret-δ-🔒\n'
+
+  await secrets.write('oauth', value)
+  assert.equal(await secrets.read('oauth'), value)
+  await secrets.delete('oauth')
+  assert.equal(await secrets.read('oauth'), null)
+
+  assert.equal(secrets.kind, 'linux-secret-service')
+  assert.deepEqual(calls.map(({ executable }) => executable), [
+    'secret-tool',
+    'secret-tool',
+    'secret-tool',
+    'secret-tool',
+  ])
+  assert.deepEqual(calls[0].args, [
+    'store',
+    '--label=TinyEdge CLI credential',
+    'application',
+    'ai.tinyedge.cli',
+    'credential',
+    'oauth',
+  ])
+  assert.deepEqual(calls[1].args, [
+    'lookup',
+    'application',
+    'ai.tinyedge.cli',
+    'credential',
+    'oauth',
+  ])
+  assert.deepEqual(calls[2].args, [
+    'clear',
+    'application',
+    'ai.tinyedge.cli',
+    'credential',
+    'oauth',
+  ])
+  assert.equal(calls.some(({ args }) => args.includes(value)), false)
+  assert.equal(calls[0].options.input, value)
+  assert.equal(calls.slice(1).every(({ options }) => options.input === ''), true)
+  assert.equal(calls.every(({ options }) => options.shell === false), true)
+  assert.equal(calls.every(({ options }) => options.timeout === 15_000), true)
+  assert.equal(calls.every(({ options }) => options.maxBuffer === 1024 * 1024), true)
+})
+
+test('Linux Secret Service adapter fails closed without leaking rejected input', async () => {
+  const value = 'provider-secret-must-not-leak'
+  const secrets = createLinuxSecretServiceSecretStore({
+    run: async (_executable, _args, options) => {
+      throw new Error(`helper failed while handling ${options.input}`)
+    },
+  })
+
+  await assert.rejects(
+    secrets.write('pi-provider-credentials', value),
+    (error) => {
+      assert.equal(error.code, 'TINYEDGE_SECRET_SERVICE_UNAVAILABLE')
+      assert.match(error.message, /install secret-tool/i)
+      assert.match(error.message, /unlock a Secret Service keyring/i)
+      assert.doesNotMatch(error.message, new RegExp(value))
+      return true
+    },
+  )
+})
+
+test('native secret store selects Linux Secret Service and rejects unsafe item names', async () => {
+  let calls = 0
+  const secrets = createNativeSecretStore({
+    platform: 'linux',
+    run: async () => {
+      calls += 1
+      return { stdout: '', stderr: '' }
+    },
+  })
+
+  assert.equal(secrets.kind, 'linux-secret-service')
+  await assert.rejects(secrets.read('../oauth'), /secret name is invalid/)
+  await assert.rejects(secrets.write('oauth', 'a'.repeat(8 * 1024)), /too large/)
+  assert.equal(calls, 0)
+  assert.throws(
+    () => createNativeSecretStore({ platform: 'darwin' }),
+    /not configured for darwin/,
+  )
 })
 
 test('login persists OAuth results while keeping secrets out of terminal output', async () => {

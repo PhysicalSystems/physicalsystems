@@ -4,6 +4,7 @@ import { redactSecrets } from '../auth/redact.js'
 import { ASK_CHOICE_TOOL } from '../harness/ask-choice.js'
 import { READ_SCOPE, RUN_SCOPE, WRITE_SCOPE } from '../config.js'
 import { createPiCredentialStore } from './pi-credential-store.js'
+import { PHYSICAL_TOOL_ALLOWLIST } from '../physical/workflow.js'
 
 const READ_TOOLS = Object.freeze([
   'list_devices',
@@ -40,7 +41,7 @@ const RUN_TOOLS = Object.freeze([
 ])
 
 export const TINYEDGE_CHAT_TOOL_ALLOWLIST = Object.freeze([
-  ASK_CHOICE_TOOL, ...READ_TOOLS, ...WRITE_TOOLS, ...RUN_TOOLS,
+  ASK_CHOICE_TOOL, ...PHYSICAL_TOOL_ALLOWLIST, ...READ_TOOLS, ...WRITE_TOOLS, ...RUN_TOOLS,
 ])
 
 export function toolsForScopes(scopes = []) {
@@ -131,6 +132,8 @@ export function tinyEdgeSystemPrompt(scopes) {
       : 'read account evidence'
   return `You are the TinyEdge terminal assistant. You may ${mode}.
 Answer questions about the signed-in user's TinyEdge account using only the available TinyEdge tools.
+The local Physical Systems tools are separate from cloud account access. When the user describes a physical outcome, first inspect the physical system, then pass the user's outcome to the planning tool without inventing an object, station, device, skill, or observed state.
+Physical discovery and planning never authorize motion. Clearly distinguish configured, detected, driver-ready, calibrated, and fully ready devices. If the plan reports a question or commissioning gap, explain it. Never claim the robot moved, ran, or verified an outcome unless a future execution receipt explicitly proves that.
 Never request, reveal, repeat, or infer credentials. Keep answers concise and evidence based.
 Never guess or invent a task, run, experiment, model, dataset, or device ID.
 Before acting on an existing task, call list_tasks and use an exact returned ID. A task ID returned by create_benchmark_task in this chat is already trusted.

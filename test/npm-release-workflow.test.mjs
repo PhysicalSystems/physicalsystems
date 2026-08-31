@@ -789,6 +789,12 @@ test('the packed README describes the one-package 0.1.4 release', () => {
 
 test('pull-request CI covers release-workflow changes and its regression test', () => {
   assert.doesNotMatch(cliWorkflow, /^\s+paths:/m)
+  assert.match(cliWorkflow, /platform: linux/)
+  assert.match(cliWorkflow, /runner: ubuntu-24\.04/)
+  assert.match(cliWorkflow, /preparatory source adapter against an[\s\S]{0,80}ephemeral Secret Service/)
+  assert.match(cliWorkflow, /TINYEDGE_LINUX_SECRET_SERVICE_CANARY=1/)
+  assert.match(cliWorkflow, /gnome-keyring-daemon --unlock --components=secrets/)
+  assert.deepEqual(cliPackage.os, ['win32'])
   assert.match(cliWorkflow, /node --test test\/npm-release-workflow\.test\.mjs/)
   assert.match(cliWorkflow, /npm install --global "npm@11\.19\.0"/)
   assert.match(cliWorkflow, /bootstrap:pi-runtime -- --cache \$cacheDirectory --install-cli/)

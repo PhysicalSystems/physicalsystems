@@ -11,17 +11,23 @@ permissions:
 
 jobs:
   test:
-    # The preview is Windows-only because credentials are protected with DPAPI.
-    # Running on Windows also exercises the real encryption round-trip test.
-    name: test (${{ matrix.architecture }})
+    # Windows exercises the supported package route and a real DPAPI round
+    # trip. Linux exercises only the preparatory source adapter against an
+    # ephemeral Secret Service; package metadata remains Windows-only.
+    name: test (${{ matrix.platform }} ${{ matrix.architecture }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - architecture: x64
+            platform: windows
             runner: windows-latest
           - architecture: arm64
+            platform: windows
             runner: windows-11-arm
+          - architecture: x64
+            platform: linux
+            runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -42,13 +48,35 @@ jobs:
           npm install --global "npm@11.19.0"
           if ((npm --version) -ne '11.19.0') { throw 'Expected npm 11.19.0' }
       - name: Bootstrap the local Pi runtime and install the CLI offline
+        if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
           npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
+      - name: Install experimental Linux source dependencies
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          cache_directory="$RUNNER_TEMP/tinyedge-pi-runtime-cache"
+          npm --prefix packages/cli run bootstrap:pi-runtime -- --cache "$cache_directory"
+          npm --prefix packages/cli ci --force --no-audit --no-fund --cache "$cache_directory"
+      - name: Exercise experimental Linux Secret Service adapter
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes dbus-x11 gnome-keyring libsecret-tools
+          runtime_directory="$(mktemp -d)"
+          export XDG_RUNTIME_DIR="$runtime_directory"
+          trap 'rm -rf "$runtime_directory"' EXIT
+          dbus-run-session -- bash -euo pipefail -c '
+            eval "$(printf "%s" "tinyedge-ephemeral-keyring" | gnome-keyring-daemon --unlock --components=secrets)"
+            TINYEDGE_LINUX_SECRET_SERVICE_CANARY=1 node --test packages/cli/test/linux-secret-service-canary.test.js
+          '
       - run: npm run check:legal
       - run: npm --prefix packages/cli run check:pi-sdk
       - run: npm --prefix packages/cli run check
       - run: npm --prefix packages/cli test
       - run: node --test test/npm-release-workflow.test.mjs
       - run: npm --prefix packages/cli run check:release-packages
+        if: matrix.platform == 'windows'

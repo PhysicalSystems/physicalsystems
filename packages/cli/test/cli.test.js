@@ -94,6 +94,21 @@ test('doctor reports Windows DPAPI as native encrypted credential storage', () =
   })
 })
 
+test('doctor does not report Linux Secret Service healthy until a keyring read succeeds', () => {
+  assert.deepEqual(credentialStorageCheck('linux-secret-service'), {
+    status: 'warn',
+    detail: 'Linux Secret Service adapter configured; keyring availability not verified',
+  })
+  assert.deepEqual(credentialStorageCheck('linux-secret-service', { availability: true }), {
+    status: 'pass',
+    detail: 'Linux Secret Service keyring is available through secret-tool',
+  })
+  assert.deepEqual(credentialStorageCheck('linux-secret-service', { availability: false }), {
+    status: 'fail',
+    detail: 'Linux Secret Service keyring could not be read',
+  })
+})
+
 test('doctor does not claim unknown or test credential storage is plaintext', () => {
   assert.deepEqual(credentialStorageCheck('memory'), {
     status: 'warn',
@@ -137,6 +152,50 @@ test('doctor treats absent login as a warning while validating discovery', async
   })
   assert.equal(result.checks.find((check) => check.name === 'Credential storage').status, 'pass')
   assert.equal(result.checks.find((check) => check.name === 'Saved connection').status, 'warn')
+})
+
+test('doctor records a redacted failure when Linux Secret Service cannot be read', async () => {
+  const capture = captureIo()
+  const secret = 'tinyedge_sk_doctor-must-redact'
+  const fetchImpl = async (url) => {
+    if (String(url).includes('oauth-protected-resource')) {
+      return Response.json({
+        resource: 'http://127.0.0.1:3456/api/mcp',
+        authorization_servers: ['http://127.0.0.1:3456'],
+      })
+    }
+    return Response.json({
+      issuer: 'http://127.0.0.1:3456',
+      authorization_endpoint: 'http://127.0.0.1:3456/oauth/authorize',
+      token_endpoint: 'http://127.0.0.1:3456/oauth/token',
+      registration_endpoint: 'http://127.0.0.1:3456/oauth/register',
+      scopes_supported: ['tinyedge:read'],
+    })
+  }
+  const result = await doctorCommand({
+    config: { mcpUrl: 'http://127.0.0.1:3456/api/mcp' },
+    tokenStore: {
+      storage: 'linux-secret-service',
+      summary: async () => { throw new Error(`keyring rejected Bearer ${secret}`) },
+    },
+    fetchImpl,
+    io: capture.io,
+    nodeVersion: '22.19.0',
+  })
+
+  assert.equal(result.ok, false)
+  assert.deepEqual(result.checks.find((check) => check.name === 'Credential storage'), {
+    name: 'Credential storage',
+    status: 'fail',
+    detail: 'Linux Secret Service keyring could not be read',
+  })
+  assert.deepEqual(result.checks.find((check) => check.name === 'Saved connection'), {
+    name: 'Saved connection',
+    status: 'fail',
+    detail: 'could not read credentials: keyring rejected Bearer [REDACTED]',
+  })
+  assert.equal(capture.out.some((line) => line.includes(secret)), false)
+  assert.equal(result.checks.some((check) => check.status === 'pass' && check.name === 'Credential storage'), false)
 })
 
 test('malicious base URL cannot receive credentials saved for another MCP resource', async () => {

@@ -1,10 +1,16 @@
 # `tinyedge`
 
-A Windows preview of the Pi-powered terminal client for TinyEdge's remote
-orchestration boundary. Starting with `0.1.4`, this one package contains the
-client library, Pi extension, and user-facing command shim. Ordinary Harness
-releases no longer require matching `@tinyedge/cli` and `@tinyedge/pi`
-publications.
+A desktop-source preview of the Pi-powered terminal client for TinyEdge's
+remote orchestration boundary. Here, “Pi” names the reviewed terminal runtime;
+it is not a claim of Raspberry Pi hardware support. Starting with `0.1.4`, this
+one package contains the client library, Pi extension, and user-facing command shim.
+Ordinary Harness releases no longer require matching `@tinyedge/cli` and
+`@tinyedge/pi` publications.
+
+The current npm package boundary remains Windows-only. The source contains an
+experimental Linux Secret Service adapter, but Linux installation remains
+unsupported until an exact clean-user package canary proves the native keyring
+and command route end to end. This is not a Raspberry Pi support claim.
 
 Source-code availability is not registry evidence. Before using the commands
 below, require `npm view tinyedge@0.1.4 version --json` to return
@@ -56,6 +62,31 @@ The terminal stays open after either flow completes.
 The explicit commands below remain available for scripting, diagnostics, and
 credential administration.
 
+### Physical Systems workflow
+
+The standalone Harness also contains the first local Physical Systems workflow.
+It connects only to a loopback TinyEdge Agent (default
+`http://127.0.0.1:8876`) and renders actual evidence as:
+
+```text
+Discover → Intent → Plan → Commission → Run → Verify
+```
+
+On startup the widget distinguishes an enrolled component from a detected,
+driver-ready, calibrated, fully ready component. It does not invent an object,
+motion, or workflow. The operator can describe an outcome in the normal Pi
+editor, or use `/physical <outcome>` for the same bounded local flow without a
+model. The Harness refreshes discovery, binds the request to that exact device
+evidence, and shows the grounded plan, question, or commissioning gap returned
+by the Agent.
+
+This source increment has no motion endpoint. `Run` and `Verify` remain locked,
+and neither the model nor `/physical` can open the robot or authorize movement.
+The separate Python `tinyedge-agent serve-physical-node` process owns local
+camera and device discovery; it serves JSON only and must run on the same host.
+`TINYEDGE_PHYSICAL_NODE_URL` may override the origin, but non-loopback
+origins and plaintext LAN connections are rejected.
+
 ## Commands
 
 ```text
@@ -80,8 +111,14 @@ Remote plaintext HTTP origins are rejected.
 On Windows, OAuth and model-provider credentials are encrypted with DPAPI for
 the current Windows user. Only ciphertext is stored beneath
 `%APPDATA%/TinyEdge/cli/secrets`; secret plaintext is never placed in process
-arguments or printed. The preview deliberately fails closed on Linux and macOS
-until native Secret Service and Keychain adapters are implemented.
+arguments or printed.
+
+The experimental Linux source path uses `secret-tool` directly, without a
+shell, and sends the secret only over standard input. It fails closed when the
+helper, Secret Service, or an unlocked keyring is unavailable; there is no
+plaintext fallback. Package metadata does not enable Linux yet. An exact
+clean-user desktop canary is required before changing that boundary. Headless
+Linux, Raspberry Pi, and macOS remain unsupported.
 
 TinyEdge OAuth authorizes access to the TinyEdge MCP service. Pi model-provider
 authentication is separate and is managed by the provider commands above.
@@ -105,8 +142,11 @@ not disable inference through the model deliberately selected for the session.
 
 ## Release and validation boundaries
 
-- This package remains Windows-only until native Secret Service and macOS
-  Keychain credential adapters exist.
+- Source package metadata accepts Windows only. The guarded Linux adapter is
+  preparatory source work and is not an npm support claim.
+- Linux needs an exact clean-user desktop package canary with an unlocked
+  Secret Service keyring before the platform gate changes. Headless Linux,
+  Raspberry Pi, and macOS remain unsupported.
 - Packed-artifact, native-binding, and command-shim checks do not validate
   production OAuth, provider onboarding, MCP execution, or browser approval.
   Those paths require separate canaries with disposable accounts.
