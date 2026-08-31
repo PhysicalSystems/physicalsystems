@@ -53,7 +53,7 @@ idempotency, cost hold, and browser-approval boundary.
 
 ## Harness behavior
 
-Bare `tinyedge` opens the native Pi terminal interface with a TinyEdge header,
+Bare `tinyedge` opens the native Pi terminal interface with a Physical Systems header,
 the devices paired to the signed-in account, and only the reviewed TinyEdge
 MCP tools. If the terminal is not connected yet, authorization opens from
 inside the Harness. Model-provider onboarding also happens in the Harness.
