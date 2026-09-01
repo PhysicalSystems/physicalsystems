@@ -21,6 +21,11 @@ export function openBrowser(url, { platform = process.platform, spawnImpl = spaw
     args = [parsed.toString()]
   }
 
-  const child = spawnImpl(command, args, { detached: true, stdio: 'ignore', windowsHide: true })
+  const child = spawnImpl(command, args, {
+    detached: true,
+    shell: false,
+    stdio: 'ignore',
+    windowsHide: true,
+  })
   child.unref?.()
 }

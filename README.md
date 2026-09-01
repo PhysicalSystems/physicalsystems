@@ -1,6 +1,6 @@
 # TinyEdge Edge
 
-TinyEdge Edge is the public device-side source for the Windows TinyEdge
+TinyEdge Edge is the public device-side source for the desktop TinyEdge
 command-line client, embedded Pi extension, and audited text-first Pi
 compatibility runtime. It does not contain the TinyEdge hosted control plane,
 scheduler, billing system, fleet data, production operations, or private
@@ -10,10 +10,12 @@ optimization intelligence.
 
 The source is available under the licenses in this repository. TinyEdge-authored
 client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
-Version `0.1.3` is published to npm under both `latest` and `preview`. Its exact
-artifacts passed native Windows x64 and ARM64 verification, npm signature and
-provenance checks, and a clean public registry canary. On Windows with Node.js
-22.19.0 or newer, install and launch the native Harness with:
+Version `0.1.3` remains published to npm under `latest`. Before the `0.1.5`
+release workflow runs, the Windows-only one-package `0.1.4` release remains on
+`preview`; a successful workflow moves only `preview` to `0.1.5`. The published artifacts passed native
+Windows x64 and ARM64 verification, npm signature and provenance checks, and a
+clean public registry canary. On Windows with Node.js 22.19.0 or newer, install
+and launch the current stable Harness with:
 
 ```powershell
 npm install --global tinyedge
@@ -24,8 +26,11 @@ tinyedge
 a persistent command. The older `0.1.1` release remains public as historical
 registry evidence but is not the current Harness.
 
-The source tree is preparing `0.1.4`, which consolidates the command, client,
-and Pi extension into the single `tinyedge` artifact. The immutable
+The Windows-only `0.1.4` preview consolidated the command, client, and Pi
+extension into the single `tinyedge` artifact. The source tree is preparing
+`0.1.5`, which qualifies that same one-package Harness for Ubuntu 22.04 and
+24.04 desktop x64.
+The immutable
 `@tinyedge/cli@0.1.3` and `@tinyedge/pi@0.1.3` releases remain available for
 compatibility but are no longer ordinary release artifacts.
 
@@ -50,21 +55,25 @@ Get-Command -All tinyedge
 - Frozen `0.1.3` facade and existing-Pi source records for compatibility.
 - Deterministic package, legal, dependency, SBOM, and release checks.
 
-The supported release and source-development targets are Windows x64 and native
-Windows ARM64 with Node.js 22.19.0 or newer. The credential store currently
-relies on Windows DPAPI. macOS and Linux support are separate work and must not
-be inferred from npm availability.
+The `0.1.5` release target and current source-development targets are Windows x64, native
+Windows ARM64, and Ubuntu 22.04/24.04 desktop x64 with Node.js 22.19.0 or newer. Windows
+uses DPAPI; Ubuntu uses `secret-tool` with an unlocked Secret Service keyring.
+Headless Linux, Raspberry Pi, other Linux targets, and macOS remain outside the
+qualified package boundary.
 
 ## Develop and validate
 
-On Windows, clone this repository and run:
+Clone this repository on a supported desktop and run:
 
-```powershell
-npx --yes npm@11.19.0 --prefix packages/cli run bootstrap:pi-runtime -- --cache "$env:TEMP\tinyedge-pi-runtime-cache" --install-cli
+```bash
+npx --yes npm@11.19.0 --prefix packages/cli run bootstrap:pi-runtime -- --cache /tmp/tinyedge-pi-runtime-cache --install-cli
 npm test
 npx --yes npm@11.19.0 run check:release-packages
 npm start
 ```
+
+On Windows, replace the cache path with
+`$env:TEMP\tinyedge-pi-runtime-cache` in PowerShell.
 
 The bootstrap packs the local audited runtime, verifies its identity, seeds an
 isolated cache, and installs the CLI from the checked-out source instead of

@@ -4,11 +4,14 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -21,7 +24,7 @@ const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
 const NPM_CLI = process.env.npm_execpath
 const RELEASE_NPM_VERSION = '11.19.0'
 const CONSUMER_NPM_VERSIONS = new Set([RELEASE_NPM_VERSION, '12.0.2'])
-const TINYEDGE_VERSION = '0.1.4'
+const TINYEDGE_VERSION = '0.1.5'
 const PI_RUNTIME_VERSION = '0.84.2-tinyedge.1'
 const PACKAGES = [
   {
@@ -155,23 +158,52 @@ function runNpm(args, options = {}) {
   return run(process.execPath, [NPM_CLI, ...args], options)
 }
 
-function runWindowsShim(shim, args, options = {}) {
-  assert.equal(process.platform, 'win32', 'npm command shims are verified on Windows')
-  const commandInterpreter = process.env.ComSpec || 'cmd.exe'
-  return run(commandInterpreter, ['/d', '/s', '/c', 'call', shim, ...args], options)
+function runCommandShim(shim, args, options = {}) {
+  if (process.platform === 'win32') {
+    const commandInterpreter = process.env.ComSpec || 'cmd.exe'
+    return run(commandInterpreter, ['/d', '/s', '/c', 'call', shim, ...args], options)
+  }
+  return run(shim, args, options)
 }
 
 function npmFileSpec(file) {
   return `file:${path.resolve(file).replaceAll('\\', '/')}`
 }
 
-function assertWindowsShimTargets(shim, target, source) {
-  const normalizedShim = readFileSync(shim, 'utf8').replaceAll('\\', '/').toLowerCase()
-  const relativeTarget = path.relative(path.dirname(shim), target).replaceAll('\\', '/').toLowerCase()
-  assert.ok(
-    normalizedShim.includes(relativeTarget),
-    `${source} must target the packed tinyedge entry (${relativeTarget})`,
-  )
+function assertCommandShimTargets(shim, target, source) {
+  if (process.platform === 'win32') {
+    const normalizedShim = readFileSync(shim, 'utf8').replaceAll('\\', '/').toLowerCase()
+    const relativeTarget = path.relative(path.dirname(shim), target).replaceAll('\\', '/').toLowerCase()
+    assert.ok(
+      normalizedShim.includes(relativeTarget),
+      `${source} must target the packed tinyedge entry (${relativeTarget})`,
+    )
+    return
+  }
+
+  assert.equal(lstatSync(shim).isSymbolicLink(), true, `${source} must be an npm-created symlink`)
+  assert.equal(realpathSync(shim), realpathSync(target), `${source} must target the packed tinyedge entry`)
+  assert.notEqual(statSync(target).mode & 0o111, 0, `${source} target must be executable`)
+}
+
+function commandShim(directory) {
+  return path.join(directory, process.platform === 'win32' ? 'tinyedge.cmd' : 'tinyedge')
+}
+
+function globalNodeModulesDirectory(prefix) {
+  return process.platform === 'win32'
+    ? path.join(prefix, 'node_modules')
+    : path.join(prefix, 'lib/node_modules')
+}
+
+function globalPackageDirectory(prefix) {
+  return path.join(globalNodeModulesDirectory(prefix), 'tinyedge')
+}
+
+function globalCommandShim(prefix) {
+  return process.platform === 'win32'
+    ? path.join(prefix, 'tinyedge.cmd')
+    : path.join(prefix, 'bin/tinyedge')
 }
 
 function readJson(file) {
@@ -556,7 +588,7 @@ function validatePackageContracts(packages) {
     { access: 'public' },
     'tinyedge publishConfig must not redirect registry or authentication',
   )
-  assert.deepEqual(tinyedge.os, ['win32'])
+  assert.deepEqual(tinyedge.os, ['win32', 'linux'])
   assert.match(tinyedge.engines?.node || '', />=22\.19\.0/)
   for (const frozen of FROZEN_PACKAGES) {
     const metadata = readJson(path.join(REPOSITORY_ROOT, frozen.directory, 'package.json'))
@@ -588,18 +620,18 @@ function validateReleaseReadmes(packages) {
     const readme = readFileSync(path.join(directory, 'README.md'), 'utf8')
     assert.match(
       readme,
-      /npm view tinyedge@0\.1\.4 version --json/,
+      /npm view tinyedge@0\.1\.5 version --json/,
       `${metadata.name} README must make exact registry availability independently verifiable`,
     )
     assert.doesNotMatch(
       readme,
-      /0\.1\.4[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
-      `${metadata.name} README must not describe its own 0.1.4 artifact as pre-publication`,
+      /0\.1\.5[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+      `${metadata.name} README must not describe its own 0.1.5 artifact as pre-publication`,
     )
     assert.doesNotMatch(
       readme,
-      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.4/i,
-      `${metadata.name} README must not describe its own 0.1.4 artifact as pre-publication`,
+      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.5/i,
+      `${metadata.name} README must not describe its own 0.1.5 artifact as pre-publication`,
     )
     assert.match(readme, /0\.1\.3/, `${metadata.name} README must retain the package-migration distinction`)
     assert.match(
@@ -607,8 +639,8 @@ function validateReleaseReadmes(packages) {
       /(?:did not|do not|does not)[\s\S]{0,160}(?:validate|exercise)[\s\S]{0,80}(?:OAuth|login|live|production)/i,
       `${metadata.name} README must preserve the live-validation boundary`,
     )
-    assert.match(readme, /npx tinyedge@0\.1\.4/)
-    assert.match(readme, /npm install --global tinyedge@0\.1\.4/)
+    assert.match(readme, /npx tinyedge@0\.1\.5/)
+    assert.match(readme, /npm install --global tinyedge@0\.1\.5/)
     assert.match(
       readme,
       /npx[\s\S]{0,100}does not[\s\S]{0,80}(?:global|persistent)/i,
@@ -793,7 +825,12 @@ function packRelease(outputDirectory) {
 }
 
 async function verifyRelease(artifactDirectory) {
-  assert.equal(process.platform, 'win32', 'release packages must be verified on Windows')
+  assert.match(process.platform, /^(?:win32|linux)$/, 'release packages must be verified on Windows or Linux')
+  if (process.platform === 'linux') {
+    assert.equal(process.arch, 'x64', 'the qualified Linux package route is Ubuntu desktop x64')
+  } else {
+    assert.match(process.arch, /^(?:x64|arm64)$/)
+  }
   const manifest = readJson(path.join(artifactDirectory, 'release-manifest.json'))
   assert.equal(manifest.schemaVersion, 1)
   assert.equal(manifest.version, TINYEDGE_VERSION)
@@ -812,6 +849,7 @@ async function verifyRelease(artifactDirectory) {
     return { ...artifact, file }
   })
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-verify-'))
+  const npmExecRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-npm-exec-'))
   try {
     const tinyedgeArtifact = candidateArtifacts.find(({ key }) => key === 'tinyedge')
     const runtimeArtifact = candidateArtifacts.find(({ key }) => key === 'pi-runtime')
@@ -873,11 +911,11 @@ async function verifyRelease(artifactDirectory) {
       reviewedLock,
     )
 
-    const localShim = path.join(temporaryRoot, 'node_modules', '.bin', 'tinyedge.cmd')
+    const localShim = commandShim(path.join(temporaryRoot, 'node_modules', '.bin'))
     const localEntry = path.join(temporaryRoot, 'node_modules/tinyedge/bin/tinyedge.js')
     assert.ok(existsSync(localShim), 'npm did not create the local tinyedge command shim')
     assert.ok(existsSync(localEntry), 'the local install is missing the packed tinyedge entry')
-    assertWindowsShimTargets(localShim, localEntry, 'local npm command shim')
+    assertCommandShimTargets(localShim, localEntry, 'local npm command shim')
     assert.equal(
       run(process.execPath, [localEntry, '--version'], {
         cwd: temporaryRoot,
@@ -886,11 +924,38 @@ async function verifyRelease(artifactDirectory) {
       manifest.version,
       'the packed local tinyedge entry must execute the reviewed client',
     )
-    const reportedVersion = runWindowsShim(localShim, ['--version'], {
+    const reportedVersion = runCommandShim(localShim, ['--version'], {
       cwd: temporaryRoot,
       timeout: 120_000,
     })
     assert.equal(reportedVersion, manifest.version)
+
+    assert.equal(
+      existsSync(path.join(npmExecRoot, 'node_modules')),
+      false,
+      'npm exec verification must start without a local dependency tree',
+    )
+    const npmExecCache = path.join(npmExecRoot, 'npm-cache')
+    const npxReportedVersion = runNpm([
+      'exec',
+      '--yes',
+      '--offline',
+      '--package',
+      npmFileSpec(tinyedgeArtifact.file),
+      '--',
+      'tinyedge',
+      '--version',
+    ], {
+      cwd: npmExecRoot,
+      env: { npm_config_cache: npmExecCache },
+      timeout: NPM_INSTALL_TIMEOUT_MS,
+    })
+    assert.equal(npxReportedVersion, manifest.version, 'npm exec must launch the exact packed artifact')
+    const npmExecInstalls = path.join(npmExecCache, '_npx')
+    assert.ok(
+      existsSync(npmExecInstalls) && readdirSync(npmExecInstalls).length > 0,
+      'npm exec must materialize the packed artifact in its isolated cache',
+    )
 
     const globalPrefix = path.join(temporaryRoot, 'global-prefix')
     runNpm([
@@ -907,11 +972,12 @@ async function verifyRelease(artifactDirectory) {
       env: { npm_config_cache: path.join(temporaryRoot, 'global-npm-cache') },
       timeout: NPM_INSTALL_TIMEOUT_MS,
     })
-    const globalShim = path.join(globalPrefix, 'tinyedge.cmd')
-    const globalEntry = path.join(globalPrefix, 'node_modules/tinyedge/bin/tinyedge.js')
+    const globalTinyEdgeDirectory = globalPackageDirectory(globalPrefix)
+    const globalShim = globalCommandShim(globalPrefix)
+    const globalEntry = path.join(globalTinyEdgeDirectory, 'bin/tinyedge.js')
     assert.ok(existsSync(globalShim), 'npm did not create the global tinyedge command shim')
     assert.ok(existsSync(globalEntry), 'the global install is missing the packed tinyedge entry')
-    assertWindowsShimTargets(globalShim, globalEntry, 'global npm command shim')
+    assertCommandShimTargets(globalShim, globalEntry, 'global npm command shim')
     assert.equal(
       run(process.execPath, [globalEntry, '--version'], {
         cwd: temporaryRoot,
@@ -920,12 +986,11 @@ async function verifyRelease(artifactDirectory) {
       manifest.version,
       'the packed global tinyedge entry must execute the reviewed client',
     )
-    const globalReportedVersion = runWindowsShim(globalShim, ['--version'], {
+    const globalReportedVersion = runCommandShim(globalShim, ['--version'], {
       cwd: temporaryRoot,
       timeout: 120_000,
     })
     assert.equal(globalReportedVersion, manifest.version)
-    const globalTinyEdgeDirectory = path.join(globalPrefix, 'node_modules/tinyedge')
     const globalShrinkwrap = path.join(globalTinyEdgeDirectory, 'npm-shrinkwrap.json')
     assert.ok(existsSync(globalShrinkwrap), 'the global tinyedge package is missing npm-shrinkwrap.json')
     assertReviewedClosure(
@@ -934,7 +999,7 @@ async function verifyRelease(artifactDirectory) {
       runtimeArtifact.integrity,
     )
     assertInstalledReviewedClosure(
-      path.join(globalPrefix, 'node_modules'),
+      globalNodeModulesDirectory(globalPrefix),
       'global consumer install',
       readJson(globalShrinkwrap),
     )
@@ -978,35 +1043,71 @@ async function verifyRelease(artifactDirectory) {
       timeout: 120_000,
     })
 
-    assert.match(process.arch, /^(?:x64|arm64)$/)
-    const installedModules = path.join(temporaryRoot, 'node_modules')
-    const nativeConsoleHelpers = findFiles(
-      installedModules,
-      (file) => file.endsWith('win32-console-mode.node')
-        && file.includes(`${path.sep}win32-${process.arch}${path.sep}`),
-    )
-    assert.ok(nativeConsoleHelpers.length >= 1, `missing Pi TUI ${process.arch} console helper`)
-    const nativeDependencyCheck = `
-      const { createRequire } = await import('node:module');
-      const require = createRequire(import.meta.url);
-      for (const helperPath of ${JSON.stringify(nativeConsoleHelpers)}) {
-        const helper = require(helperPath);
-        if (typeof helper.enableVirtualTerminalInput !== 'function'
-          || typeof helper.isModifierPressed !== 'function') {
-          throw new Error('the Pi TUI native console helper has an unexpected contract');
+    if (process.platform === 'win32') {
+      const installedModules = path.join(temporaryRoot, 'node_modules')
+      const nativeConsoleHelpers = findFiles(
+        installedModules,
+        (file) => file.endsWith('win32-console-mode.node')
+          && file.includes(`${path.sep}win32-${process.arch}${path.sep}`),
+      )
+      assert.ok(nativeConsoleHelpers.length >= 1, `missing Pi TUI ${process.arch} console helper`)
+      const nativeDependencyCheck = `
+        const { createRequire } = await import('node:module');
+        const require = createRequire(import.meta.url);
+        for (const helperPath of ${JSON.stringify(nativeConsoleHelpers)}) {
+          const helper = require(helperPath);
+          if (typeof helper.enableVirtualTerminalInput !== 'function'
+            || typeof helper.isModifierPressed !== 'function') {
+            throw new Error('the Pi TUI native console helper has an unexpected contract');
+          }
         }
-      }
-    `
-    run(process.execPath, ['--input-type=module', '--eval', nativeDependencyCheck], {
-      cwd: temporaryRoot,
-      timeout: 120_000,
-    })
+      `
+      run(process.execPath, ['--input-type=module', '--eval', nativeDependencyCheck], {
+        cwd: temporaryRoot,
+        timeout: 120_000,
+      })
+    } else {
+      const secretStoreEntry = path.join(installedTinyEdgeDirectory, 'src/auth/secret-store.js')
+      const secretServiceCheck = `
+        import assert from 'node:assert/strict';
+        const { createLinuxSecretServiceSecretStore } = await import(
+          ${JSON.stringify(pathToFileURL(secretStoreEntry).href)}
+        );
+        const store = createLinuxSecretServiceSecretStore();
+        const name = 'release-package-canary';
+        const value = 'tinyedge-linux-secret-service-canary';
+        await store.delete(name);
+        try {
+          await store.write(name, value);
+          assert.equal(await store.read(name), value);
+        } finally {
+          await store.delete(name);
+        }
+        assert.equal(await store.read(name), null);
+      `
+      run(process.execPath, ['--input-type=module', '--eval', secretServiceCheck], {
+        cwd: temporaryRoot,
+        timeout: 120_000,
+      })
+      run('python3', [
+        path.join(SCRIPT_DIR, 'check-linux-harness-pty.py'),
+        localShim,
+      ], {
+        cwd: temporaryRoot,
+        env: {
+          TINYEDGE_CONFIG_DIR: path.join(temporaryRoot, 'linux-harness-config'),
+          TERM: 'xterm-256color',
+        },
+        timeout: 120_000,
+      })
+    }
   } finally {
     removeTemporaryDirectory(temporaryRoot)
+    removeTemporaryDirectory(npmExecRoot)
   }
 
   console.log(
-    `Verified TinyEdge ${manifest.version} as one offline-installable package with bundled @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, normal-lifecycle local/global shims, embedded client and Pi extension, native console helper, and bare Harness dispatch on ${process.arch}`,
+    `Verified TinyEdge ${manifest.version} as one offline-installable package with bundled @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, normal-lifecycle local/global/npm-exec commands, embedded client and Pi extension, bare Harness dispatch, and ${process.platform === 'win32' ? 'native console helper' : 'interactive pseudo-terminal smoke'} on ${process.platform} ${process.arch}`,
   )
 }
 

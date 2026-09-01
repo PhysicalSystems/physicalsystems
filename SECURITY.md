@@ -9,12 +9,15 @@ client and is not the native Harness described by this repository.
 | Version | Security support |
 | --- | --- |
 | `main` | Yes |
+| `0.1.5` | Yes when published to `preview`; until then use `main` |
+| `0.1.4` | Yes while it remains the Windows `preview` |
 | `0.1.3` | Yes |
 | `0.1.2` | Previous published Harness |
 | `0.1.1` and earlier | No active maintenance in this repository |
 
-The current client supports Windows x64 and Windows ARM64 with Node.js 22.19.0
-or newer. macOS and Linux are not currently supported.
+The current source supports Windows x64, Windows ARM64, and qualified Ubuntu
+22.04/24.04 desktop x64 with Node.js 22.19.0 or newer. Headless Linux, Raspberry Pi, other
+Linux targets, and macOS are not currently supported.
 
 ## Report a vulnerability
 

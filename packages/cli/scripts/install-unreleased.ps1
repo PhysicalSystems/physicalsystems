@@ -116,7 +116,7 @@ function Install-PinnedNode {
 }
 
 if ($env:OS -ne 'Windows_NT') {
-  throw 'This installer is for Windows. TinyEdge Harness currently supports Windows only.'
+  throw 'This unreleased-source installer is Windows-only. On qualified Ubuntu desktop x64, first require `npm view tinyedge@0.1.5 version --json` to return `"0.1.5"`, then run `npx --yes tinyedge@0.1.5`.'
 }
 
 if (-not $env:LOCALAPPDATA) {

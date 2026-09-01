@@ -1,9 +1,10 @@
 # Release checklist
 
-## Released state on 2026-08-18
+## Released state before 0.1.5
 
 `tinyedge@0.1.3`, `@tinyedge/cli@0.1.3`, and `@tinyedge/pi@0.1.3`
-are immutable public releases under `latest` and `preview`.
+are immutable public releases. `tinyedge@0.1.3` remains under `latest`, while
+the Windows-only one-package `tinyedge@0.1.4` release is under `preview`.
 `@tinyedge/pi-runtime@0.84.2-tinyedge.1` is also public under those tags, while
 its inert namespace proof remains at `bootstrap=0.0.0`. Those releases used npm
 staged publishing and separate 2FA approval for each package.
@@ -15,9 +16,11 @@ separately versioned component with its own release cadence; ordinary Harness
 releases verify its exact public bytes, bundle it into `tinyedge`, and never
 republish it.
 
-There is still no verified public `install.ps1` route. Do not remove the
-Windows restriction or advertise another platform until its native credential
-store and clean-user canary exist.
+Version `0.1.5` adds Ubuntu 22.04/24.04 desktop x64 after normal packed local, global, and
+npm-exec installs; native Secret Service storage; and interactive Harness
+render/input/exit evidence pass. There is still no verified public
+`install.ps1` route. Headless Linux, Raspberry Pi, other Linux targets, and
+macOS remain unsupported.
 
 ## Current release model
 
@@ -30,35 +33,37 @@ The workflow:
 1. Refuses to run while `LICENSE-PENDING.md` or
    `NPM-RELEASE-PENDING.md` exists. An unresolved source tree must use `UNLICENSED`
    and cannot produce a publishable artifact.
-2. Packs `@tinyedge/pi-runtime@0.84.2-tinyedge.1` and `tinyedge@0.1.4`
+2. Packs `@tinyedge/pi-runtime@0.84.2-tinyedge.1` and `tinyedge@0.1.5`
    exactly once on Windows x64. The runtime is verification-only; the
    `tinyedge` tarball carries the command, source, exports, complete reviewed
    dependency closure, `npm-shrinkwrap.json`, legal bundle, and SBOM. Bundling
    is required because npm 12 no longer applies a dependency package's
    shrinkwrap during consumer installation.
-3. Downloads those same bytes on hosted Windows x64 and native ARM64. Each
-   architecture verifies normal-lifecycle local and isolated global installs
-   with npm 11.19.0 and npm 12.0.2. Every install uses only the `tinyedge`
+3. Downloads those same bytes on hosted Windows x64, native Windows ARM64, and
+   Ubuntu 22.04/24.04 desktop x64. Each route verifies normal-lifecycle local, isolated
+   global, and npm-exec installs with npm 11.19.0 and npm 12.0.2. Every install uses only the `tinyedge`
    tarball, an empty cache, and offline mode; it then checks the exact reviewed
    dependency identities, npm command shims, bare Harness dispatch path, Pi
-   extension, and architecture-specific native console helper.
-4. Enters the protected environment only after both architecture jobs pass.
+   extension, and the platform terminal path. Ubuntu also proves a real
+   Secret Service round trip and interactive pseudo-terminal render/input/exit.
+4. Enters the protected environment only after every Windows and Ubuntu
+   verification job passes.
    It requires `NPM_RELEASE_POLICY_VERSION=v2-direct-preview`, confirms the
    source repository is public, verifies the environment's live required
    reviewer and exact `main` branch policy through the GitHub API, rechecks the
    manifest and tarball digests, and compares every packed legal file with the
    reviewed source.
-5. Proves both `latest` and `preview` still resolve to `tinyedge@0.1.3`, proves
-   `tinyedge@0.1.4` is not public, and proves the packed runtime is
+5. Proves `latest=tinyedge@0.1.3`, `preview=tinyedge@0.1.4`, and
+   `tinyedge@0.1.5` is not public, then proves the packed runtime is
    byte-identical to the existing registry artifact. It then runs exactly:
 
    ```bash
-   npm publish "./release-artifacts/tinyedge-0.1.4.tgz" \
+   npm publish "./release-artifacts/tinyedge-0.1.5.tgz" \
      --registry="https://registry.npmjs.org/" \
      --provenance --tag preview --access public
    ```
 
-6. Rechecks that `preview=0.1.4` and `latest=0.1.3`, compares registry
+6. Rechecks that `preview=0.1.5` and `latest=0.1.3`, compares registry
    integrity and shasum with the approved tarball, requires SLSA v1 provenance
    metadata, and runs npm's cryptographic signature audit.
 
@@ -67,7 +72,7 @@ The package becomes public on `preview` when this command succeeds. CI never
 uses `latest`, never publishes the compatibility runtime, and never uses a
 long-lived npm token or lifecycle publish script.
 
-Local packing and pull-request x64/arm64 checks remain available while the
+Local packing and pull-request Windows/Ubuntu checks remain available while the
 manual release workflow stays blocked on unresolved publication policy.
 Building or testing never publishes, deploys, pushes, or changes a dist-tag.
 
@@ -107,18 +112,28 @@ After direct publication to `preview`, verify registry metadata, signature,
 attestation, and exact version:
 
 ```powershell
-npm view tinyedge@0.1.4 version dist.integrity dist.shasum dist.attestations --json
+npm view tinyedge@0.1.5 version dist.integrity dist.shasum dist.attestations --json
 npm view tinyedge dist-tags --json
-$audit = Join-Path $env:TEMP "tinyedge-0.1.4-signature-audit"
+$audit = Join-Path $env:TEMP "tinyedge-0.1.5-signature-audit"
 New-Item -ItemType Directory -Force $audit | Out-Null
 Push-Location $audit
 npm init --yes | Out-Null
-npm install --ignore-scripts --no-audit --no-fund tinyedge@0.1.4
+npm install --ignore-scripts --no-audit --no-fund tinyedge@0.1.5
 npm audit signatures
 Pop-Location
 npm install --global tinyedge@preview
 tinyedge --version
 tinyedge doctor
+```
+
+On Ubuntu desktop, first require Node.js 22.19.0 or newer plus `secret-tool`,
+D-Bus, an unlocked Secret Service keyring, and `xdg-open`, then run:
+
+```bash
+npm view tinyedge@0.1.5 version dist.integrity dist.shasum dist.attestations --json
+npx --yes tinyedge@0.1.5 --version
+npm install --global tinyedge@0.1.5
+tinyedge
 ```
 
 Use a disposable account to test production OAuth, provider login, MCP
@@ -129,7 +144,7 @@ Attach the canary and workflow evidence to the release issue.
 Promotion changes only the tag; it never rebuilds:
 
 ```powershell
-npm dist-tag add tinyedge@0.1.4 latest
+npm dist-tag add tinyedge@0.1.5 latest
 ```
 
 Verify `npm view tinyedge dist-tags --json`, then test a clean unversioned
