@@ -18,6 +18,7 @@ export function createPhysicalWorkflowState(nodeOrigin) {
     snapshot: null,
     response: null,
     requestedIntent: null,
+    exploration: null,
     error: null,
   })
 }
@@ -35,6 +36,7 @@ export function updatePhysicalWorkflow(state, event) {
       snapshot: event.snapshot,
       response: null,
       requestedIntent: null,
+      exploration: null,
       error: null,
     })
   }
@@ -44,6 +46,35 @@ export function updatePhysicalWorkflow(state, event) {
       status: 'connected',
       response: event.response,
       requestedIntent: cleanMessage(event.requestedIntent),
+      exploration: null,
+      error: null,
+    })
+  }
+  if (event.type === 'exploration') {
+    if (!state.response) throw new TypeError('Physical commissioning requires a grounded intent')
+    if (!event.exploration
+      || event.exploration.status !== 'draft'
+      || event.exploration.physicalExecutionAuthorized !== false
+      || event.exploration.method !== null
+      || event.exploration.durationMinutes !== null
+      || event.exploration.maxTrials !== null
+      || event.exploration.methodSelectionRequired !== true
+      || event.exploration.boundsSelectionRequired !== true
+      || event.exploration.requiresLocalApproval !== true
+      || event.exploration.interpretationDigest
+        !== state.response.interpretation?.interpretationDigest) {
+      throw new TypeError('A non-authorizing physical commissioning draft is required')
+    }
+    return Object.freeze({ ...state, exploration: event.exploration, error: null })
+  }
+  if (event.type === 'exploration-declined') {
+    if (!state.response) throw new TypeError('Physical commissioning requires a grounded intent')
+    return Object.freeze({
+      ...state,
+      exploration: Object.freeze({
+        status: 'declined',
+        physicalExecutionAuthorized: false,
+      }),
       error: null,
     })
   }
@@ -53,6 +84,7 @@ export function updatePhysicalWorkflow(state, event) {
       status: 'unavailable',
       snapshot: null,
       response: null,
+      exploration: null,
       error: cleanMessage(event.error?.message || event.error || 'Physical node unavailable'),
     })
   }
@@ -62,11 +94,12 @@ export function updatePhysicalWorkflow(state, event) {
       status: state.snapshot ? 'connected' : 'unavailable',
       response: null,
       requestedIntent: cleanMessage(event.requestedIntent),
+      exploration: null,
       error: cleanMessage(event.error?.message || event.error || 'Physical plan rejected'),
     })
   }
   if (event.type === 'reset-intent') {
-    return Object.freeze({ ...state, response: null, requestedIntent: null, error: null })
+    return Object.freeze({ ...state, response: null, requestedIntent: null, exploration: null, error: null })
   }
   throw new TypeError(`Unknown physical workflow event: ${event.type}`)
 }
@@ -75,13 +108,14 @@ function stepStates(state) {
   const discovered = Boolean(state.snapshot)
   const interpretation = state.response?.interpretation
   const intentKnown = Boolean(interpretation)
-  const planReady = interpretation?.status === 'ready'
+  const planReady = hasGroundedPlan(interpretation)
   const planNeedsWork = (intentKnown && !planReady) || Boolean(state.snapshot && state.error)
+  const commissioningDraft = state.exploration?.status === 'draft'
   return [
     state.status === 'checking' ? 'working' : discovered ? 'done' : state.error ? 'blocked' : 'waiting',
     intentKnown ? 'done' : 'waiting',
     planReady ? 'done' : planNeedsWork ? 'blocked' : 'waiting',
-    intentKnown ? 'blocked' : 'waiting',
+    commissioningDraft ? 'draft' : intentKnown ? 'blocked' : 'waiting',
     'locked',
     'locked',
   ]
@@ -91,6 +125,7 @@ const STATUS_MARK = Object.freeze({
   done: '✓',
   working: '…',
   blocked: '!',
+  draft: '◇',
   waiting: '○',
   locked: '—',
 })
@@ -121,12 +156,43 @@ function evidenceLine(response) {
 function planLine(response) {
   const interpretation = response?.interpretation
   const grounding = interpretation?.grounding
-  if (!interpretation || !grounding || interpretation.status !== 'ready') return null
+  if (!interpretation || !grounding || !hasGroundedPlan(interpretation)) return null
   const action = cleanMessage(interpretation.action || 'workflow')
   const objectId = cleanMessage(grounding.objectId || 'configured object')
   const source = cleanMessage(grounding.sourceStationId || 'source')
   const destination = cleanMessage(grounding.destinationStationId || 'destination')
   return `Plan · ${action} ${objectId} · ${source} → ${destination}`
+}
+
+function groundingLine(response) {
+  const interpretation = response?.interpretation
+  const grounding = interpretation?.grounding
+  if (!interpretation || !grounding || hasGroundedPlan(interpretation)) return null
+  if (!grounding.objectId || !grounding.sourceStationId || !grounding.destinationStationId) return null
+  const action = cleanMessage(interpretation.action || 'workflow')
+  return `Grounding · ${action} ${cleanMessage(grounding.objectId)} · ${cleanMessage(grounding.sourceStationId)} → ${cleanMessage(grounding.destinationStationId)}`
+}
+
+function explorationLines(exploration) {
+  if (!exploration) return []
+  if (exploration.status === 'declined') {
+    return ['Commissioning · no draft prepared · physical execution remains locked']
+  }
+  if (exploration.status !== 'draft') return []
+  const gaps = (exploration.gapIds || []).map(cleanMessage).join(', ')
+  const operations = (exploration.operationIds || []).map(cleanMessage).join(', ')
+  return [
+    `Commissioning draft · ${cleanMessage(exploration.label)}`,
+    `Bound evidence · ${gaps || 'reported gap'} · operations: ${operations || 'reported operations'}`,
+    'Required next · local node must supply an eligible method and safe bounds',
+    'Gate · draft only · local review and approval required before any motion',
+  ]
+}
+
+function hasGroundedPlan(interpretation) {
+  if (interpretation?.status !== 'ready' || !interpretation.workflowIntent) return false
+  const grounding = interpretation.grounding
+  return Boolean(grounding?.objectId && grounding?.sourceStationId && grounding?.destinationStationId)
 }
 
 function nextLine(state) {
@@ -136,8 +202,14 @@ function nextLine(state) {
   if (state.error) return `Planning blocked · ${state.error}`
   if (!state.response) return 'Describe the physical outcome in the editor, or run /physical.'
   const interpretation = state.response.interpretation
+  if (state.exploration?.status === 'draft') {
+    return 'Commissioning draft ready · method and bounds remain unresolved; execution remains locked.'
+  }
+  if (state.exploration?.status === 'declined') {
+    return 'Commissioning paused · no draft prepared; physical execution remains locked.'
+  }
   if (interpretation.status === 'ready') {
-    return 'Plan grounded · commissioning evidence is required; physical execution remains locked.'
+    return 'Plan grounded · the physical execution endpoint remains locked.'
   }
   if (interpretation.questions?.length) return `Needs input · ${cleanMessage(interpretation.questions[0])}`
   if (interpretation.gaps?.length) return `Commissioning gap · ${cleanMessage(interpretation.gaps[0].detail)}`
@@ -167,8 +239,11 @@ export function renderPhysicalWorkflow(state, width = 100) {
   const observation = evidenceLine(state.response)
   if (state.requestedIntent) lines.push(fit(`Intent · ${state.requestedIntent}`, safeWidth))
   const plan = planLine(state.response)
+  const grounding = groundingLine(state.response)
   if (plan) lines.push(fit(plan, safeWidth))
+  if (grounding) lines.push(fit(grounding, safeWidth))
   if (observation) lines.push(fit(observation, safeWidth))
+  for (const line of explorationLines(state.exploration)) lines.push(fit(line, safeWidth))
   lines.push(fit(nextLine(state), safeWidth))
   return lines
 }

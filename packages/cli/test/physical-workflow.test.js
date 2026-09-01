@@ -9,6 +9,7 @@ import {
   renderPhysicalWorkflow,
   updatePhysicalWorkflow,
 } from '../src/physical/workflow.js'
+import { createPhysicalCommissioningDraft } from '../src/physical/exploration.js'
 
 function snapshotFixture({ ready = true } = {}) {
   return {
@@ -63,6 +64,19 @@ function intentFixture({ status = 'ready', gaps = [], questions = [] } = {}) {
   }
 }
 
+function commissioningResponseFixture() {
+  return intentFixture({
+    status: 'needs-clarification',
+    gaps: [{
+      gapId: 'robot-manipulation-commissioning',
+      kind: 'commissioning-required',
+      deviceId: 'robot-one',
+      operationIds: ['pick-container'],
+      detail: 'The selected robot requires a qualified pick operation.',
+    }],
+  })
+}
+
 test('workflow renders actual discovery separately from configuration', () => {
   let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
   assert.match(renderPhysicalWorkflow(state).join('\n'), /○ Discover/)
@@ -89,8 +103,7 @@ test('workflow exposes grounded plan but keeps run and verify locked', () => {
   assert.match(rendered, /— Verify/)
   assert.match(rendered, /Intent · Move the cup/)
   assert.match(rendered, /Plan · transfer cup-one · source → destination/)
-  assert.match(rendered, /commissioning evidence is required/)
-  assert.match(rendered, /execution remains locked/)
+  assert.match(rendered, /physical execution endpoint remains locked/)
 })
 
 test('workflow shows the first real question or commissioning gap', () => {
@@ -169,4 +182,126 @@ test('workflow truncates long terminal lines to the available width', () => {
   let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
   state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
   for (const line of renderPhysicalWorkflow(state, 48)) assert.ok(line.length <= 48)
+})
+
+test('an explicit commissioning gap can prepare a bound draft without claiming a plan exists', () => {
+  const response = commissioningResponseFixture()
+  const proposal = createPhysicalCommissioningDraft(response)
+  let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
+  state = updatePhysicalWorkflow(state, {
+    type: 'intent', response, requestedIntent: 'Move the cup',
+  })
+  state = updatePhysicalWorkflow(state, { type: 'exploration', exploration: proposal })
+
+  const rendered = renderPhysicalWorkflow(state, 180).join('\n')
+  assert.match(rendered, /! Plan/)
+  assert.match(rendered, /◇ Commission/)
+  assert.match(rendered, /Grounding · transfer cup-one · source → destination/)
+  assert.doesNotMatch(rendered, /Plan · transfer/)
+  assert.match(rendered, /Commissioning draft · Resolve reported commissioning gap/)
+  assert.match(rendered, /Bound evidence · robot-manipulation-commissioning · operations: pick-container/)
+  assert.match(rendered, /local node must supply an eligible method and safe bounds/)
+  assert.match(rendered, /draft only · local review and approval required before any motion/)
+  assert.match(rendered, /— Run/)
+  assert.match(rendered, /— Verify/)
+  assert.equal(state.exploration.method, null)
+  assert.equal(state.exploration.durationMinutes, null)
+  assert.equal(state.exploration.physicalExecutionAuthorized, false)
+})
+
+test('workflow renders a declined commissioning draft and keeps execution blocked', () => {
+  const response = commissioningResponseFixture()
+  let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
+  state = updatePhysicalWorkflow(state, {
+    type: 'intent', response, requestedIntent: 'Move the cup',
+  })
+  state = updatePhysicalWorkflow(state, { type: 'exploration-declined' })
+
+  const rendered = renderPhysicalWorkflow(state).join('\n')
+  assert.match(rendered, /! Commission/)
+  assert.doesNotMatch(rendered, /◇ Commission/)
+  assert.match(rendered, /— Run/)
+  assert.match(rendered, /— Verify/)
+  assert.match(rendered, /Commissioning · no draft prepared · physical execution remains locked/)
+  assert.match(rendered, /Commissioning paused · no draft prepared/)
+  assert.deepEqual(state.exploration, {
+    status: 'declined',
+    physicalExecutionAuthorized: false,
+  })
+})
+
+test('resetting intent clears the commissioning draft while preserving discovery', () => {
+  const response = commissioningResponseFixture()
+  let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
+  state = updatePhysicalWorkflow(state, {
+    type: 'intent', response, requestedIntent: 'Move the cup',
+  })
+  state = updatePhysicalWorkflow(state, {
+    type: 'exploration',
+    exploration: createPhysicalCommissioningDraft(response),
+  })
+  state = updatePhysicalWorkflow(state, { type: 'reset-intent' })
+
+  assert.equal(state.response, null)
+  assert.equal(state.requestedIntent, null)
+  assert.equal(state.exploration, null)
+  assert.equal(state.error, null)
+  assert.ok(state.snapshot)
+  const rendered = renderPhysicalWorkflow(state).join('\n')
+  assert.match(rendered, /✓ Discover  ○ Intent  ○ Plan  ○ Commission  — Run  — Verify/)
+  assert.doesNotMatch(rendered, /Commissioning draft|Bound evidence|Intent · Move the cup/)
+})
+
+test('workflow rejects commissioning transitions without a non-authorizing draft', () => {
+  const initial = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  assert.throws(
+    () => updatePhysicalWorkflow(initial, {
+      type: 'exploration', exploration: { status: 'configured' },
+    }),
+    /requires a grounded intent/,
+  )
+  assert.throws(
+    () => updatePhysicalWorkflow(initial, { type: 'exploration-declined' }),
+    /requires a grounded intent/,
+  )
+
+  let grounded = updatePhysicalWorkflow(initial, { type: 'snapshot', snapshot: snapshotFixture() })
+  grounded = updatePhysicalWorkflow(grounded, {
+    type: 'intent', response: intentFixture(), requestedIntent: 'Move the cup',
+  })
+  assert.throws(
+    () => updatePhysicalWorkflow(grounded, {
+      type: 'exploration', exploration: { status: 'draft' },
+    }),
+    /non-authorizing physical commissioning draft is required/,
+  )
+  const staleDraft = {
+    ...createPhysicalCommissioningDraft(commissioningResponseFixture()),
+    interpretationDigest: `sha256:${'f'.repeat(64)}`,
+  }
+  assert.throws(
+    () => updatePhysicalWorkflow(grounded, {
+      type: 'exploration', exploration: staleDraft,
+    }),
+    /non-authorizing physical commissioning draft is required/,
+  )
+  assert.throws(
+    () => updatePhysicalWorkflow(grounded, {
+      type: 'exploration',
+      exploration: {
+        status: 'draft',
+        physicalExecutionAuthorized: true,
+        method: null,
+        durationMinutes: null,
+        maxTrials: null,
+        methodSelectionRequired: true,
+        boundsSelectionRequired: true,
+        requiresLocalApproval: true,
+      },
+    }),
+    /non-authorizing physical commissioning draft is required/,
+  )
 })

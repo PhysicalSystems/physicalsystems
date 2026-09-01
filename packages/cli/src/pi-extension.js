@@ -13,6 +13,10 @@ import { loginCommand } from './commands/login.js'
 import { logoutCommand } from './commands/logout.js'
 import { ASK_CHOICE_TOOL, createAskChoiceTool } from './harness/ask-choice.js'
 import { createHarnessHeader, summarizeDeviceInventory } from './harness/header.js'
+import {
+  promptPhysicalCommissioningDraft,
+  recommendPhysicalCommissioningDraft,
+} from './physical/exploration.js'
 import { createPhysicalNodeClient } from './physical/node-client.js'
 import {
   createPhysicalPiTools,
@@ -354,7 +358,26 @@ export function createTinyEdgePiExtension({
             )
             transitionPhysical({ type: 'intent', response, requestedIntent: intent }, ctx)
             const interpretation = response.interpretation
-            if (interpretation.status === 'ready') {
+            const recommendation = recommendPhysicalCommissioningDraft(response)
+            if (recommendation) {
+              ctx.ui.notify(
+                'The local node reported a commissioning gap. Preparing a bound draft cannot start motion.',
+                'info',
+              )
+              const proposal = await promptPhysicalCommissioningDraft(ctx, response)
+              if (proposal?.decision === 'declined') {
+                transitionPhysical({ type: 'exploration-declined' }, ctx)
+                ctx.ui.notify('Commissioning paused. Physical execution remains locked.', 'warning')
+              } else if (proposal) {
+                transitionPhysical({ type: 'exploration', exploration: proposal }, ctx)
+                ctx.ui.notify(
+                  `Commissioning draft prepared for ${proposal.operationIds.length} reported operation${proposal.operationIds.length === 1 ? '' : 's'}. No method, bounds, or motion was selected.`,
+                  'info',
+                )
+              } else {
+                ctx.ui.notify('Commissioning draft was not prepared. Execution remains locked.', 'warning')
+              }
+            } else if (interpretation.status === 'ready') {
               ctx.ui.notify('Physical workflow grounded. Execution remains locked.', 'info')
             } else if (interpretation.questions?.length) {
               ctx.ui.notify(interpretation.questions[0], 'warning')

@@ -42,6 +42,11 @@ function identifier(value, label) {
   return result
 }
 
+function optionalIdentifier(value, label) {
+  if (value === null) return null
+  return identifier(value, label)
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
@@ -178,6 +183,23 @@ function normalizeInterpretation(value) {
   }
   const normalized = clone(interpretation)
   normalized.status = status
+  normalized.interpretationDigest = digest(
+    interpretation.interpretationDigest,
+    'physical intent interpretationDigest',
+  )
+  const grounding = object(interpretation.grounding, 'physical intent grounding')
+  normalized.grounding = {
+    ...clone(grounding),
+    objectId: optionalIdentifier(grounding.objectId, 'physical intent grounding.objectId'),
+    sourceStationId: optionalIdentifier(
+      grounding.sourceStationId,
+      'physical intent grounding.sourceStationId',
+    ),
+    destinationStationId: optionalIdentifier(
+      grounding.destinationStationId,
+      'physical intent grounding.destinationStationId',
+    ),
+  }
   normalized.physicalExecutionAuthorized = bool(
     interpretation.physicalExecutionAuthorized,
     'physical intent physicalExecutionAuthorized',
@@ -187,10 +209,25 @@ function normalizeInterpretation(value) {
   }
   normalized.gaps = array(interpretation.gaps, 'physical intent gaps', 64).map((gap, index) => {
     const item = object(gap, `physical intent gap ${index}`)
-    text(item.gapId, `physical intent gap ${index}.gapId`, 128)
-    text(item.kind, `physical intent gap ${index}.kind`, 128)
-    text(item.detail, `physical intent gap ${index}.detail`, 512)
-    return clone(item)
+    const operationIds = array(
+      item.operationIds,
+      `physical intent gap ${index}.operationIds`,
+      8,
+    ).map((operationId, operationIndex) => identifier(
+      operationId,
+      `physical intent gap ${index}.operationIds[${operationIndex}]`,
+    ))
+    if (new Set(operationIds).size !== operationIds.length) {
+      throw new Error(`physical intent gap ${index}.operationIds must be distinct`)
+    }
+    return {
+      ...clone(item),
+      gapId: identifier(item.gapId, `physical intent gap ${index}.gapId`),
+      kind: identifier(item.kind, `physical intent gap ${index}.kind`),
+      deviceId: optionalIdentifier(item.deviceId, `physical intent gap ${index}.deviceId`),
+      operationIds,
+      detail: text(item.detail, `physical intent gap ${index}.detail`, 512),
+    }
   })
   normalized.questions = array(interpretation.questions, 'physical intent questions', 16)
     .map((question, index) => text(question, `physical intent question ${index}`, 500))

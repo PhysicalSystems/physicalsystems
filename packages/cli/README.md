@@ -78,10 +78,19 @@ motion, or workflow. The operator can describe an outcome in the normal Pi
 editor, or use `/physical <outcome>` for the same bounded local flow without a
 model. The Harness refreshes discovery, binds the request to that exact device
 evidence, and shows the grounded plan, question, or commissioning gap returned
-by the Agent.
+by the Agent. When the intent is grounded but the physical setup still needs
+learning or validation, the Harness can prepare a commissioning draft bound to
+the exact interpretation digest, gap, device, and operation evidence returned
+by the Agent. The current Agent contract does not say whether a gap should be
+resolved by teaching, installing, importing, or qualifying a skill, and it does
+not provide safe time or trial bounds. The Harness therefore does not infer a
+method or budget. Those choices require a future versioned commissioning-plan
+contract from the local node.
 
 This source increment has no motion endpoint. `Run` and `Verify` remain locked,
-and neither the model nor `/physical` can open the robot or authorize movement.
+and the commissioning draft is non-authorizing: neither the model nor
+`/physical` can select a method, set movement bounds, open the robot, start
+exploration, or authorize movement.
 The separate Python `tinyedge-agent serve-physical-node` process owns local
 camera and device discovery; it serves JSON only and must run on the same host.
 `TINYEDGE_PHYSICAL_NODE_URL` may override the origin, but non-loopback

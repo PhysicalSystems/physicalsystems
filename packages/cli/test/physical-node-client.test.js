@@ -78,6 +78,7 @@ function intentFixture() {
       gaps: [],
       questions: [],
       physicalExecutionAuthorized: false,
+      interpretationDigest: `sha256:${'d'.repeat(64)}`,
     },
     observationEvidence: { kind: 'live-camera', status: 'observed' },
     discoverySnapshotDigest: `sha256:${'b'.repeat(64)}`,
@@ -166,6 +167,41 @@ test('physical node client rejects inconsistent readiness and changed intent bin
     'Move cup from source to destination',
     `sha256:${'c'.repeat(64)}`,
   ), /does not match the inspected discovery/)
+})
+
+test('physical node client validates commissioning binding evidence at the loopback boundary', async () => {
+  const commissioning = intentFixture()
+  commissioning.interpretation.status = 'needs-clarification'
+  commissioning.interpretation.workflowIntent = null
+  commissioning.interpretation.gaps = [{
+    gapId: 'robot-manipulation-commissioning',
+    kind: 'commissioning-required',
+    deviceId: 'robot-one',
+    operationIds: ['pick-container'],
+    detail: 'The selected robot requires a qualified pick operation.',
+  }]
+  const valid = createPhysicalNodeClient({ fetchImpl: async () => jsonResponse(commissioning) })
+  const result = await valid.interpret(
+    'Move cup from source to destination',
+    `sha256:${'c'.repeat(64)}`,
+  )
+  assert.equal(result.interpretation.interpretationDigest, `sha256:${'d'.repeat(64)}`)
+  assert.deepEqual(result.interpretation.gaps[0].operationIds, ['pick-container'])
+
+  for (const mutate of [
+    (value) => { value.interpretation.interpretationDigest = 'not-a-digest' },
+    (value) => { value.interpretation.gaps[0].deviceId = 'Robot One' },
+    (value) => { value.interpretation.gaps[0].operationIds = ['Pick Container'] },
+    (value) => { value.interpretation.gaps[0].operationIds = ['pick-container', 'pick-container'] },
+  ]) {
+    const invalid = structuredClone(commissioning)
+    mutate(invalid)
+    const client = createPhysicalNodeClient({ fetchImpl: async () => jsonResponse(invalid) })
+    await assert.rejects(client.interpret(
+      'Move cup from source to destination',
+      `sha256:${'c'.repeat(64)}`,
+    ), /digest|identifier|distinct/)
+  }
 })
 
 test('physical node client fails closed on remote redirects, oversized data, and errors', async () => {

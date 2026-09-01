@@ -10,8 +10,8 @@
     "status": "public-canonical"
   },
   "candidatePayload": {
-    "fileCount": 955,
-    "sha256": "fcaae207222369a31a62c6972367a15cbcff4fd214c036ac0b45780bf63c9254",
+    "fileCount": 957,
+    "sha256": "76b0ecdaf0aea74c6d3cc22f5e9c0861f0bad1b0ceb24a9cb45528ab8bc2f0af",
     "canonicalization": "Exclude .git, every node_modules directory, release-artifacts, verification-evidence, and EXPORT-PROVENANCE.json; sort paths ordinally after replacing backslashes with forward slashes; normalize CRLF or CR to LF for text files without NUL bytes and leave binary bytes unchanged; concatenate lowercase SHA-256, two spaces, path, and LF for each file; SHA-256 the UTF-8 byte sequence."
   },
   "boundary": {

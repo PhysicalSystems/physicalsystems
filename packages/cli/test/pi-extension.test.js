@@ -135,6 +135,7 @@ test('standalone Harness renders and drives the local physical workflow inside P
   const messages = []
   const widgets = new Map()
   const calls = []
+  const selections = []
   const snapshot = {
     nodeName: 'ubuntu-lab',
     system: { systemId: 'cup-transfer', displayName: 'Cup transfer workcell', workcellId: 'desk-one' },
@@ -162,9 +163,21 @@ test('standalone Harness renders and drives the local physical workflow inside P
   }
   const response = {
     interpretation: {
-      status: 'ready', action: 'transfer',
+      status: 'needs-clarification', action: 'transfer',
       grounding: { objectId: 'cup-one', sourceStationId: 'source', destinationStationId: 'destination' },
-      workflowIntent: { workflowId: 'transfer-one-cup' }, requiredOperations: [], gaps: [], questions: [],
+      workflowIntent: null,
+      requiredOperations: [
+        { operationId: 'pick-container', effect: 'actuating' },
+        { operationId: 'place-container', effect: 'actuating' },
+      ],
+      gaps: [{
+        gapId: 'robot-manipulation-commissioning',
+        kind: 'commissioning-required',
+        deviceId: 'so101-follower',
+        operationIds: ['pick-container', 'place-container'],
+        detail: 'The selected robot requires qualified manipulation operations.',
+      }],
+      questions: [],
       interpretationDigest: `sha256:${'b'.repeat(64)}`, physicalExecutionAuthorized: false,
     },
     observationEvidence: { kind: 'live-camera', status: 'observed' },
@@ -196,6 +209,10 @@ test('standalone Harness renders and drives the local physical workflow inside P
       setHeader() {},
       setWidget(name, factory) { widgets.set(name, factory) },
       async input() { throw new Error('input should not be requested when command has arguments') },
+      async select(question, options) {
+        selections.push({ question, options })
+        return options[0]
+      },
     },
   }
 
@@ -224,8 +241,15 @@ test('standalone Harness renders and drives the local physical workflow inside P
   ])
   widget = widgets.get('tinyedge-physical-workflow')(null, theme).render(120).join('\n')
   assert.match(widget, /✓ Intent/)
+  assert.match(widget, /! Plan/)
+  assert.match(widget, /◇ Commission/)
   assert.match(widget, /— Run/)
-  assert.match(messages.at(-1).message, /Execution remains locked/)
+  assert.match(widget, /Resolve reported commissioning gap/)
+  assert.match(widget, /local node must supply an eligible method and safe bounds/)
+  assert.equal(selections.length, 1)
+  assert.match(selections[0].question, /Commissioning gap reported/)
+  assert.match(selections[0].options[0], /gap-bound commissioning draft/)
+  assert.match(messages.at(-1).message, /No method, bounds, or motion was selected/)
 })
 
 test('Harness gives a fresh benchmark request a deterministic question-first tool boundary', async () => {
