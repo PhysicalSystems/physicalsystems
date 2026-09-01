@@ -76,7 +76,7 @@ Building or testing never publishes, deploys, pushes, or changes a dist-tag.
 These controls cannot be committed to the repository:
 
 - On npmjs.com, configure the `tinyedge` trusted publisher for organization
-  `TinyEdgeAI`, repository `tinyedge-edge`, workflow `npm-release.yml`, and
+  `PhysicalSystems`, repository `tinyedge-edge`, workflow `npm-release.yml`, and
   environment `npm-release`. Allow **`npm publish`**. The workflow contains no
   `npm stage publish` command.
 - Remove the obsolete trusted-publisher grants for `@tinyedge/cli`,

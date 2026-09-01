@@ -13,6 +13,18 @@ import { loginCommand } from './commands/login.js'
 import { logoutCommand } from './commands/logout.js'
 import { ASK_CHOICE_TOOL, createAskChoiceTool } from './harness/ask-choice.js'
 import { createHarnessHeader, summarizeDeviceInventory } from './harness/header.js'
+import {
+  promptPhysicalCommissioningDraft,
+  recommendPhysicalCommissioningDraft,
+} from './physical/exploration.js'
+import { createPhysicalNodeClient } from './physical/node-client.js'
+import {
+  createPhysicalPiTools,
+  createPhysicalWorkflowState,
+  createPhysicalWorkflowWidget,
+  PHYSICAL_TOOL_ALLOWLIST,
+  updatePhysicalWorkflow,
+} from './physical/workflow.js'
 
 const NEW_BENCHMARK_INTENT = /\b(?:benchmark(?:ing|ed|s)?|evaluat(?:e|ing|ed|ion)|profil(?:e|ing|ed)|measure(?:ment|ments|d|s|ing)?|test(?:ing|ed|s)?)\b/i
 const EXISTING_WORK_INTENT = /\b(?:resume|continue)\b|\b(?:existing|previous|saved)\s+(?:task|benchmark|run|work)\b|\b(?:benchmark\s+)?(?:status|results?|comparison)\b/i
@@ -90,6 +102,9 @@ export function createTinyEdgePiExtension({
   loginImpl = loginCommand,
   logoutImpl = logoutCommand,
   defineToolImpl = defineTool,
+  createPhysicalNodeClientImpl = createPhysicalNodeClient,
+  physicalNodeUrl = env.TINYEDGE_PHYSICAL_NODE_URL,
+  physicalFetchImpl = globalThis.fetch,
   standalone = false,
   autoLogin = false,
   showHeader = false,
@@ -100,6 +115,17 @@ export function createTinyEdgePiExtension({
     const tokenStore = createTokenStoreImpl({ configDir: config.configDir, secretStore })
     const askChoiceTool = createAskChoiceTool(defineToolImpl)
     pi.registerTool(askChoiceTool)
+    const physicalEnabled = standalone
+    const physicalClient = physicalEnabled
+      ? createPhysicalNodeClientImpl({
+        ...(physicalNodeUrl ? { baseUrl: physicalNodeUrl } : {}),
+        fetchImpl: physicalFetchImpl,
+      })
+      : null
+    let physicalState = physicalEnabled
+      ? createPhysicalWorkflowState(physicalClient.origin)
+      : null
+    let physicalContext
     let registeredTools = []
     let headerContext
     let freshBenchmarkTurn = false
@@ -108,6 +134,53 @@ export function createTinyEdgePiExtension({
       connected: false,
       connecting: false,
       deviceGroups: [],
+    }
+
+    function renderPhysicalWorkflowWidget(ctx = physicalContext) {
+      if (!physicalEnabled || !ctx || ctx.mode !== 'tui' || typeof ctx.ui?.setWidget !== 'function') return
+      physicalContext = ctx
+      ctx.ui.setWidget(
+        'tinyedge-physical-workflow',
+        createPhysicalWorkflowWidget(() => physicalState),
+      )
+    }
+
+    function transitionPhysical(event, ctx = physicalContext) {
+      if (!physicalEnabled) return
+      physicalState = updatePhysicalWorkflow(physicalState, event)
+      renderPhysicalWorkflowWidget(ctx)
+    }
+
+    async function refreshPhysicalSystem(ctx = physicalContext) {
+      transitionPhysical({ type: 'checking' }, ctx)
+      try {
+        const snapshot = await physicalClient.inspect()
+        transitionPhysical({ type: 'snapshot', snapshot }, ctx)
+        return snapshot
+      } catch (error) {
+        transitionPhysical({ type: 'error', error }, ctx)
+        throw error
+      }
+    }
+
+    if (physicalEnabled) {
+      const physicalTools = createPhysicalPiTools({
+        defineTool: defineToolImpl,
+        client: physicalClient,
+        onSnapshot(snapshot) {
+          transitionPhysical({ type: 'snapshot', snapshot })
+        },
+        onIntent(response, requestedIntent) {
+          transitionPhysical({ type: 'intent', response, requestedIntent })
+        },
+        onError(error) {
+          transitionPhysical({ type: 'error', error })
+        },
+        onPlanError(error, requestedIntent) {
+          transitionPhysical({ type: 'plan-error', error, requestedIntent })
+        },
+      })
+      for (const tool of physicalTools) pi.registerTool(tool)
     }
 
     function renderHeader(ctx = headerContext) {
@@ -168,7 +241,7 @@ export function createTinyEdgePiExtension({
       for (const tool of tools) pi.registerTool(tool)
       registeredTools = tools.map((tool) => tool.name)
       const active = standalone
-        ? [ASK_CHOICE_TOOL, ...registeredTools]
+        ? [ASK_CHOICE_TOOL, ...PHYSICAL_TOOL_ALLOWLIST, ...registeredTools]
         : [...new Set([...pi.getActiveTools(), ASK_CHOICE_TOOL, ...registeredTools])]
       pi.setActiveTools(active)
       updateHeader({ connected: true, connecting: false }, ctx)
@@ -212,7 +285,11 @@ export function createTinyEdgePiExtension({
     pi.registerCommand('tinyedge-tools', {
       description: 'Show TinyEdge tools enabled for this Pi session',
       handler: async (_args, ctx) => {
-        ctx.ui.notify(registeredTools.length ? registeredTools.join('\n') : 'No TinyEdge tools loaded', 'info')
+        const tools = [
+          ...(physicalEnabled ? PHYSICAL_TOOL_ALLOWLIST : []),
+          ...registeredTools,
+        ]
+        ctx.ui.notify(tools.length ? tools.join('\n') : 'No TinyEdge tools loaded', 'info')
       },
     })
 
@@ -236,13 +313,86 @@ export function createTinyEdgePiExtension({
         const previous = new Set(registeredTools)
         pi.setActiveTools([
           ASK_CHOICE_TOOL,
-          ...pi.getActiveTools().filter((name) => name === ASK_CHOICE_TOOL || !previous.has(name)),
+          ...(physicalEnabled ? PHYSICAL_TOOL_ALLOWLIST : []),
+          ...pi.getActiveTools().filter((name) => (
+            name === ASK_CHOICE_TOOL
+            || PHYSICAL_TOOL_ALLOWLIST.includes(name)
+            || !previous.has(name)
+          )),
         ].filter((name, index, names) => names.indexOf(name) === index))
         registeredTools = []
         updateHeader({ connected: false, connecting: false, deviceGroups: [] }, ctx)
         ctx.ui.notify('TinyEdge disconnected. Registered tools now fail closed.', 'info')
       },
     })
+
+    if (physicalEnabled) {
+      pi.registerCommand('physical', {
+        description: 'Discover the local workcell and describe a physical outcome',
+        handler: async (args, ctx) => {
+          let snapshot
+          try {
+            snapshot = await refreshPhysicalSystem(ctx)
+          } catch (error) {
+            ctx.ui.notify(error?.message || String(error), 'warning')
+            return
+          }
+          const supplied = String(args || '').replace(/\s+/g, ' ').trim()
+          let intent = supplied
+          if (!intent) {
+            if (typeof ctx.ui?.input !== 'function') {
+              ctx.ui.notify('Type /physical followed by the physical outcome.', 'info')
+              return
+            }
+            intent = String(await ctx.ui.input(
+              'What should this physical system accomplish?',
+              'Describe the physical outcome',
+            ) || '').replace(/\s+/g, ' ').trim()
+          }
+          if (!intent) return
+          transitionPhysical({ type: 'reset-intent' }, ctx)
+          try {
+            const response = await physicalClient.interpret(
+              intent,
+              snapshot.discoveryBindingDigest,
+            )
+            transitionPhysical({ type: 'intent', response, requestedIntent: intent }, ctx)
+            const interpretation = response.interpretation
+            const recommendation = recommendPhysicalCommissioningDraft(response)
+            if (recommendation) {
+              ctx.ui.notify(
+                'The local node reported a commissioning gap. Preparing a bound draft cannot start motion.',
+                'info',
+              )
+              const proposal = await promptPhysicalCommissioningDraft(ctx, response)
+              if (proposal?.decision === 'declined') {
+                transitionPhysical({ type: 'exploration-declined' }, ctx)
+                ctx.ui.notify('Commissioning paused. Physical execution remains locked.', 'warning')
+              } else if (proposal) {
+                transitionPhysical({ type: 'exploration', exploration: proposal }, ctx)
+                ctx.ui.notify(
+                  `Commissioning draft prepared for ${proposal.operationIds.length} reported operation${proposal.operationIds.length === 1 ? '' : 's'}. No method, bounds, or motion was selected.`,
+                  'info',
+                )
+              } else {
+                ctx.ui.notify('Commissioning draft was not prepared. Execution remains locked.', 'warning')
+              }
+            } else if (interpretation.status === 'ready') {
+              ctx.ui.notify('Physical workflow grounded. Execution remains locked.', 'info')
+            } else if (interpretation.questions?.length) {
+              ctx.ui.notify(interpretation.questions[0], 'warning')
+            } else if (interpretation.gaps?.length) {
+              ctx.ui.notify(interpretation.gaps[0].detail, 'warning')
+            } else {
+              ctx.ui.notify(`Physical workflow is ${interpretation.status}.`, 'warning')
+            }
+          } catch (error) {
+            transitionPhysical({ type: 'plan-error', error, requestedIntent: intent }, ctx)
+            ctx.ui.notify(error?.message || String(error), 'error')
+          }
+        },
+      })
+    }
 
     pi.on('before_agent_start', (event) => {
       freshBenchmarkTurn = isFreshBenchmarkRequest(event.prompt)
@@ -286,13 +436,27 @@ export function createTinyEdgePiExtension({
         && event.toolName !== 'list_devices') {
         return { block: true, reason: NEW_INTAKE_TOOL_BLOCK }
       }
-      if (!standalone || registeredTools.includes(event.toolName)) return undefined
+      if (!standalone || registeredTools.includes(event.toolName)
+        || PHYSICAL_TOOL_ALLOWLIST.includes(event.toolName)) return undefined
       return { block: true, reason: 'Only reviewed TinyEdge tools are available in this Harness.' }
     })
 
     pi.on('session_start', async (_event, ctx) => {
-      pi.setActiveTools([...new Set([ASK_CHOICE_TOOL, ...pi.getActiveTools()])])
+      pi.setActiveTools([...new Set([
+        ASK_CHOICE_TOOL,
+        ...(physicalEnabled ? PHYSICAL_TOOL_ALLOWLIST : []),
+        ...pi.getActiveTools(),
+      ])])
       renderHeader(ctx)
+      renderPhysicalWorkflowWidget(ctx)
+      if (physicalEnabled && showHeader) {
+        try {
+          await refreshPhysicalSystem(ctx)
+        } catch {
+          // The persistent widget carries the unavailable state. The Harness
+          // remains usable for cloud work and /physical can retry explicitly.
+        }
+      }
       try {
         const summary = await tokenStore.summary()
         updateHeader({ connected: summary.connected, connecting: false }, ctx)

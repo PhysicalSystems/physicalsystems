@@ -1,6 +1,6 @@
 import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui'
 
-import { VERSION, versionLabel } from '../version.js'
+import { VERSION } from '../version.js'
 
 function toolPayload(value) {
   if (value?.structuredContent && typeof value.structuredContent === 'object') {
@@ -75,12 +75,9 @@ export function summarizeDeviceInventory(value) {
 }
 
 const LOGO = Object.freeze([
-  ' _____ _             _____    _            ',
-  '|_   _(_)_ __  _   _| ____|__| | __ _  ___ ',
-  '  | | | | \'_ \\| | | |  _| / _` |/ _` |/ _ \\',
-  '  | | | | | | | |_| | |__| (_| | (_| |  __/',
-  '  |_| |_|_| |_|\\__, |_____\\__,_|\\__, |\\___|',
-  '                |___/              |___/      ',
+  '┌─ PHYSICAL SYSTEMS ─────────────────────────┐',
+  '│ Local orchestration for real-world hardware │',
+  '└─────────────────────────────────────────────┘',
 ])
 
 function fit(value, width) {
@@ -123,7 +120,7 @@ function deviceRows(groups, width) {
 }
 
 export function createHarnessHeader({ getState, version = VERSION } = {}) {
-  const label = version === VERSION ? versionLabel : `TinyEdge v${version}`
+  const label = `PHYSICAL SYSTEMS · Harness v${version}`
   return (_tui, theme) => ({
     render(width) {
       const state = getState()

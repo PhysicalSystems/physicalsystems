@@ -130,6 +130,128 @@ test('standalone Harness blocks direct shell and non-TinyEdge tools', async () =
   })
 })
 
+test('standalone Harness renders and drives the local physical workflow inside Pi', async () => {
+  const pi = fakePi()
+  const messages = []
+  const widgets = new Map()
+  const calls = []
+  const selections = []
+  const snapshot = {
+    nodeName: 'ubuntu-lab',
+    system: { systemId: 'cup-transfer', displayName: 'Cup transfer workcell', workcellId: 'desk-one' },
+    discoveryBindingDigest: `sha256:${'c'.repeat(64)}`,
+    discovery: {
+      observedAt: '2026-08-31T12:00:00.000Z',
+      snapshotDigest: `sha256:${'a'.repeat(64)}`,
+      summary: {
+        configured: 2, detected: 2, driverReady: 2, calibrationReady: 2, ready: 2, allReady: true,
+      },
+      devices: [
+        {
+          deviceId: 'overhead-camera', kind: 'camera', roles: ['observation'],
+          capabilities: ['capture-frame'], configured: true, detected: true,
+          driverReady: true, calibrationReady: true, ready: true,
+        },
+        {
+          deviceId: 'so101-follower', kind: 'robot', roles: ['robot-follower'],
+          capabilities: ['pick-container'], configured: true, detected: true,
+          driverReady: true, calibrationReady: true, ready: true,
+        },
+      ],
+    },
+    physicalExecutionAuthorized: false,
+  }
+  const response = {
+    interpretation: {
+      status: 'needs-clarification', action: 'transfer',
+      grounding: { objectId: 'cup-one', sourceStationId: 'source', destinationStationId: 'destination' },
+      workflowIntent: null,
+      requiredOperations: [
+        { operationId: 'pick-container', effect: 'actuating' },
+        { operationId: 'place-container', effect: 'actuating' },
+      ],
+      gaps: [{
+        gapId: 'robot-manipulation-commissioning',
+        kind: 'commissioning-required',
+        deviceId: 'so101-follower',
+        operationIds: ['pick-container', 'place-container'],
+        detail: 'The selected robot requires qualified manipulation operations.',
+      }],
+      questions: [],
+      interpretationDigest: `sha256:${'b'.repeat(64)}`, physicalExecutionAuthorized: false,
+    },
+    observationEvidence: { kind: 'live-camera', status: 'observed' },
+    discoverySnapshotDigest: `sha256:${'d'.repeat(64)}`,
+    discoveryBindingDigest: snapshot.discoveryBindingDigest,
+    physicalExecutionAuthorized: false,
+  }
+  const physicalClient = {
+    origin: 'http://127.0.0.1:8876',
+    async inspect() { calls.push('inspect'); return snapshot },
+    async interpret(intent, digest) { calls.push(['interpret', intent, digest]); return response },
+  }
+  createTinyEdgePiExtension({
+    standalone: true,
+    showHeader: true,
+    createConfigImpl: () => ({
+      baseUrl: 'https://tinyedge.ai', mcpUrl: 'https://tinyedge.ai/api/mcp', configDir: 'C:\\test', scopes: ['tinyedge:read'],
+    }),
+    createSecretStoreImpl: () => createMemorySecretStore(),
+    createTokenStoreImpl: () => ({ async summary() { return { connected: false } } }),
+    createPhysicalNodeClientImpl: () => physicalClient,
+    defineToolImpl: (value) => value,
+  })(pi)
+  const ctx = {
+    mode: 'tui',
+    model: { provider: 'test', id: 'model' },
+    ui: {
+      notify(message, level) { messages.push({ message, level }) },
+      setHeader() {},
+      setWidget(name, factory) { widgets.set(name, factory) },
+      async input() { throw new Error('input should not be requested when command has arguments') },
+      async select(question, options) {
+        selections.push({ question, options })
+        return options[0]
+      },
+    },
+  }
+
+  await pi.handlers.get('session_start')({}, ctx)
+  assert.deepEqual(calls, ['inspect'])
+  assert.equal(pi.commands.has('physical'), true)
+  assert.equal(pi.tools.has('inspect_physical_system'), true)
+  assert.equal(pi.tools.has('plan_physical_workflow'), true)
+  assert.equal(pi.activeTools.includes('plan_physical_workflow'), true)
+  assert.equal(pi.handlers.get('tool_call')({ toolName: 'plan_physical_workflow' }), undefined)
+
+  const theme = { fg: (_name, value) => value }
+  let widget = widgets.get('tinyedge-physical-workflow')(null, theme).render(120).join('\n')
+  assert.match(widget, /2\/2 components ready/)
+  assert.match(widget, /✓ overhead-camera/)
+  assert.doesNotMatch(widget, /yellow cup|taught motion/i)
+
+  await pi.commands.get('physical').handler(
+    'Move the cup from source station to destination station.',
+    ctx,
+  )
+  assert.deepEqual(calls, [
+    'inspect',
+    'inspect',
+    ['interpret', 'Move the cup from source station to destination station.', snapshot.discoveryBindingDigest],
+  ])
+  widget = widgets.get('tinyedge-physical-workflow')(null, theme).render(120).join('\n')
+  assert.match(widget, /✓ Intent/)
+  assert.match(widget, /! Plan/)
+  assert.match(widget, /◇ Commission/)
+  assert.match(widget, /— Run/)
+  assert.match(widget, /Resolve reported commissioning gap/)
+  assert.match(widget, /local node must supply an eligible method and safe bounds/)
+  assert.equal(selections.length, 1)
+  assert.match(selections[0].question, /Commissioning gap reported/)
+  assert.match(selections[0].options[0], /gap-bound commissioning draft/)
+  assert.match(messages.at(-1).message, /No method, bounds, or motion was selected/)
+})
+
 test('Harness gives a fresh benchmark request a deterministic question-first tool boundary', async () => {
   assert.equal(isFreshBenchmarkRequest('Can you benchmark my Basler camera on my Raspberry Pi?'), true)
   assert.equal(isFreshBenchmarkRequest('Resume my existing Basler benchmark task'), false)

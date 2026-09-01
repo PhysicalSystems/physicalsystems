@@ -8,11 +8,29 @@ export function nodeVersionSupported(version = process.versions.node) {
   return major > 22 || (major === 22 && minor >= 19)
 }
 
-export function credentialStorageCheck(storage) {
+export function credentialStorageCheck(storage, { availability } = {}) {
   if (storage === 'windows-dpapi') {
     return Object.freeze({
       status: 'pass',
       detail: 'Windows DPAPI encryption scoped to the current user',
+    })
+  }
+  if (storage === 'linux-secret-service') {
+    if (availability === true) {
+      return Object.freeze({
+        status: 'pass',
+        detail: 'Linux Secret Service keyring is available through secret-tool',
+      })
+    }
+    if (availability === false) {
+      return Object.freeze({
+        status: 'fail',
+        detail: 'Linux Secret Service keyring could not be read',
+      })
+    }
+    return Object.freeze({
+      status: 'warn',
+      detail: 'Linux Secret Service adapter configured; keyring availability not verified',
     })
   }
   if (storage === 'memory') {
@@ -48,7 +66,17 @@ export async function doctorCommand({
     nodeVersionSupported(nodeVersion) ? 'pass' : 'fail',
     nodeVersionSupported(nodeVersion) ? nodeVersion : `${nodeVersion}; requires >=22.19.0`,
   )
-  const credentialStorage = credentialStorageCheck(tokenStore.storage)
+
+  let stored = null
+  let storageError = null
+  try {
+    stored = await tokenStore.summary()
+  } catch (error) {
+    storageError = safeErrorMessage(error)
+  }
+  const credentialStorage = credentialStorageCheck(tokenStore.storage, {
+    availability: storageError === null,
+  })
   record('Credential storage', credentialStorage.status, credentialStorage.detail)
 
   try {
@@ -58,8 +86,9 @@ export async function doctorCommand({
     record('OAuth discovery', 'fail', safeErrorMessage(error))
   }
 
-  const stored = await tokenStore.summary()
-  if (!stored.connected) {
+  if (storageError !== null) {
+    record('Saved connection', 'fail', `could not read credentials: ${storageError}`)
+  } else if (!stored.connected) {
     record('Saved connection', 'warn', 'not logged in')
   } else {
     record('Saved connection', stored.expired && !stored.canRefresh ? 'fail' : 'pass', 'credentials present and redacted')
