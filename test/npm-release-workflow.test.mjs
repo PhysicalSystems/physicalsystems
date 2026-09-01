@@ -646,6 +646,23 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.match(packageChecker, /npm exec verification must start without a local dependency tree/)
   assert.match(packageChecker, /cwd: npmExecRoot/)
   assert.match(packageChecker, /npm exec must materialize the packed artifact in its isolated cache/)
+  const npmExecVerificationStart = packageChecker.indexOf('const npxReportedVersion = runNpm([')
+  const npmExecVerificationEnd = packageChecker.indexOf(
+    'assert.equal(npxReportedVersion',
+    npmExecVerificationStart,
+  )
+  assert.ok(npmExecVerificationStart >= 0 && npmExecVerificationEnd > npmExecVerificationStart)
+  const npmExecVerification = packageChecker.slice(
+    npmExecVerificationStart,
+    npmExecVerificationEnd,
+  )
+  assert.match(npmExecVerification, /'--offline'/)
+  assert.match(npmExecVerification, /'--no-audit'/)
+  assert.match(npmExecVerification, /'--no-fund'/)
+  assert.match(npmExecVerification, /'--timing'/)
+  assert.match(npmExecVerification, /timeout: NPM_EXEC_TIMEOUT_MS/)
+  assert.doesNotMatch(npmExecVerification, /'--prefer-offline'/)
+  assert.doesNotMatch(npmExecVerification, /'--ignore-scripts'/)
   assert.match(packageChecker, /'node_modules\/@tinyedge\/pi-runtime'/)
   assert.match(packageChecker, /function commandShim\(directory\)/)
   assert.match(packageChecker, /assertCommandShimTargets\(localShim, localEntry/)
@@ -659,7 +676,20 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.match(packageChecker, /check-linux-harness-pty\.py/)
   assert.match(packageChecker, /createLinuxSecretServiceSecretStore/)
   assert.match(packageChecker, /const NPM_INSTALL_TIMEOUT_MS = 10 \* 60_000/)
-  assert.equal((packageChecker.match(/timeout: NPM_INSTALL_TIMEOUT_MS/g) || []).length, 3)
+  assert.match(
+    packageChecker,
+    /const NPM_EXEC_TIMEOUT_MS = process\.platform === 'win32' && process\.arch === 'x64'[\s\S]{0,80}\? 15 \* 60_000[\s\S]{0,80}: NPM_INSTALL_TIMEOUT_MS/,
+  )
+  assert.equal((packageChecker.match(/timeout: NPM_INSTALL_TIMEOUT_MS/g) || []).length, 2)
+  assert.equal((packageChecker.match(/timeout: NPM_EXEC_TIMEOUT_MS/g) || []).length, 1)
+  assert.match(packageChecker, /phase: 'local npm install'/)
+  assert.match(packageChecker, /phase: 'isolated npm exec'/)
+  assert.match(packageChecker, /phase: 'global npm install'/)
+  assert.match(
+    packageChecker,
+    /if \(result\.error\)[\s\S]{0,500}result\.error\.message[\s\S]{0,500}result\.stdout\?\.trim\(\)[\s\S]{0,500}result\.stderr\?\.trim\(\)/,
+  )
+  assert.match(packageChecker, /Completed \$\{phase\} in \$\{elapsedMs\} ms/)
 })
 
 test('the published tinyedge package carries the reviewed dependency closure', () => {

@@ -113,24 +113,43 @@ const REVIEWED_RUNTIME_LICENSES = new Set([
   'MIT',
 ])
 const NPM_INSTALL_TIMEOUT_MS = 10 * 60_000
+const NPM_EXEC_TIMEOUT_MS = process.platform === 'win32' && process.arch === 'x64'
+  ? 15 * 60_000
+  : NPM_INSTALL_TIMEOUT_MS
 
 function run(command, args, options = {}) {
+  const phase = options.phase
+  const timeout = options.timeout ?? 300_000
+  const startedAt = Date.now()
+  if (phase) console.log(`Starting ${phase} (timeout ${timeout} ms)`)
   const result = spawnSync(command, args, {
     cwd: options.cwd || REPOSITORY_ROOT,
     encoding: 'utf8',
     env: { ...process.env, NO_COLOR: '1', ...options.env },
     maxBuffer: options.maxBuffer || 64 * 1024 * 1024,
-    timeout: options.timeout || 300_000,
+    timeout,
     windowsHide: true,
   })
-  if (result.error) throw result.error
+  const elapsedMs = Date.now() - startedAt
+  if (result.error) {
+    const error = new Error([
+      `${phase || 'command'} failed after ${elapsedMs} ms: ${result.error.message}`,
+      `${command} ${args.join(' ')}`,
+      `timeout: ${timeout} ms`,
+      result.stdout?.trim(),
+      result.stderr?.trim(),
+    ].filter(Boolean).join('\n'), { cause: result.error })
+    error.code = result.error.code
+    throw error
+  }
   if (result.status !== 0) {
     throw new Error([
-      `${command} ${args.join(' ')} exited with ${result.status}`,
+      `${phase || 'command'} failed after ${elapsedMs} ms: ${command} ${args.join(' ')} exited with ${result.status}`,
       result.stdout?.trim(),
       result.stderr?.trim(),
     ].filter(Boolean).join('\n'))
   }
+  if (phase) console.log(`Completed ${phase} in ${elapsedMs} ms`)
   return result.stdout.trim()
 }
 
@@ -874,6 +893,7 @@ async function verifyRelease(artifactDirectory) {
     ], {
       cwd: temporaryRoot,
       env: { npm_config_cache: path.join(temporaryRoot, 'local-npm-cache') },
+      phase: 'local npm install',
       timeout: NPM_INSTALL_TIMEOUT_MS,
     })
 
@@ -940,6 +960,9 @@ async function verifyRelease(artifactDirectory) {
       'exec',
       '--yes',
       '--offline',
+      '--no-audit',
+      '--no-fund',
+      '--timing',
       '--package',
       npmFileSpec(tinyedgeArtifact.file),
       '--',
@@ -948,7 +971,8 @@ async function verifyRelease(artifactDirectory) {
     ], {
       cwd: npmExecRoot,
       env: { npm_config_cache: npmExecCache },
-      timeout: NPM_INSTALL_TIMEOUT_MS,
+      phase: 'isolated npm exec',
+      timeout: NPM_EXEC_TIMEOUT_MS,
     })
     assert.equal(npxReportedVersion, manifest.version, 'npm exec must launch the exact packed artifact')
     const npmExecInstalls = path.join(npmExecCache, '_npx')
@@ -970,6 +994,7 @@ async function verifyRelease(artifactDirectory) {
     ], {
       cwd: temporaryRoot,
       env: { npm_config_cache: path.join(temporaryRoot, 'global-npm-cache') },
+      phase: 'global npm install',
       timeout: NPM_INSTALL_TIMEOUT_MS,
     })
     const globalTinyEdgeDirectory = globalPackageDirectory(globalPrefix)
