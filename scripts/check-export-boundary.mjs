@@ -114,7 +114,7 @@ assert.equal(
   licensePending ? 'UNLICENSED' : 'Apache-2.0',
   'workspace package license must match the source-license state',
 )
-for (const packageFile of [...tinyedgePackageFiles, runtimePackageFile]) {
+for (const packageFile of tinyedgePackageFiles) {
   const manifest = JSON.parse(readFileSync(path.join(root, packageFile), 'utf8'))
   assert.equal(manifest.repository?.url, expectedRepository, packageFile + ' repository identity')
   assert.equal(manifest.bugs?.url, expectedBugs, packageFile + ' issue tracker identity')
@@ -177,6 +177,14 @@ for (const packageFile of tinyedgePackageFiles) {
   }
 }
 const runtimeManifest = JSON.parse(readFileSync(path.join(root, runtimePackageFile), 'utf8'))
+assert.equal(runtimeManifest.repository?.url, frozenRepository, runtimePackageFile + ' frozen repository identity')
+assert.equal(runtimeManifest.bugs?.url, frozenBugs, runtimePackageFile + ' frozen issue tracker identity')
+assert.equal(
+  runtimeManifest.homepage,
+  'https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi-runtime#readme',
+  runtimePackageFile + ' frozen homepage identity',
+)
+assert.equal(runtimeManifest.version, '0.84.2-tinyedge.1', runtimePackageFile + ' must retain its immutable published version')
 assert.equal(runtimeManifest.license, 'MIT', runtimePackageFile + ' must preserve the upstream MIT license')
 if (npmReleasePending) {
   assert.equal(runtimeManifest.private, true, runtimePackageFile + ' must remain private while npm publication is pending')

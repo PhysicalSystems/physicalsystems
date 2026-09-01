@@ -126,7 +126,7 @@ jobs:
             assert.equal(legacy.private, true)
           }
           assert.equal(runtime.engines?.node, '>=22.19.0')
-          assert.equal(runtime.repository?.url, 'git+https://github.com/PhysicalSystems/tinyedge-edge.git')
+          assert.equal(runtime.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
           assert.equal(tinyedge.dependencies?.['@tinyedge/pi-runtime'], expectedRuntimeVersion)
           assert.equal(tinyedge.dependencies?.['@tinyedge/cli'], undefined)
 

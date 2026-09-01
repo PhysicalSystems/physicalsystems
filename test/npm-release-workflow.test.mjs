@@ -37,6 +37,7 @@ const packageChecker = readFileSync(
 )
 const cliPackage = JSON.parse(readFileSync(path.join(root, 'packages/cli/package.json'), 'utf8'))
 const cliPackageLock = readFileSync(path.join(root, 'packages/cli/package-lock.json'), 'utf8')
+const parsedCliPackageLock = JSON.parse(cliPackageLock)
 const cliShrinkwrap = readFileSync(path.join(root, 'packages/cli/npm-shrinkwrap.json'), 'utf8')
 const piRuntimePackage = JSON.parse(
   readFileSync(path.join(root, 'packages/pi-runtime/package.json'), 'utf8'),
@@ -54,7 +55,6 @@ const legacyPackages = [
   JSON.parse(readFileSync(path.join(root, 'packages/npx/package.json'), 'utf8')),
   JSON.parse(readFileSync(path.join(root, 'packages/pi/package.json'), 'utf8')),
 ]
-const releasePackages = [cliPackage, piRuntimePackage]
 const packedReadme = readFileSync(path.join(root, 'packages/cli/README.md'), 'utf8')
 
 function writeFixtureFile(fixtureRoot, relative, contents) {
@@ -148,9 +148,10 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
   writeFixtureFile(fixtureRoot, 'packages/pi-runtime/package.json', JSON.stringify({
     private: npmReleaseIsPending,
     license: 'MIT',
-    repository,
-    bugs,
-    homepage: 'https://github.com/PhysicalSystems/tinyedge-edge/tree/main/packages/pi-runtime#readme',
+    repository: frozenRepository,
+    bugs: frozenBugs,
+    homepage: 'https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi-runtime#readme',
+    version: '0.84.2-tinyedge.1',
     files: runtimeLegalFiles,
   }, null, 2) + '\n')
   for (const legalFile of runtimeLegalFiles) {
@@ -172,9 +173,10 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
     writeFixtureFile(fixtureRoot, 'packages/pi-runtime/package.json', JSON.stringify({
       private: npmReleaseIsPending,
       license: 'MIT',
-      repository,
-      bugs,
-      homepage: 'https://github.com/PhysicalSystems/tinyedge-edge/tree/main/packages/pi-runtime#readme',
+      repository: frozenRepository,
+      bugs: frozenBugs,
+      homepage: 'https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi-runtime#readme',
+      version: '0.84.2-tinyedge.1',
       files: runtimeLegalFiles,
     }, null, 2) + '\n')
   }
@@ -678,6 +680,20 @@ test('the published tinyedge package carries the reviewed dependency closure', (
 test('the compatibility runtime is an exact MIT artifact without default native extras', () => {
   assert.equal(piRuntimePackage.name, '@tinyedge/pi-runtime')
   assert.equal(piRuntimePackage.version, '0.84.2-tinyedge.1')
+  assert.equal(piRuntimePackage.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
+  assert.equal(piRuntimePackage.homepage, 'https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/pi-runtime#readme')
+  assert.equal(piRuntimePackage.bugs?.url, 'https://github.com/TinyEdgeAI/tinyedge-edge/issues')
+  assert.deepEqual(piRuntimePackage.publishConfig, { access: 'public' })
+  const lockedRuntime = parsedCliPackageLock.packages['node_modules/@tinyedge/pi-runtime']
+  assert.equal(lockedRuntime.version, '0.84.2-tinyedge.1')
+  assert.equal(
+    lockedRuntime.resolved,
+    'https://registry.npmjs.org/@tinyedge/pi-runtime/-/pi-runtime-0.84.2-tinyedge.1.tgz',
+  )
+  assert.equal(
+    lockedRuntime.integrity,
+    'sha512-k51lJ+KuNHodGgwBpgQuo+7VyKmFuzToGVBIdmjJgcuEJ7wbIFvMD+456ApkuxS/9/zcqXnHu8MTD7CVrx9O7A==',
+  )
   assert.notEqual(piRuntimePackage.private, true)
   assert.equal(piRuntimePackage.license, 'MIT')
   assert.equal(piRuntimePackage.bin, undefined)
@@ -721,14 +737,12 @@ test('the compatibility runtime is an exact MIT artifact without default native 
   assert.match(workflow, /lockedRuntime\?\.integrity, runtimeArtifact\.integrity/)
 })
 
-test('the clean export uses only the standalone repository identity', () => {
+test('the clean export uses the standalone identity while preserving the frozen runtime artifact', () => {
   const expectedRepository = 'git+https://github.com/PhysicalSystems/tinyedge-edge.git'
   const expectedBugs = 'https://github.com/PhysicalSystems/tinyedge-edge/issues'
-  for (const manifest of releasePackages) {
-    assert.equal(manifest.repository.url, expectedRepository)
-    assert.equal(manifest.bugs.url, expectedBugs)
-    assert.deepEqual(manifest.publishConfig, { access: 'public' })
-  }
+  assert.equal(cliPackage.repository.url, expectedRepository)
+  assert.equal(cliPackage.bugs.url, expectedBugs)
+  assert.deepEqual(cliPackage.publishConfig, { access: 'public' })
   assert.match(workflow, /GITHUB_REPOSITORY" = "PhysicalSystems\/tinyedge-edge"/)
   assert.match(releaseGuide, /repository `tinyedge-edge`/)
   assert.match(packageChecker, /PhysicalSystems\/tinyedge-edge\.git/)

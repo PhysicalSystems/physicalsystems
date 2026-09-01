@@ -31,7 +31,7 @@
         },
         {
           "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "96b197f9f3e151aa0e0bbcab7cd5c2e44f669738524aca950b8e073642534e04"
+          "value": "b762bc9110a8083371d3bd536bc618eeaafb397221641f50bce03289258d289e"
         }
       ]
     },
@@ -3683,7 +3683,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "0533c98a54f6562fc87ae80f62509d279b8b6c522a45100ecb127ae37a67aaa99b210436e9fe54291716cb7bd1e5e104b9c15dbdd774629b4af344ac542389f6"
+          "content": "939d6527e2ae347a1d1a0c01a6042ea3eed5c8a985bb34e81950487668c981cb8427bc1b205bcc0fee39e80a64bb14bff7fcdca979c7bbc3130fb095af1f4eec"
         }
       ],
       "licenses": [
@@ -3701,7 +3701,7 @@
           "hashes": [
             {
               "alg": "SHA-512",
-              "content": "0533c98a54f6562fc87ae80f62509d279b8b6c522a45100ecb127ae37a67aaa99b210436e9fe54291716cb7bd1e5e104b9c15dbdd774629b4af344ac542389f6"
+              "content": "939d6527e2ae347a1d1a0c01a6042ea3eed5c8a985bb34e81950487668c981cb8427bc1b205bcc0fee39e80a64bb14bff7fcdca979c7bbc3130fb095af1f4eec"
             }
           ]
         }
@@ -3709,7 +3709,7 @@
       "properties": [
         {
           "name": "tinyedge:npm:integrity",
-          "value": "sha512-BTPJilT2Vi/IeugPYlCdJ5uLbFIqRRAOyxJ643pnqqmbIQQ26f5UKRcWy3vR5eEEucFdvdd0YptK80SsVCOJ9g=="
+          "value": "sha512-k51lJ+KuNHodGgwBpgQuo+7VyKmFuzToGVBIdmjJgcuEJ7wbIFvMD+456ApkuxS/9/zcqXnHu8MTD7CVrx9O7A=="
         },
         {
           "name": "tinyedge:npm:package-path",
