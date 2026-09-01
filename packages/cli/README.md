@@ -7,33 +7,35 @@ one package contains the client library, Pi extension, and user-facing command s
 Ordinary Harness releases no longer require matching `@tinyedge/cli` and
 `@tinyedge/pi` publications.
 
-The current npm package boundary remains Windows-only. The source contains an
-experimental Linux Secret Service adapter, but Linux installation remains
-unsupported until an exact clean-user package canary proves the native keyring
-and command route end to end. This is not a Raspberry Pi support claim.
+Version `0.1.5` expands the desktop package boundary from Windows to Ubuntu
+22.04 and 24.04 desktop x64. The Ubuntu route uses the session's native Secret Service keyring
+and requires `secret-tool`, D-Bus, an unlocked desktop keyring, and `xdg-open`.
+Headless Linux, Raspberry Pi, other Linux distributions and architectures, and
+macOS remain outside the qualified support boundary.
 
 Source-code availability is not registry evidence. Before using the commands
-below, require `npm view tinyedge@0.1.4 version --json` to return
-`"0.1.4"`.
+below, require `npm view tinyedge@0.1.5 version --json` to return
+`"0.1.5"`.
 
-Run the exact `0.1.4` package without installing a persistent command:
+Run the exact `0.1.5` package without installing a persistent command:
 
-```powershell
-npx tinyedge@0.1.4
+```bash
+npx tinyedge@0.1.5
 ```
 
 `npx` may cache package files, but it does not add a global `tinyedge` command.
 For a persistent command in new terminals, install the exact package globally:
 
-```powershell
-npm install --global tinyedge@0.1.4
+```bash
+npm install --global tinyedge@0.1.5
 tinyedge
 ```
 
 Unversioned commands follow npm's current dist-tags and are not evidence for a
-specific release. The `0.1.3` release used separate `tinyedge`,
+specific release. Version `0.1.4` was the Windows-only one-package preview. The
+`0.1.3` release used separate `tinyedge`,
 `@tinyedge/cli`, and `@tinyedge/pi` artifacts; those immutable versions remain
-available for compatibility but are not part of the `0.1.4` release graph.
+available for compatibility but are not part of the `0.1.5` release graph.
 Historical package checks did not validate production OAuth, login, or live
 MCP execution.
 
@@ -122,12 +124,10 @@ the current Windows user. Only ciphertext is stored beneath
 `%APPDATA%/TinyEdge/cli/secrets`; secret plaintext is never placed in process
 arguments or printed.
 
-The experimental Linux source path uses `secret-tool` directly, without a
-shell, and sends the secret only over standard input. It fails closed when the
-helper, Secret Service, or an unlocked keyring is unavailable; there is no
-plaintext fallback. Package metadata does not enable Linux yet. An exact
-clean-user desktop canary is required before changing that boundary. Headless
-Linux, Raspberry Pi, and macOS remain unsupported.
+On Ubuntu desktop, credentials are stored through `secret-tool` directly,
+without a shell, and secret values are sent only over standard input. The
+client fails closed when the helper, Secret Service, or an unlocked keyring is
+unavailable; there is no plaintext fallback or headless file-store fallback.
 
 TinyEdge OAuth authorizes access to the TinyEdge MCP service. Pi model-provider
 authentication is separate and is managed by the provider commands above.
@@ -151,11 +151,12 @@ not disable inference through the model deliberately selected for the session.
 
 ## Release and validation boundaries
 
-- Source package metadata accepts Windows only. The guarded Linux adapter is
-  preparatory source work and is not an npm support claim.
-- Linux needs an exact clean-user desktop package canary with an unlocked
-  Secret Service keyring before the platform gate changes. Headless Linux,
-  Raspberry Pi, and macOS remain unsupported.
+- Package metadata accepts Windows and Linux. Release qualification covers
+  Windows x64, native Windows ARM64, and Ubuntu 22.04/24.04 desktop x64; it does not imply
+  support for headless Linux, Raspberry Pi, other Linux targets, or macOS.
+- Ubuntu qualification uses the exact packed artifact for normal local,
+  global, and npm-exec installs, native Secret Service storage, and an
+  interactive pseudo-terminal Harness render/input/exit smoke test.
 - Packed-artifact, native-binding, and command-shim checks do not validate
   production OAuth, provider onboarding, MCP execution, or browser approval.
   Those paths require separate canaries with disposable accounts.

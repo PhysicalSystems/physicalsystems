@@ -15,6 +15,7 @@ import {
   refreshAccessToken,
   registerOAuthClient,
 } from '../src/auth/oauth.js'
+import { openBrowser } from '../src/auth/open-browser.js'
 import { redactSecrets, redactText } from '../src/auth/redact.js'
 import { createTokenStore } from '../src/auth/token-store.js'
 import {
@@ -25,6 +26,45 @@ import {
 } from '../src/auth/secret-store.js'
 import { loginCommand, validateGrantedScopes } from '../src/commands/login.js'
 import { logoutCommand } from '../src/commands/logout.js'
+
+test('Linux browser handoff invokes xdg-open directly with the validated URL', () => {
+  const calls = []
+  let unrefCalled = false
+  openBrowser('https://tinyedge.ai/oauth/authorize?scope=tinyedge%3Aread', {
+    platform: 'linux',
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options })
+      return { unref() { unrefCalled = true } }
+    },
+  })
+
+  assert.deepEqual(calls, [{
+    command: 'xdg-open',
+    args: ['https://tinyedge.ai/oauth/authorize?scope=tinyedge%3Aread'],
+    options: {
+      detached: true,
+      shell: false,
+      stdio: 'ignore',
+      windowsHide: true,
+    },
+  }])
+  assert.equal(unrefCalled, true)
+})
+
+test('browser handoff rejects insecure non-loopback URLs before spawning', () => {
+  let spawned = false
+  assert.throws(
+    () => openBrowser('http://example.com/oauth/authorize', {
+      platform: 'linux',
+      spawnImpl() {
+        spawned = true
+        return {}
+      },
+    }),
+    /Refusing to open an insecure authorization URL/,
+  )
+  assert.equal(spawned, false)
+})
 
 test('PKCE challenge matches the RFC 7636 S256 example', () => {
   const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'

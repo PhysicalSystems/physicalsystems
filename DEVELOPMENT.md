@@ -6,9 +6,11 @@ alternative to the published npm release. It does not change npm's `latest` or
 
 ## Requirements
 
-- Windows x64 or Windows ARM64.
+- Windows x64, Windows ARM64, or Ubuntu 22.04/24.04 desktop x64.
 - Node.js 22.19.0 or newer.
 - Git.
+- On Ubuntu: `secret-tool`, D-Bus, an unlocked Secret Service keyring, and
+  `xdg-open` in the desktop session.
 - A TinyEdge account and a supported model-provider credential for
   authenticated use.
 
@@ -22,13 +24,25 @@ npm test
 npm run doctor
 ```
 
+On Ubuntu desktop, install the native helpers and use a POSIX cache path:
+
+```bash
+sudo apt-get update
+sudo apt-get install --yes libsecret-tools dbus-x11 gnome-keyring xdg-utils
+git clone https://github.com/PhysicalSystems/tinyedge-edge.git
+cd tinyedge-edge
+npx --yes npm@11.19.0 --prefix packages/cli run bootstrap:pi-runtime -- --cache /tmp/tinyedge-pi-runtime-cache --install-cli
+npm test
+npm run doctor
+```
+
 The pinned bootstrap packs the local audited Pi compatibility runtime twice,
 verifies byte identity against the CLI lock, seeds an isolated npm cache, and
 installs the CLI from the checked-out runtime instead of consuming registry
 runtime bytes. It does not stage or publish any package.
 
-`doctor` should confirm Node.js, Windows DPAPI, OAuth discovery, and MCP
-discovery. An absent TinyEdge login is a warning during this first check.
+`doctor` should confirm Node.js, the platform credential store, OAuth discovery,
+and MCP discovery. An absent TinyEdge login is a warning during this first check.
 
 ## Launch
 
@@ -59,12 +73,13 @@ Use `npm start` when you intend to run the checked-out source. Use
 `npx --yes tinyedge` when you intend to run the current public npm release.
 
 Do not copy credentials into an issue, terminal transcript, or chat. Windows
-secrets are stored inside the current user's DPAPI boundary.
+uses the current user's DPAPI boundary; Ubuntu uses the unlocked Secret Service
+keyring and has no plaintext fallback.
 
 ## What this proves
 
 This proves that the reviewed source can install and launch on that computer.
 It does not by itself prove the current public npm bytes, a global command
 installation, production OAuth completion, provider quota, workload execution,
-or Windows support beyond the machine actually tested. Record source and
+or platform support beyond the machine actually tested. Record source and
 release evidence separately.

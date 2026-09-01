@@ -231,9 +231,9 @@ export const TARGETS = Object.freeze({
     key: 'tinyedge',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: 'b762bc9110a8083371d3bd536bc618eeaafb397221641f50bce03289258d289e',
+    shrinkwrapSha256: '040c06b88aae480b84339200453e7178724a1a322efce778903f949dd3818af3',
     rootName: 'tinyedge',
-    rootVersion: '0.1.4',
+    rootVersion: '0.1.5',
     // Direct publication is limited to preview through the protected OIDC
     // workflow. Promotion to latest remains a separate maintainer action.
     rootLicense: 'Apache-2.0',
@@ -250,7 +250,7 @@ export const WORKSPACE_TARGET = Object.freeze({
   rootVersion: '0.0.0',
   rootLicense: 'Apache-2.0',
   packageRoots: Object.freeze([
-    Object.freeze({ name: 'tinyedge', version: '0.1.4', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
+    Object.freeze({ name: 'tinyedge', version: '0.1.5', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
     Object.freeze({ name: '@tinyedge/pi-runtime', version: '0.84.2-tinyedge.1', license: 'MIT', packageJsonPath: 'packages/pi-runtime/package.json' }),
   ]),
 })

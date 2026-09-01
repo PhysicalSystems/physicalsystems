@@ -18,7 +18,7 @@ test('Pi runtime bootstrap gives cold hosted-runner installs ten bounded minutes
 function fixtures() {
   const manifest = {
     name: 'tinyedge',
-    version: '0.1.4',
+    version: '0.1.5',
     license: 'Apache-2.0',
     dependencies: {
       [runtimeName]: runtimeVersion,

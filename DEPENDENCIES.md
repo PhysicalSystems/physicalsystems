@@ -24,8 +24,8 @@ correctness boundary, not an optimization: npm 12 ignores a dependency
 package's shrinkwrap, so relying on the shrinkwrap alone can resolve a
 different graph. Release verification installs only the packed `tinyedge`
 tarball in offline mode with empty caches under npm 11.19.0 and npm 12.0.2 on
-Windows x64 and ARM64, then compares every installed name/version identity with
-the reviewed lock.
+Windows x64, Windows ARM64, and Ubuntu 22.04/24.04 desktop x64, then compares every
+installed name/version identity with the reviewed lock.
 
 | License | Runtime artifacts |
 | --- | ---: |

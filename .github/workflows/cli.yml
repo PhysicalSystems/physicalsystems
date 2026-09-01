@@ -11,21 +11,30 @@ permissions:
 
 jobs:
   test:
-    # Windows exercises the supported package route and a real DPAPI round
-    # trip. Linux exercises only the preparatory source adapter against an
-    # ephemeral Secret Service; package metadata remains Windows-only.
-    name: test (${{ matrix.platform }} ${{ matrix.architecture }})
+    # Every supported desktop route exercises a packed npm artifact.
+    # Linux additionally proves fail-closed Secret Service storage and a real
+    # interactive Harness render/input/exit cycle through a pseudo-terminal.
+    # Keep the three established required-check contexts stable. Ubuntu 22.04
+    # is additive; the established Linux context remains the Ubuntu 24.04 job.
+    name: test (${{ matrix.check_name }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - architecture: x64
+            check_name: windows x64
             platform: windows
             runner: windows-latest
           - architecture: arm64
+            check_name: windows arm64
             platform: windows
             runner: windows-11-arm
           - architecture: x64
+            check_name: ubuntu-22.04 x64
+            platform: linux
+            runner: ubuntu-22.04
+          - architecture: x64
+            check_name: linux x64
             platform: linux
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
@@ -48,17 +57,18 @@ jobs:
           npm install --global "npm@11.19.0"
           if ((npm --version) -ne '11.19.0') { throw 'Expected npm 11.19.0' }
       - name: Bootstrap the local Pi runtime and install the CLI offline
-        if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
           npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
-      - name: Exercise experimental Linux Secret Service adapter
+      - name: Exercise Linux Secret Service adapter
         if: matrix.platform == 'linux'
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install --yes dbus-x11 gnome-keyring libsecret-tools
+          sudo apt-get install --yes dbus-x11 gnome-keyring libsecret-tools xdg-utils
+          command -v secret-tool
+          command -v xdg-open
           runtime_directory="$(mktemp -d)"
           export XDG_RUNTIME_DIR="$runtime_directory"
           trap 'rm -rf "$runtime_directory"' EXIT
@@ -67,15 +77,35 @@ jobs:
             TINYEDGE_LINUX_SECRET_SERVICE_CANARY=1 node --test packages/cli/test/linux-secret-service-canary.test.js
           '
       - run: npm run check:legal
-        if: matrix.platform == 'windows'
-      - name: Verify experimental Linux source SBOM metadata
-        if: matrix.platform == 'linux'
-        run: node scripts/legal/sbom.mjs --check
       - run: npm --prefix packages/cli run check:pi-sdk
-        if: matrix.platform == 'windows'
       - run: npm --prefix packages/cli run check
       - run: npm --prefix packages/cli test
-        if: matrix.platform == 'windows'
       - run: node --test test/npm-release-workflow.test.mjs
       - run: npm --prefix packages/cli run check:release-packages
         if: matrix.platform == 'windows'
+      - name: Verify the packed Linux package and interactive Harness
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          runtime_directory="$(mktemp -d)"
+          export XDG_RUNTIME_DIR="$runtime_directory"
+          trap 'rm -rf "$runtime_directory"' EXIT
+          dbus-run-session -- bash -euo pipefail -c '
+            eval "$(printf "%s" "tinyedge-ephemeral-keyring" | gnome-keyring-daemon --unlock --components=secrets)"
+            npm --prefix packages/cli run check:release-packages
+          '
+      - name: Pack a review candidate for the Ubuntu laptop canary
+        if: matrix.platform == 'windows' && matrix.architecture == 'x64'
+        shell: pwsh
+        run: |
+          $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE 'candidate-artifacts'
+          npm --prefix packages/cli run release:pack -- $artifactDirectory
+      - name: Upload the review candidate for the Ubuntu laptop canary
+        if: matrix.platform == 'windows' && matrix.architecture == 'x64'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tinyedge-0.1.5-ubuntu-canary-${{ github.sha }}
+          path: candidate-artifacts
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
