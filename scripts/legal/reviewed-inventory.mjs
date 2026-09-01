@@ -231,7 +231,7 @@ export const TARGETS = Object.freeze({
     key: 'tinyedge',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: '96b197f9f3e151aa0e0bbcab7cd5c2e44f669738524aca950b8e073642534e04',
+    shrinkwrapSha256: 'b762bc9110a8083371d3bd536bc618eeaafb397221641f50bce03289258d289e',
     rootName: 'tinyedge',
     rootVersion: '0.1.4',
     // Direct publication is limited to preview through the protected OIDC

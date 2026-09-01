@@ -564,7 +564,7 @@ function validatePackageContracts(packages) {
     assert.equal(metadata.version, frozen.version)
     assert.equal(metadata.private, true, `${frozen.name}@${frozen.version} must remain frozen source`)
   }
-  assert.equal(runtime.metadata.repository?.url, 'git+https://github.com/PhysicalSystems/tinyedge-edge.git')
+  assert.equal(runtime.metadata.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
   assert.deepEqual(
     runtime.metadata.publishConfig,
     { access: 'public' },
