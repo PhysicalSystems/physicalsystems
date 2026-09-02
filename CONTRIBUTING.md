@@ -1,7 +1,7 @@
-# Contributing to TinyEdge Edge
+# Contributing to Physical Systems
 
-Thanks for helping improve the TinyEdge edge client. This repository contains
-the public device-side client and release tooling. Read [BOUNDARY.md](BOUNDARY.md)
+Thanks for helping improve the Physical Systems Harness. This repository
+contains the public operator client and release tooling. Read [BOUNDARY.md](BOUNDARY.md)
 before proposing a change; hosted control-plane, scheduling, billing, fleet,
 and optimization-policy implementations are intentionally out of scope.
 
@@ -11,7 +11,7 @@ and optimization-policy implementations are intentionally out of scope.
   boundary change, open an issue before investing in an implementation.
 - Never include credentials, access tokens, customer or fleet data, private
   service code, local user paths, session transcripts, or model artifacts.
-- Preserve Apache-2.0 for TinyEdge-authored code and MIT plus upstream notices
+- Preserve Apache-2.0 for project-authored code and MIT plus upstream notices
   for the Pi compatibility runtime. Do not edit hash-verified upstream runtime
   payloads directly without a separately reviewed provenance update.
 - Keep platform claims limited to Windows desktop and qualified Ubuntu desktop

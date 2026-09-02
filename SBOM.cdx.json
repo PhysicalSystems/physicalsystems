@@ -5,8 +5,8 @@
   "metadata": {
     "component": {
       "type": "application",
-      "bom-ref": "pkg:npm/tinyedge-edge-workspace@0.0.0",
-      "name": "tinyedge-edge-workspace",
+      "bom-ref": "pkg:npm/physicalsystems-workspace@0.0.0",
+      "name": "physicalsystems-workspace",
       "version": "0.0.0",
       "licenses": [
         {
@@ -15,7 +15,7 @@
           }
         }
       ],
-      "purl": "pkg:npm/tinyedge-edge-workspace@0.0.0",
+      "purl": "pkg:npm/physicalsystems-workspace@0.0.0",
       "properties": [
         {
           "name": "tinyedge:release:source-license-state",
@@ -27,7 +27,7 @@
         },
         {
           "name": "tinyedge:sbom:package-json-sha256",
-          "value": "29e193dfcd01ebd64b8f7dbc34eeb0980e52d4292d88be8e7441c6f3c6809f22"
+          "value": "df00e6969f1be303316824997c84040c7475be315f4b19fbaf1b4429231f619a"
         }
       ]
     },
@@ -50,7 +50,7 @@
       },
       {
         "name": "tinyedge:sbom:composition",
-        "value": "tinyedge-edge-workspace@0.0.0 -> physicalsystems plus its audited compatibility runtime"
+        "value": "physicalsystems-workspace@0.0.0 -> physicalsystems plus its audited compatibility runtime"
       },
       {
         "name": "tinyedge:sbom:default-install",
@@ -6446,7 +6446,7 @@
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "6dbf3a1a48bed59b8b5be8f4a53e879864b27e7afe18cffecbe7eb6df746f3d0"
+          "value": "ee585de630e222b88f31c73cbcd0227c6430367de0fa7e86a42734847bae493b"
         },
         {
           "name": "tinyedge:workspace:package-root",
@@ -8306,6 +8306,13 @@
       ]
     },
     {
+      "ref": "pkg:npm/physicalsystems-workspace@0.0.0",
+      "dependsOn": [
+        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
+        "pkg:npm/physicalsystems@0.2.0"
+      ]
+    },
+    {
       "ref": "pkg:npm/physicalsystems@0.2.0",
       "dependsOn": [
         "pkg:npm/%40earendil-works/pi-tui@0.84.2",
@@ -8370,13 +8377,6 @@
     {
       "ref": "pkg:npm/strnum@2.3.0",
       "dependsOn": []
-    },
-    {
-      "ref": "pkg:npm/tinyedge-edge-workspace@0.0.0",
-      "dependsOn": [
-        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
-        "pkg:npm/physicalsystems@0.2.0"
-      ]
     },
     {
       "ref": "pkg:npm/ts-algebra@2.0.0",

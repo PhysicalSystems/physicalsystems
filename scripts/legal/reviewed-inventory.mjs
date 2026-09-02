@@ -23,7 +23,7 @@ export const APACHE_2_TEMPLATE = Object.freeze({
 
 export const NOTICE_TEMPLATE = Object.freeze({
   path: 'scripts/legal/templates/NOTICE.txt',
-  sha256: '9b07008e533851eb661dd9c125d5e1712c5131afbade67ce458df93a946042af',
+  sha256: '1694460fc26d199688f6e76a181c69cfd1246697b3c7690aeebdb318793fdbe9',
   status: 'approved-canonical-source',
 })
 
@@ -246,7 +246,7 @@ export const WORKSPACE_TARGET = Object.freeze({
   key: 'workspace',
   packageJsonPath: 'package.json',
   outputPath: 'SBOM.cdx.json',
-  rootName: 'tinyedge-edge-workspace',
+  rootName: 'physicalsystems-workspace',
   rootVersion: '0.0.0',
   rootLicense: 'Apache-2.0',
   packageRoots: Object.freeze([
