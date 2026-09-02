@@ -108,14 +108,23 @@ and the commissioning draft is non-authorizing: neither the model nor
 exploration, or authorize movement.
 The separate Python `tinyedge-agent serve-physical-node` process owns local
 camera and device discovery; port `8876` is a JSON API, not a second Harness UI,
-and the process must run on the same host.
+and the process must run on the same host. On an explicit Harness launch, the
+client first validates and reuses a compatible node already listening there.
+Otherwise it starts a preinstalled, separately distributed `tinyedge-agent`
+with fixed arguments,
+waits for its versioned discovery contract, and stops only that child when the
+Harness closes. This path never invokes a shell, package manager, installer,
+`sudo`, or lifecycle download.
 
 ```bash
 tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
 ```
 
 `TINYEDGE_PHYSICAL_NODE_URL` may override the origin, but non-loopback
-origins and plaintext LAN connections are rejected.
+origins and plaintext LAN connections are rejected. An override is external:
+the Harness validates it but never starts or stops it. If the Agent launcher is
+installed outside `PATH`, set `TINYEDGE_PHYSICAL_NODE_EXECUTABLE` to that one
+exact executable path; the value is not parsed as a command line.
 
 ## Commands
 
@@ -175,7 +184,8 @@ not disable inference through the model deliberately selected for the session.
 - Ubuntu qualification uses the exact packed artifact for normal local,
   global, and npm-exec installs, native Secret Service storage, and an
   interactive pseudo-terminal Harness render/input/exit smoke test. The npm
-  package does not yet install or supervise the separate Python physical node.
+  package can supervise an existing/preinstalled Python physical node, but it
+  does not contain or install that separately distributed Agent or its drivers.
 - Packed-artifact, native-binding, and command-shim checks do not validate
   production OAuth, provider onboarding, MCP execution, or browser approval.
   Those paths require separate canaries with disposable accounts.

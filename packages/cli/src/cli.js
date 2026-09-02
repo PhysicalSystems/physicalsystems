@@ -138,7 +138,8 @@ export async function runCli(argv = process.argv.slice(2), dependencies = {}) {
     return 0
   }
 
-  const env = baseUrl ? { ...process.env, TINYEDGE_BASE_URL: baseUrl } : process.env
+  const callerEnv = dependencies.env || process.env
+  const env = baseUrl ? { ...callerEnv, TINYEDGE_BASE_URL: baseUrl } : callerEnv
   const config = dependencies.config || createConfig(env)
   const needsAccountStore = ['login', 'chat', 'logout', 'whoami', 'doctor'].includes(command)
   const tokenStore = dependencies.tokenStore || (needsAccountStore ? createTokenStore({
@@ -155,6 +156,9 @@ export async function runCli(argv = process.argv.slice(2), dependencies = {}) {
       secretStore: dependencies.secretStore,
       createMode: dependencies.createHarnessMode,
       createExtension: dependencies.createHarnessExtension,
+      ensurePhysicalNodeImpl: dependencies.ensurePhysicalNode,
+      physicalNodeSupervisorOptions: dependencies.physicalNodeSupervisorOptions,
+      env,
       cwd: dependencies.cwd,
     })
   } else if (command === 'login') {

@@ -7,6 +7,7 @@ import {
   physicalSystemsSystemPrompt,
 } from '../chat/pi-session.js'
 import { createHarnessMode } from '../harness/interactive-mode.js'
+import { ensurePhysicalNode } from '../physical/node-supervisor.js'
 import { createTinyEdgePiExtension } from '../pi-extension.js'
 
 function extensionLoadErrors(services) {
@@ -53,6 +54,7 @@ async function runHarnessCommand({
   sdk: suppliedSdk,
   cwd = process.cwd(),
   initialMessage,
+  physicalNodeUrl,
   createExtension = createTinyEdgePiExtension,
   createMode,
 }) {
@@ -70,6 +72,7 @@ async function runHarnessCommand({
     standalone: true,
     cloudEnabled: false,
     showHeader: true,
+    physicalNodeUrl,
     createConfigImpl: () => config,
     ...(secretStore ? { createSecretStoreImpl: () => secretStore } : {}),
   })
@@ -144,13 +147,41 @@ async function runHarnessCommand({
 }
 
 export async function harnessCommand(options) {
-  // Official Pi offline-startup semantics prevent background downloads,
-  // catalog refreshes, update checks, and install telemetry. They do not block
-  // inference through the model selected for the TinyEdge session.
-  const restoreEnvironment = isolatePiStartupEnvironment()
+  const {
+    ensurePhysicalNodeImpl = ensurePhysicalNode,
+    env = process.env,
+    fetchImpl = globalThis.fetch,
+    physicalNodeSupervisorOptions = {},
+  } = options
+  let physicalNode
+  let restoreEnvironment = () => {}
+  let primaryFailure
   try {
-    return await runHarnessCommand(options)
+    physicalNode = await ensurePhysicalNodeImpl({
+      env,
+      fetchImpl,
+      ...physicalNodeSupervisorOptions,
+    })
+    if (!physicalNode?.origin || typeof physicalNode.dispose !== 'function') {
+      throw new Error('Physical Systems node supervisor returned an invalid lifecycle')
+    }
+    // Official Pi offline-startup semantics prevent background downloads,
+    // catalog refreshes, update checks, and install telemetry. They do not block
+    // inference through the model selected for the TinyEdge session.
+    restoreEnvironment = isolatePiStartupEnvironment()
+    return await runHarnessCommand({ ...options, physicalNodeUrl: physicalNode.origin })
+  } catch (error) {
+    primaryFailure = error
+    throw error
   } finally {
-    restoreEnvironment()
+    let cleanupFailure
+    try {
+      await physicalNode?.dispose()
+    } catch (error) {
+      cleanupFailure = error
+    } finally {
+      restoreEnvironment()
+    }
+    if (!primaryFailure && cleanupFailure) throw cleanupFailure
   }
 }

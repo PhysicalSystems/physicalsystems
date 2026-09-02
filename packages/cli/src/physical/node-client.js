@@ -4,6 +4,9 @@ const MAX_RESPONSE_BYTES = 256 * 1024
 const MAX_INTENT_CHARACTERS = 500
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
+export const PHYSICAL_NODE_UNAVAILABLE = 'PHYSICAL_NODE_UNAVAILABLE'
+export const PHYSICAL_NODE_TIMEOUT = 'PHYSICAL_NODE_TIMEOUT'
+
 export const PHYSICAL_NODE_STATE_VERSION = 'experimental-physical-node-state-v1'
 export const PHYSICAL_CANDIDATE_SNAPSHOT_VERSION = 'experimental-physical-candidates-v1'
 export const PHYSICAL_NODE_INTENT_REQUEST_VERSION = 'experimental-physical-node-intent-request-v1'
@@ -579,10 +582,16 @@ export function createPhysicalNodeClient({
       })
     } catch (error) {
       clearTimeout(timer)
-      if (error?.name === 'AbortError') throw new Error('Physical node did not respond before the timeout')
-      throw new Error(
+      if (error?.name === 'AbortError') {
+        const timeout = new Error('Physical node did not respond before the timeout')
+        timeout.code = PHYSICAL_NODE_TIMEOUT
+        throw timeout
+      }
+      const unavailable = new Error(
         `Physical Systems node is unavailable at ${origin}; start tinyedge-agent serve-physical-node locally`,
       )
+      unavailable.code = PHYSICAL_NODE_UNAVAILABLE
+      throw unavailable
     }
     let raw
     try {
@@ -599,7 +608,11 @@ export function createPhysicalNodeClient({
         throw new Error('Physical node response is too large')
       }
     } catch (error) {
-      if (error?.name === 'AbortError') throw new Error('Physical node did not respond before the timeout')
+      if (error?.name === 'AbortError') {
+        const timeout = new Error('Physical node did not respond before the timeout')
+        timeout.code = PHYSICAL_NODE_TIMEOUT
+        throw timeout
+      }
       if (Number.isInteger(response?.status)) error.status = response.status
       throw error
     } finally {
