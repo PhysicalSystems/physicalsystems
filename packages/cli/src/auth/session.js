@@ -17,7 +17,7 @@ function requireMatchingResource(tokens, configuredResource) {
   const configured = canonicalResource(configuredResource)
   if (!stored || !configured || stored !== configured) {
     throw new Error(
-      'Saved TinyEdge credentials belong to a different service; run `tinyedge login` for this service',
+      'Saved TinyEdge credentials belong to a different service; run `physicalsystems login` for this service',
     )
   }
 }
@@ -35,7 +35,7 @@ export async function createAuthenticatedMcp({
   allowedTools,
 }) {
   let tokens = await tokenStore.load()
-  if (!tokens) throw new Error('Run `tinyedge login` first')
+  if (!tokens) throw new Error('Run `physicalsystems login` first')
   requireMatchingResource(tokens, config.mcpUrl)
 
   async function refresh() {

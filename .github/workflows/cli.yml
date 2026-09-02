@@ -1,4 +1,4 @@
-name: TinyEdge CLI
+name: Physical Systems CLI
 
 on:
   pull_request:
@@ -104,7 +104,7 @@ jobs:
         if: matrix.platform == 'windows' && matrix.architecture == 'x64'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: tinyedge-0.1.5-ubuntu-canary-${{ github.sha }}
+          name: physicalsystems-0.2.0-ubuntu-canary-${{ github.sha }}
           path: candidate-artifacts
           if-no-files-found: error
           compression-level: 0

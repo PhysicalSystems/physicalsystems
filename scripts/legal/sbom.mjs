@@ -652,9 +652,9 @@ async function buildWorkspaceSbom({ root }) {
   assert(workspaceManifest.version === WORKSPACE_TARGET.rootVersion, 'workspace root version drifted')
   assert(workspaceManifest.license === WORKSPACE_TARGET.rootLicense, 'workspace root release-lock license drifted')
 
-  const tinyedgeBom = await buildSbomForTarget('tinyedge', { root })
-  const components = clone(tinyedgeBom.components)
-  const dependencies = clone(tinyedgeBom.dependencies)
+  const physicalSystemsBom = await buildSbomForTarget('physicalsystems', { root })
+  const components = clone(physicalSystemsBom.components)
+  const dependencies = clone(physicalSystemsBom.dependencies)
   const componentsByRef = new Map(components.map((component) => [component['bom-ref'], component]))
   const packageRootRefs = []
   for (const packageRoot of WORKSPACE_TARGET.packageRoots) {
@@ -676,11 +676,11 @@ async function buildWorkspaceSbom({ root }) {
       continue
     }
     let component
-    if (packageRoot.name === 'tinyedge') {
+    if (packageRoot.name === 'physicalsystems') {
       component = {
-        ...clone(tinyedgeBom.metadata.component),
+        ...clone(physicalSystemsBom.metadata.component),
         scope: 'required',
-        properties: [...tinyedgeBom.metadata.component.properties, ...workspaceProperties]
+        properties: [...physicalSystemsBom.metadata.component.properties, ...workspaceProperties]
           .sort((left, right) => left.name.localeCompare(right.name)),
       }
     } else {
@@ -740,9 +740,9 @@ async function buildWorkspaceSbom({ root }) {
         }),
       },
       properties: [
-        ...tinyedgeBom.metadata.properties,
+        ...physicalSystemsBom.metadata.properties,
         ...properties({
-          'tinyedge:sbom:composition': `${WORKSPACE_TARGET.rootName}@${WORKSPACE_TARGET.rootVersion} -> tinyedge plus its audited compatibility runtime`,
+          'tinyedge:sbom:composition': `${WORKSPACE_TARGET.rootName}@${WORKSPACE_TARGET.rootVersion} -> physicalsystems plus its audited compatibility runtime`,
         }),
       ].sort((left, right) => left.name.localeCompare(right.name)),
     },
@@ -999,7 +999,7 @@ async function main(argv) {
     process.stdout.write(serializeSbom(await buildSbomForTarget(target)))
     return
   }
-  throw new Error('usage: node scripts/legal/sbom.mjs [--verify|--write|--check|--stdout <pi-runtime|tinyedge>]')
+  throw new Error('usage: node scripts/legal/sbom.mjs [--verify|--write|--check|--stdout <pi-runtime|physicalsystems>]')
 }
 
 const isMain = process.argv[1]

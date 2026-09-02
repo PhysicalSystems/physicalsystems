@@ -17,7 +17,7 @@ test('CLI reports its version without loading credentials', async () => {
   assert.deepEqual(capture.out, [VERSION])
 })
 
-test('bare tinyedge opens the native Harness while explicit help stays one-shot', async () => {
+test('bare physicalsystems opens the native Harness while explicit help stays one-shot', async () => {
   const calls = []
   const dependencies = {
     config: { configDir: 'C:\\TinyEdge' },
@@ -32,6 +32,8 @@ test('bare tinyedge opens the native Harness while explicit help stays one-shot'
 
   const capture = captureIo()
   assert.equal(await runCli(['help'], { io: capture.io }), 0)
+  assert.match(capture.out[0], /Physical Systems Harness/)
+  assert.match(capture.out[0], /Usage: physicalsystems/)
   assert.match(capture.out[0], /harness\s+Open the local Physical Systems Harness/)
   assert.deepEqual(calls, [{ configDir: 'C:\\TinyEdge', tokenStore: null }])
 })

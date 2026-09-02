@@ -39,8 +39,8 @@ export async function chatCommand({
   secretStore,
 }) {
   const summary = await tokenStore.summary()
-  if (!summary.connected) throw new Error('Run `tinyedge login` first')
-  if (!hasReadScope(summary)) throw new Error('Reconnect with `tinyedge login` to grant read access')
+  if (!summary.connected) throw new Error('Run `physicalsystems login` first')
+  if (!hasReadScope(summary)) throw new Error('Reconnect with `physicalsystems login` to grant read access')
 
   const allowedTools = toolsForScopes(summary.scope)
   const auth = await createAuthenticatedMcp({
@@ -95,7 +95,7 @@ export async function chatCommand({
     const terminal = createInterface({ input, output })
     try {
       while (true) {
-        const value = (await terminal.question('tinyedge> ')).trim()
+        const value = (await terminal.question('physicalsystems> ')).trim()
         if (!value) continue
         if (value === '/exit' || value === '/quit') break
         if (value === '/help') {

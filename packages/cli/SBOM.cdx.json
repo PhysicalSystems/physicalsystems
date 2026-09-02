@@ -5,9 +5,9 @@
   "metadata": {
     "component": {
       "type": "library",
-      "bom-ref": "pkg:npm/tinyedge@0.1.5",
-      "name": "tinyedge",
-      "version": "0.1.5",
+      "bom-ref": "pkg:npm/physicalsystems@0.2.0",
+      "name": "physicalsystems",
+      "version": "0.2.0",
       "licenses": [
         {
           "license": {
@@ -15,7 +15,7 @@
           }
         }
       ],
-      "purl": "pkg:npm/tinyedge@0.1.5",
+      "purl": "pkg:npm/physicalsystems@0.2.0",
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
@@ -31,7 +31,7 @@
         },
         {
           "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "040c06b88aae480b84339200453e7178724a1a322efce778903f949dd3818af3"
+          "value": "acbf96413845361d8958c1b39a7034c5265be0944db2300ef197792028d4bbc4"
         }
       ]
     },
@@ -8249,6 +8249,14 @@
       ]
     },
     {
+      "ref": "pkg:npm/physicalsystems@0.2.0",
+      "dependsOn": [
+        "pkg:npm/%40earendil-works/pi-tui@0.84.2",
+        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
+        "pkg:npm/proper-lockfile@4.1.2"
+      ]
+    },
+    {
       "ref": "pkg:npm/proper-lockfile@4.1.2",
       "dependsOn": [
         "pkg:npm/graceful-fs@4.2.11",
@@ -8305,14 +8313,6 @@
     {
       "ref": "pkg:npm/strnum@2.3.0",
       "dependsOn": []
-    },
-    {
-      "ref": "pkg:npm/tinyedge@0.1.5",
-      "dependsOn": [
-        "pkg:npm/%40earendil-works/pi-tui@0.84.2",
-        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
-        "pkg:npm/proper-lockfile@4.1.2"
-      ]
     },
     {
       "ref": "pkg:npm/ts-algebra@2.0.0",

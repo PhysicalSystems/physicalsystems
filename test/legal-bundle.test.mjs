@@ -70,7 +70,7 @@ test('reviewed shrinkwrap graphs produce deterministic CycloneDX 1.6 output offl
     assert.equal(firstBom.specVersion, '1.6')
     assert.equal(firstBom.version, 1)
     const installedNodes = target === WORKSPACE_TARGET.key
-      ? TARGETS.tinyedge.dependencyNodeCount + 1
+      ? TARGETS.physicalsystems.dependencyNodeCount + 1
       : TARGETS[target].dependencyNodeCount
     assert.equal(firstBom.components.length, installedNodes + VENDORED_COMPONENTS.length + PI_TUI_NATIVE_FILES.length + EXCLUDED_OPTIONAL_PEERS.length)
     assert.equal(firstBom.dependencies.length, firstBom.components.length + 1)
@@ -88,7 +88,7 @@ test('workspace SBOM composes tinyedge and its runtime without duplicate identit
   assert.equal(new Set(dependencyRefs).size, dependencyRefs.length)
 
   const expectedRoots = [
-    'pkg:npm/tinyedge@0.1.5',
+    'pkg:npm/physicalsystems@0.2.0',
     'pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1',
   ].sort()
   const workspaceEdges = bom.dependencies.find(({ ref }) => ref === bom.metadata.component['bom-ref']).dependsOn

@@ -1,48 +1,47 @@
-# `tinyedge`
+# `physicalsystems`
 
-A desktop-source preview of the Pi-powered terminal client for TinyEdge's
-remote orchestration boundary. Here, “Pi” names the reviewed terminal runtime;
-it is not a claim of Raspberry Pi hardware support. Starting with `0.1.4`, this
-one package contains the client library, Pi extension, and user-facing command shim.
-Ordinary Harness releases no longer require matching `@tinyedge/cli` and
-`@tinyedge/pi` publications.
+A local-first Physical Systems Harness built on the reviewed Pi terminal
+runtime. Here, “Pi” names that terminal runtime; it is not a claim of Raspberry
+Pi hardware support. This package contains the client library, Pi extension,
+and user-facing command shim. Optional TinyEdge cloud commands remain available
+but are not required to start or use local physical discovery.
 
-Version `0.1.5` expands the desktop package boundary from Windows to Ubuntu
+Version `0.2.0` introduces the `physicalsystems` package identity on Windows and Ubuntu
 22.04 and 24.04 desktop x64. The Ubuntu route uses the session's native Secret Service keyring
 and requires `secret-tool`, D-Bus, an unlocked desktop keyring, and `xdg-open`.
 Headless Linux, Raspberry Pi, other Linux distributions and architectures, and
 macOS remain outside the qualified support boundary.
 
 Source-code availability is not registry evidence. Before using the commands
-below, require `npm view tinyedge@0.1.5 version --json` to return
-`"0.1.5"`.
+below, require `npm view physicalsystems@0.2.0 version --json` to return
+`"0.2.0"`.
 
-Run the exact `0.1.5` package without installing a persistent command:
+Run the exact `0.2.0` package without installing a persistent command:
 
 ```bash
-npx tinyedge@0.1.5
+npx physicalsystems@0.2.0
 ```
 
-`npx` may cache package files, but it does not add a global `tinyedge` command.
+`npx` may cache package files, but it does not add a global `physicalsystems` command.
 For a persistent command in new terminals, install the exact package globally:
 
 ```bash
-npm install --global tinyedge@0.1.5
-tinyedge
+npm install --global physicalsystems@0.2.0
+physicalsystems
 ```
 
 Unversioned commands follow npm's current dist-tags and are not evidence for a
-specific release. Version `0.1.4` was the Windows-only one-package preview. The
+specific release. Version `0.1.5` remains the final TinyEdge-branded preview. The
 `0.1.3` release used separate `tinyedge`,
 `@tinyedge/cli`, and `@tinyedge/pi` artifacts; those immutable versions remain
-available for compatibility but are not part of the `0.1.5` release graph.
+available for compatibility but are not part of the `physicalsystems` release graph.
 Historical package checks did not validate production OAuth, login, or live
 MCP execution.
 
 The chat command depends on the exact MIT-licensed
 `@tinyedge/pi-runtime@0.84.2-tinyedge.1` compatibility package derived from
 the reviewed Pi 0.84.2 artifact. The complete locked closure is bundled inside
-`tinyedge` so npm 11 and npm 12 install the same reviewed bytes from the one
+`physicalsystems` so npm 11 and npm 12 install the same reviewed bytes from the one
 user-facing package. Its text-first default install excludes the optional
 native clipboard and Photon/WASM image-processing peers. Every Pi built-in tool
 is disabled. Ambient extensions, context files, skills, templates, and themes
@@ -56,7 +55,7 @@ idempotency, cost hold, and browser-approval boundary.
 
 ## Harness behavior
 
-Bare `tinyedge` opens the native Pi terminal interface as a local-first Physical
+Bare `physicalsystems` opens the native Pi terminal interface as a local-first Physical
 Systems Harness. It checks the loopback Physical Systems node and shows only
 device candidates that node actually observed. It does not connect a TinyEdge
 account, open TinyEdge OAuth, or populate a cloud device-family table.
@@ -120,18 +119,18 @@ origins and plaintext LAN connections are rejected.
 ## Commands
 
 ```text
-tinyedge         Open the native Pi-powered Physical Systems Harness
-tinyedge login   Authorize read-only access through TinyEdge OAuth + PKCE
-tinyedge login --allow-write  Explicitly request write access
-tinyedge login --allow-run    Explicitly request workload-run access
-tinyedge provider list        Show supported model providers and auth methods
-tinyedge provider login ID    Connect a model provider using OAuth or API key
-tinyedge provider logout ID   Remove that provider credential
-tinyedge models [--provider ID]  List authenticated provider models
-tinyedge chat [--model PROVIDER/MODEL] [PROMPT]
-tinyedge whoami  Verify the saved connection without exposing credentials
-tinyedge doctor  Check Node, OAuth discovery, saved auth, and MCP reachability
-tinyedge logout  Revoke the saved OAuth grants and remove local credentials
+physicalsystems         Open the native Pi-powered Physical Systems Harness
+physicalsystems login   Authorize optional read-only TinyEdge cloud access
+physicalsystems login --allow-write  Explicitly request cloud write access
+physicalsystems login --allow-run    Explicitly request cloud workload-run access
+physicalsystems provider list        Show supported model providers and auth methods
+physicalsystems provider login ID    Connect a model provider using OAuth or API key
+physicalsystems provider logout ID   Remove that provider credential
+physicalsystems models [--provider ID]  List authenticated provider models
+physicalsystems chat [--model PROVIDER/MODEL] [PROMPT]
+physicalsystems whoami  Verify the optional cloud connection without exposing credentials
+physicalsystems doctor  Check Node, OAuth discovery, saved auth, and MCP reachability
+physicalsystems logout  Revoke saved cloud OAuth grants and remove local credentials
 ```
 
 The default service is `https://tinyedge.ai`. For local tests only, set
@@ -150,7 +149,7 @@ unavailable; there is no plaintext fallback or headless file-store fallback.
 
 TinyEdge OAuth authorizes access to the TinyEdge MCP service. Pi model-provider
 authentication is separate and is managed by the provider commands above.
-`tinyedge chat` refuses to start without TinyEdge read scope. Write and run
+`physicalsystems chat` refuses to start without TinyEdge read scope. Write and run
 tools appear only after a deliberate `login --allow-write` or
 `login --allow-run`; the server still requires exact browser approval for
 consequential work.

@@ -24,7 +24,7 @@ const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
 const NPM_CLI = process.env.npm_execpath
 const RELEASE_NPM_VERSION = '11.19.0'
 const CONSUMER_NPM_VERSIONS = new Set([RELEASE_NPM_VERSION, '12.0.2'])
-const TINYEDGE_VERSION = '0.1.5'
+const PHYSICAL_SYSTEMS_VERSION = '0.2.0'
 const PI_RUNTIME_VERSION = '0.84.2-tinyedge.1'
 const PACKAGES = [
   {
@@ -33,7 +33,7 @@ const PACKAGES = [
     name: '@tinyedge/pi-runtime',
     version: PI_RUNTIME_VERSION,
   },
-  { key: 'tinyedge', directory: 'packages/cli', name: 'tinyedge' },
+  { key: 'physicalsystems', directory: 'packages/cli', name: 'physicalsystems' },
 ]
 const FROZEN_PACKAGES = [
   { directory: 'packages/npx', name: 'tinyedge', version: '0.1.3' },
@@ -206,7 +206,7 @@ function assertCommandShimTargets(shim, target, source) {
 }
 
 function commandShim(directory) {
-  return path.join(directory, process.platform === 'win32' ? 'tinyedge.cmd' : 'tinyedge')
+  return path.join(directory, process.platform === 'win32' ? 'physicalsystems.cmd' : 'physicalsystems')
 }
 
 function globalNodeModulesDirectory(prefix) {
@@ -216,13 +216,13 @@ function globalNodeModulesDirectory(prefix) {
 }
 
 function globalPackageDirectory(prefix) {
-  return path.join(globalNodeModulesDirectory(prefix), 'tinyedge')
+  return path.join(globalNodeModulesDirectory(prefix), 'physicalsystems')
 }
 
 function globalCommandShim(prefix) {
   return process.platform === 'win32'
-    ? path.join(prefix, 'tinyedge.cmd')
-    : path.join(prefix, 'bin/tinyedge')
+    ? path.join(prefix, 'physicalsystems.cmd')
+    : path.join(prefix, 'bin/physicalsystems')
 }
 
 function readJson(file) {
@@ -257,7 +257,7 @@ function collectInstalledPackages(nodeModules, result = []) {
 
 function packageVersionIdentities(packages) {
   return [...new Set(packages
-    .filter(({ name, version }) => name && version && name !== 'tinyedge')
+    .filter(({ name, version }) => name && version && name !== 'physicalsystems')
     .map(({ name, version }) => `${name}@${version}`))]
     .sort()
 }
@@ -374,9 +374,9 @@ function validatePiRuntimeProvenance(directory, metadata) {
 }
 
 function assertReviewedClosure(lock, source, expectedRuntimeIntegrity) {
-  assert.equal(lock.name, 'tinyedge', `${source} must describe tinyedge`)
+  assert.equal(lock.name, 'physicalsystems', `${source} must describe physicalsystems`)
   assert.equal(lock.lockfileVersion, 3, `${source} must use lockfileVersion 3`)
-  assert.equal(lock.version, TINYEDGE_VERSION, `${source} must describe TinyEdge ${TINYEDGE_VERSION}`)
+  assert.equal(lock.version, PHYSICAL_SYSTEMS_VERSION, `${source} must describe Physical Systems ${PHYSICAL_SYSTEMS_VERSION}`)
   assert.equal(lock.packages?.['']?.version, lock.version, `${source} root version must match`)
   assert.deepEqual(
     [...lock.packages?.['']?.bundleDependencies || []].sort(),
@@ -571,44 +571,44 @@ function validateSourceLegalBundle(packages) {
 
 function validatePackageContracts(packages) {
   const runtime = packages.find(({ key }) => key === 'pi-runtime')
-  const tinyedge = packages.find(({ key }) => key === 'tinyedge').metadata
-  const version = tinyedge.version
-  assert.equal(version, TINYEDGE_VERSION)
+  const physicalsystems = packages.find(({ key }) => key === 'physicalsystems').metadata
+  const version = physicalsystems.version
+  assert.equal(version, PHYSICAL_SYSTEMS_VERSION)
   validateSourceLegalBundle(packages)
   validatePiRuntimeProvenance(runtime.directory, runtime.metadata)
   assert.equal(
-    tinyedge.dependencies['@tinyedge/pi-runtime'],
+    physicalsystems.dependencies['@tinyedge/pi-runtime'],
     PI_RUNTIME_VERSION,
-    'tinyedge must depend on the exact compatibility runtime',
+    'physicalsystems must depend on the exact compatibility runtime',
   )
   assert.deepEqual(
-    tinyedge.bin,
-    { tinyedge: 'bin/tinyedge.js' },
-    'tinyedge must own its command directly',
+    physicalsystems.bin,
+    { physicalsystems: 'bin/physicalsystems.js' },
+    'physicalsystems must own its command directly',
   )
   assert.deepEqual(
-    tinyedge.exports,
+    physicalsystems.exports,
     {
       '.': './src/index.js',
       './run': './src/cli.js',
       './pi-extension': './src/pi-extension.js',
     },
-    'tinyedge must carry the former core import surface in the same artifact',
+    'physicalsystems must carry the former core import surface in the same artifact',
   )
   assert.equal(
-    tinyedge.bundleDependencies,
+    physicalsystems.bundleDependencies,
     true,
-    'tinyedge must bundle its reviewed dependency closure for npm 12 consumers',
+    'physicalsystems must bundle its reviewed dependency closure for npm 12 consumers',
   )
-  assert.equal(tinyedge.dependencies['@tinyedge/cli'], undefined)
-  assert.equal(tinyedge.repository?.url, 'git+https://github.com/PhysicalSystems/tinyedge-edge.git')
+  assert.equal(physicalsystems.dependencies['@tinyedge/cli'], undefined)
+  assert.equal(physicalsystems.repository?.url, 'git+https://github.com/PhysicalSystems/tinyedge-edge.git')
   assert.deepEqual(
-    tinyedge.publishConfig,
+    physicalsystems.publishConfig,
     { access: 'public' },
-    'tinyedge publishConfig must not redirect registry or authentication',
+    'physicalsystems publishConfig must not redirect registry or authentication',
   )
-  assert.deepEqual(tinyedge.os, ['win32', 'linux'])
-  assert.match(tinyedge.engines?.node || '', />=22\.19\.0/)
+  assert.deepEqual(physicalsystems.os, ['win32', 'linux'])
+  assert.match(physicalsystems.engines?.node || '', />=22\.19\.0/)
   for (const frozen of FROZEN_PACKAGES) {
     const metadata = readJson(path.join(REPOSITORY_ROOT, frozen.directory, 'package.json'))
     assert.equal(metadata.name, frozen.name)
@@ -639,18 +639,18 @@ function validateReleaseReadmes(packages) {
     const readme = readFileSync(path.join(directory, 'README.md'), 'utf8')
     assert.match(
       readme,
-      /npm view tinyedge@0\.1\.5 version --json/,
+      /npm view physicalsystems@0\.2\.0 version --json/,
       `${metadata.name} README must make exact registry availability independently verifiable`,
     )
     assert.doesNotMatch(
       readme,
-      /0\.1\.5[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
-      `${metadata.name} README must not describe its own 0.1.5 artifact as pre-publication`,
+      /0\.2\.0[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+      `${metadata.name} README must not describe its own 0.2.0 artifact as pre-publication`,
     )
     assert.doesNotMatch(
       readme,
-      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.1\.5/i,
-      `${metadata.name} README must not describe its own 0.1.5 artifact as pre-publication`,
+      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.2\.0/i,
+      `${metadata.name} README must not describe its own 0.2.0 artifact as pre-publication`,
     )
     assert.match(readme, /0\.1\.3/, `${metadata.name} README must retain the package-migration distinction`)
     assert.match(
@@ -658,8 +658,8 @@ function validateReleaseReadmes(packages) {
       /(?:did not|do not|does not)[\s\S]{0,160}(?:validate|exercise)[\s\S]{0,80}(?:OAuth|login|live|production)/i,
       `${metadata.name} README must preserve the live-validation boundary`,
     )
-    assert.match(readme, /npx tinyedge@0\.1\.5/)
-    assert.match(readme, /npm install --global tinyedge@0\.1\.5/)
+    assert.match(readme, /npx physicalsystems@0\.2\.0/)
+    assert.match(readme, /npm install --global physicalsystems@0\.2\.0/)
     assert.match(
       readme,
       /npx[\s\S]{0,100}does not[\s\S]{0,80}(?:global|persistent)/i,
@@ -751,8 +751,8 @@ function packRelease(outputDirectory) {
   let runtimeIntegrity
   let reviewedShrinkwrapValidated = false
   const artifacts = packages.map(({ key, directory, metadata, version: fixedVersion }) => {
-    if (key === 'tinyedge') {
-      assert.ok(runtimeIntegrity, 'the compatibility runtime must be packed before tinyedge')
+    if (key === 'physicalsystems') {
+      assert.ok(runtimeIntegrity, 'the compatibility runtime must be packed before physicalsystems')
       validateReviewedShrinkwrap(runtimeIntegrity)
       reviewedShrinkwrapValidated = true
     }
@@ -768,12 +768,12 @@ function packRelease(outputDirectory) {
     assert.equal(result.name, metadata.name)
     assert.equal(result.version, artifactVersion)
     assertSafePackList(metadata.name, result.files)
-    if (key === 'tinyedge') {
+    if (key === 'physicalsystems') {
       const bundledNames = [...result.bundled || []].sort()
       for (const dependency of Object.keys(metadata.dependencies || {})) {
         assert.ok(
           bundledNames.includes(dependency),
-          `the tinyedge tarball must bundle direct dependency ${dependency}`,
+          `the physicalsystems tarball must bundle direct dependency ${dependency}`,
         )
       }
       const bundleRoots = [...new Set(result.files
@@ -796,16 +796,16 @@ function packRelease(outputDirectory) {
       assert.equal(
         unexpectedBundle,
         undefined,
-        `the tinyedge tarball contains unexpected bundled dependency ${unexpectedBundle}`,
+        `the physicalsystems tarball contains unexpected bundled dependency ${unexpectedBundle}`,
       )
       assert.ok(
         result.files.some(({ path: file }) => /(^|\/)npm-shrinkwrap\.json$/.test(file)),
-        'the tinyedge tarball must contain its reviewed npm-shrinkwrap.json',
+        'the physicalsystems tarball must contain its reviewed npm-shrinkwrap.json',
       )
       assert.equal(
         result.files.some(({ path: file }) => /(^|\/)RELEASE\.md$/i.test(file)),
         false,
-        'the internal release checklist must not be published in the tinyedge tarball',
+        'the internal release checklist must not be published in the physicalsystems tarball',
       )
     }
     const file = path.join(outputDirectory, result.filename)
@@ -840,7 +840,7 @@ function packRelease(outputDirectory) {
     `${JSON.stringify(manifest, null, 2)}\n`,
     'utf8',
   )
-  console.log(`Packed TinyEdge ${version} release artifacts in ${outputDirectory}`)
+  console.log(`Packed Physical Systems ${version} release artifacts in ${outputDirectory}`)
 }
 
 async function verifyRelease(artifactDirectory) {
@@ -852,7 +852,7 @@ async function verifyRelease(artifactDirectory) {
   }
   const manifest = readJson(path.join(artifactDirectory, 'release-manifest.json'))
   assert.equal(manifest.schemaVersion, 1)
-  assert.equal(manifest.version, TINYEDGE_VERSION)
+  assert.equal(manifest.version, PHYSICAL_SYSTEMS_VERSION)
   assert.equal(manifest.artifacts.length, PACKAGES.length)
 
   const candidateArtifacts = manifest.artifacts.map((artifact, index) => {
@@ -868,17 +868,17 @@ async function verifyRelease(artifactDirectory) {
     return { ...artifact, file }
   })
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-verify-'))
-  const npmExecRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-npm-exec-'))
+  const npmExecRoot = mkdtempSync(path.join(tmpdir(), 'physicalsystems-npm-exec-'))
   try {
-    const tinyedgeArtifact = candidateArtifacts.find(({ key }) => key === 'tinyedge')
+    const physicalSystemsArtifact = candidateArtifacts.find(({ key }) => key === 'physicalsystems')
     const runtimeArtifact = candidateArtifacts.find(({ key }) => key === 'pi-runtime')
-    assert.ok(tinyedgeArtifact, 'the release manifest is missing the tinyedge artifact')
+    assert.ok(physicalSystemsArtifact, 'the release manifest is missing the physicalsystems artifact')
     assert.ok(runtimeArtifact, 'the release manifest is missing the compatibility runtime artifact')
-    const localDependencies = { tinyedge: npmFileSpec(tinyedgeArtifact.file) }
+    const localDependencies = { physicalsystems: npmFileSpec(physicalSystemsArtifact.file) }
     writeFileSync(
       path.join(temporaryRoot, 'package.json'),
       `${JSON.stringify({
-        name: 'tinyedge-release-verification',
+        name: 'physicalsystems-release-verification',
         private: true,
         version: '0.0.0',
         dependencies: localDependencies,
@@ -897,15 +897,15 @@ async function verifyRelease(artifactDirectory) {
       timeout: NPM_INSTALL_TIMEOUT_MS,
     })
 
-    const installed = readJson(path.join(temporaryRoot, 'node_modules/tinyedge/package.json'))
-    const installedTinyEdgeDirectory = path.join(temporaryRoot, 'node_modules/tinyedge')
+    const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
+    const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')
     const installedRuntimeDirectory = path.join(
-      installedTinyEdgeDirectory,
+      installedPhysicalSystemsDirectory,
       'node_modules/@tinyedge/pi-runtime',
     )
     const installedRuntime = readJson(path.join(installedRuntimeDirectory, 'package.json'))
     assert.equal(installed.version, manifest.version)
-    assert.equal(installed.name, 'tinyedge')
+    assert.equal(installed.name, 'physicalsystems')
     assert.equal(installed.dependencies?.['@tinyedge/cli'], undefined)
     assert.equal(installedRuntime.version, PI_RUNTIME_VERSION)
     validatePiRuntimeProvenance(installedRuntimeDirectory, installedRuntime)
@@ -917,12 +917,12 @@ async function verifyRelease(artifactDirectory) {
       'verification must reproduce the advertised one-package install',
     )
 
-    const installedShrinkwrap = path.join(installedTinyEdgeDirectory, 'npm-shrinkwrap.json')
-    assert.ok(existsSync(installedShrinkwrap), 'the installed tinyedge package is missing npm-shrinkwrap.json')
+    const installedShrinkwrap = path.join(installedPhysicalSystemsDirectory, 'npm-shrinkwrap.json')
+    assert.ok(existsSync(installedShrinkwrap), 'the installed physicalsystems package is missing npm-shrinkwrap.json')
     const reviewedLock = readJson(installedShrinkwrap)
     assertReviewedClosure(
       reviewedLock,
-      'local installed tinyedge shrinkwrap',
+      'local installed physicalsystems shrinkwrap',
       runtimeArtifact.integrity,
     )
     assertInstalledReviewedClosure(
@@ -932,9 +932,9 @@ async function verifyRelease(artifactDirectory) {
     )
 
     const localShim = commandShim(path.join(temporaryRoot, 'node_modules', '.bin'))
-    const localEntry = path.join(temporaryRoot, 'node_modules/tinyedge/bin/tinyedge.js')
-    assert.ok(existsSync(localShim), 'npm did not create the local tinyedge command shim')
-    assert.ok(existsSync(localEntry), 'the local install is missing the packed tinyedge entry')
+    const localEntry = path.join(temporaryRoot, 'node_modules/physicalsystems/bin/physicalsystems.js')
+    assert.ok(existsSync(localShim), 'npm did not create the local physicalsystems command shim')
+    assert.ok(existsSync(localEntry), 'the local install is missing the packed physicalsystems entry')
     assertCommandShimTargets(localShim, localEntry, 'local npm command shim')
     assert.equal(
       run(process.execPath, [localEntry, '--version'], {
@@ -942,7 +942,7 @@ async function verifyRelease(artifactDirectory) {
         timeout: 120_000,
       }),
       manifest.version,
-      'the packed local tinyedge entry must execute the reviewed client',
+      'the packed local physicalsystems entry must execute the reviewed client',
     )
     const reportedVersion = runCommandShim(localShim, ['--version'], {
       cwd: temporaryRoot,
@@ -964,9 +964,9 @@ async function verifyRelease(artifactDirectory) {
       '--no-fund',
       '--timing',
       '--package',
-      npmFileSpec(tinyedgeArtifact.file),
+      npmFileSpec(physicalSystemsArtifact.file),
       '--',
-      'tinyedge',
+      'physicalsystems',
       '--version',
     ], {
       cwd: npmExecRoot,
@@ -990,18 +990,18 @@ async function verifyRelease(artifactDirectory) {
       '--offline',
       '--no-audit',
       '--no-fund',
-      tinyedgeArtifact.file,
+      physicalSystemsArtifact.file,
     ], {
       cwd: temporaryRoot,
       env: { npm_config_cache: path.join(temporaryRoot, 'global-npm-cache') },
       phase: 'global npm install',
       timeout: NPM_INSTALL_TIMEOUT_MS,
     })
-    const globalTinyEdgeDirectory = globalPackageDirectory(globalPrefix)
+    const globalPhysicalSystemsDirectory = globalPackageDirectory(globalPrefix)
     const globalShim = globalCommandShim(globalPrefix)
-    const globalEntry = path.join(globalTinyEdgeDirectory, 'bin/tinyedge.js')
-    assert.ok(existsSync(globalShim), 'npm did not create the global tinyedge command shim')
-    assert.ok(existsSync(globalEntry), 'the global install is missing the packed tinyedge entry')
+    const globalEntry = path.join(globalPhysicalSystemsDirectory, 'bin/physicalsystems.js')
+    assert.ok(existsSync(globalShim), 'npm did not create the global physicalsystems command shim')
+    assert.ok(existsSync(globalEntry), 'the global install is missing the packed physicalsystems entry')
     assertCommandShimTargets(globalShim, globalEntry, 'global npm command shim')
     assert.equal(
       run(process.execPath, [globalEntry, '--version'], {
@@ -1009,18 +1009,18 @@ async function verifyRelease(artifactDirectory) {
         timeout: 120_000,
       }),
       manifest.version,
-      'the packed global tinyedge entry must execute the reviewed client',
+      'the packed global physicalsystems entry must execute the reviewed client',
     )
     const globalReportedVersion = runCommandShim(globalShim, ['--version'], {
       cwd: temporaryRoot,
       timeout: 120_000,
     })
     assert.equal(globalReportedVersion, manifest.version)
-    const globalShrinkwrap = path.join(globalTinyEdgeDirectory, 'npm-shrinkwrap.json')
-    assert.ok(existsSync(globalShrinkwrap), 'the global tinyedge package is missing npm-shrinkwrap.json')
+    const globalShrinkwrap = path.join(globalPhysicalSystemsDirectory, 'npm-shrinkwrap.json')
+    assert.ok(existsSync(globalShrinkwrap), 'the global physicalsystems package is missing npm-shrinkwrap.json')
     assertReviewedClosure(
       readJson(globalShrinkwrap),
-      'global installed tinyedge shrinkwrap',
+      'global installed physicalsystems shrinkwrap',
       runtimeArtifact.integrity,
     )
     assertInstalledReviewedClosure(
@@ -1029,7 +1029,7 @@ async function verifyRelease(artifactDirectory) {
       readJson(globalShrinkwrap),
     )
     const globalRuntimeDirectory = path.join(
-      globalTinyEdgeDirectory,
+      globalPhysicalSystemsDirectory,
       'node_modules/@tinyedge/pi-runtime',
     )
     validatePiRuntimeProvenance(
@@ -1037,7 +1037,7 @@ async function verifyRelease(artifactDirectory) {
       readJson(path.join(globalRuntimeDirectory, 'package.json')),
     )
 
-    const coreEntry = path.join(temporaryRoot, 'node_modules/tinyedge/src/cli.js')
+    const coreEntry = path.join(temporaryRoot, 'node_modules/physicalsystems/src/cli.js')
     const defaultDispatchCheck = `
       const { runCli } = await import(${JSON.stringify(pathToFileURL(coreEntry).href)});
       let harnessStarted = false;
@@ -1048,7 +1048,7 @@ async function verifyRelease(artifactDirectory) {
         harnessCommand: async () => { harnessStarted = true; },
       });
       if (code !== 0 || !harnessStarted) {
-        throw new Error('bare tinyedge did not dispatch to the native Harness');
+        throw new Error('bare physicalsystems did not dispatch to the native Harness');
       }
     `
     run(process.execPath, ['--input-type=module', '--eval', defaultDispatchCheck], {
@@ -1056,11 +1056,11 @@ async function verifyRelease(artifactDirectory) {
       timeout: 120_000,
     })
 
-    const piEntry = path.join(temporaryRoot, 'node_modules/tinyedge/src/pi-extension.js')
+    const piEntry = path.join(temporaryRoot, 'node_modules/physicalsystems/src/pi-extension.js')
     const piImportCheck = `
       const extension = await import(${JSON.stringify(pathToFileURL(piEntry).href)});
       if (typeof extension.default !== 'function') {
-        throw new Error('the packed TinyEdge Pi extension is not callable');
+        throw new Error('the packed Physical Systems Pi extension is not callable');
       }
     `
     run(process.execPath, ['--input-type=module', '--eval', piImportCheck], {
@@ -1132,7 +1132,7 @@ async function verifyRelease(artifactDirectory) {
   }
 
   console.log(
-    `Verified TinyEdge ${manifest.version} as one offline-installable package with bundled @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, normal-lifecycle local/global/npm-exec commands, embedded client and Pi extension, bare Harness dispatch, and ${process.platform === 'win32' ? 'native console helper' : 'interactive pseudo-terminal smoke'} on ${process.platform} ${process.arch}`,
+    `Verified Physical Systems ${manifest.version} as one offline-installable package with bundled @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, normal-lifecycle local/global/npm-exec commands, embedded client and Pi extension, bare Harness dispatch, and ${process.platform === 'win32' ? 'native console helper' : 'interactive pseudo-terminal smoke'} on ${process.platform} ${process.arch}`,
   )
 }
 

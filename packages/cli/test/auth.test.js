@@ -303,7 +303,7 @@ test('Linux Secret Service adapter uses stable attributes and keeps secrets off 
   ])
   assert.deepEqual(calls[0].args, [
     'store',
-    '--label=TinyEdge CLI credential',
+    '--label=Physical Systems credential',
     'application',
     'ai.tinyedge.cli',
     'credential',

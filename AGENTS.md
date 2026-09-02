@@ -4,7 +4,7 @@ This is the canonical public source workspace for the TinyEdge edge client.
 
 ## Source boundary
 
-- Keep only the `tinyedge` command/client/extension package, audited Pi
+- Keep only the `physicalsystems` command/client/extension package, audited Pi
   compatibility runtime, frozen public-package source records, public
   contracts, tests, release tooling, and documentation needed to audit the
   device-side client.
@@ -18,7 +18,7 @@ This is the canonical public source workspace for the TinyEdge edge client.
 - Preserve Apache-2.0 for TinyEdge-authored code and MIT for the Pi
   compatibility runtime, including its upstream provenance and notices.
 - Source availability and npm publication are separate transitions. TinyEdge
-  policy authorizes one `tinyedge` candidate for the protected release
+  policy authorizes one `physicalsystems` candidate for the protected release
   workflow; the root workspace and frozen 0.1.3 package records remain private.
   A human npm owner may retain interactive 2FA publication capability, but
   must not use it as an alternate release path.
@@ -26,7 +26,7 @@ This is the canonical public source workspace for the TinyEdge edge client.
   `packages/cli/RELEASE.md`, including explicit founder authorization for a
   solo release and required x64/ARM64 checks under both pinned npm 11 and npm
   12. Keep the complete reviewed dependency closure bundled in the prebuilt
-  `tinyedge` tarball. CI may direct-publish only that tarball to `preview`;
+  `physicalsystems` tarball. CI may direct-publish only that tarball to `preview`;
   never add a lifecycle publish script, long-lived npm write token, CI
   `latest` promotion, runtime republish, or undocumented release route.
 - Do not stage, publish, promote, or create an installer from an ordinary code

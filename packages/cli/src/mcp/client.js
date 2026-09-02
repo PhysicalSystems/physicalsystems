@@ -52,7 +52,7 @@ export class RemoteMcpClient {
     getAccessToken,
     onUnauthorized,
     fetchImpl = fetch,
-    clientInfo = { name: 'tinyedge', version: VERSION },
+    clientInfo = { name: 'physicalsystems', version: VERSION },
     allowedTools,
     requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   }) {
@@ -71,7 +71,7 @@ export class RemoteMcpClient {
 
   async #post(payload, canRefresh = true) {
     const accessToken = await this.getAccessToken()
-    if (!accessToken) throw new McpUnauthorizedError('Run `tinyedge login` first')
+    if (!accessToken) throw new McpUnauthorizedError('Run `physicalsystems login` first')
 
     const headers = {
       authorization: `Bearer ${accessToken}`,

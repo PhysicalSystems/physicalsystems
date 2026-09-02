@@ -1,61 +1,63 @@
-# TinyEdge Edge
+# Physical Systems Harness
 
-TinyEdge Edge is the public device-side source for the desktop TinyEdge
-command-line client, embedded Pi extension, and audited text-first Pi
-compatibility runtime. It does not contain the TinyEdge hosted control plane,
-scheduler, billing system, fleet data, production operations, or private
+This repository contains the public device-side source for the local Physical
+Systems Harness, its embedded Pi extension, and the audited text-first Pi
+compatibility runtime. Optional TinyEdge cloud commands remain isolated from
+the local physical workflow. The repository does not contain the hosted control
+plane, scheduler, billing system, fleet data, production operations, or private
 optimization intelligence.
 
 ## Current status
 
 The source is available under the licenses in this repository. TinyEdge-authored
 client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
-Version `0.1.3` remains published to npm under `latest`. Before the `0.1.5`
-release workflow runs, the Windows-only one-package `0.1.4` release remains on
-`preview`; a successful workflow moves only `preview` to `0.1.5`. The published artifacts passed native
-Windows x64 and ARM64 verification, npm signature and provenance checks, and a
-clean public registry canary. On Windows with Node.js 22.19.0 or newer, install
-and launch the current stable Harness with:
+The immutable `tinyedge@0.1.3` package remains under `latest`, and
+`tinyedge@0.1.5` remains under `preview`. This source prepares the new unscoped
+`physicalsystems@0.2.0` package identity; source availability is not evidence
+that the new package has been published. Until `npm view physicalsystems@0.2.0`
+succeeds, use the existing preview with:
 
 ```powershell
-npm install --global tinyedge
-tinyedge
+npx --yes tinyedge@preview
 ```
 
-`npx --yes tinyedge@latest` remains a one-shot alternative; it does not install
-a persistent command. The older `0.1.1` release remains public as historical
-registry evidence but is not the current Harness.
+After the separately approved `physicalsystems` preview is published, the
+branded one-shot command will be:
 
-The Windows-only `0.1.4` preview consolidated the command, client, and Pi
-extension into the single `tinyedge` artifact. The source tree is preparing
-`0.1.5`, which qualifies that same one-package Harness for Ubuntu 22.04 and
-24.04 desktop x64.
+```bash
+npx --yes physicalsystems@preview
+```
+
+The former `tinyedge` package consolidated the command, client, and Pi
+extension into one artifact and qualified that package for Windows and Ubuntu.
+The `physicalsystems` package carries that reviewed one-package structure under
+the product's public identity.
 The immutable
 `@tinyedge/cli@0.1.3` and `@tinyedge/pi@0.1.3` releases remain available for
 compatibility but are no longer ordinary release artifacts.
 
 ## Command ownership
 
-The npm client owns the product-level `tinyedge` command. TinyEdge's Python
+The npm client owns the product-level `physicalsystems` command. TinyEdge's Python
 benchmark tooling uses `tinydevice`, so the two entry points do not compete for
 the same executable name. In PowerShell, diagnose an unrelated executable or
 stale global installation on `PATH` with:
 
 ```powershell
-Get-Command -All tinyedge
+Get-Command -All physicalsystems
 ```
 
 ## What is included
 
-- `tinyedge`: the local-first Physical Systems Harness plus optional OAuth,
+- `physicalsystems`: the local-first Physical Systems Harness plus optional OAuth,
   credential, MCP, provider, command, and Pi extension logic in one package.
 - `@tinyedge/pi-runtime`: the separately versioned audited MIT Pi compatibility
-  runtime, bundled into `tinyedge` so the one-package install retains the
+  runtime, bundled into `physicalsystems` so the one-package install retains the
   reviewed graph under npm 11 and npm 12.
 - Frozen `0.1.3` facade and existing-Pi source records for compatibility.
 - Deterministic package, legal, dependency, SBOM, and release checks.
 
-The `0.1.5` release target and current source-development targets are Windows x64, native
+The `0.2.0` release target and current source-development targets are Windows x64, native
 Windows ARM64, and Ubuntu 22.04/24.04 desktop x64 with Node.js 22.19.0 or newer. Windows
 uses DPAPI; Ubuntu uses `secret-tool` with an unlocked Secret Service keyring.
 Headless Linux, Raspberry Pi, other Linux targets, and macOS remain outside the
@@ -109,9 +111,9 @@ or private support route.
 
 ## npm release gate
 
-The `0.1.3` packages were published through npm staged publishing. Starting
-with `0.1.4`, the protected workflow directly publishes one OIDC-authenticated
-`tinyedge` artifact to `preview` after the `npm-release` environment approval.
-It never changes `latest`, republishes the audited runtime, or uses a long-lived
-npm token. Canary-approved promotion remains a separate maintainer action in
+The existing `tinyedge` releases remain immutable. The protected workflow is
+being migrated to publish one OIDC-authenticated `physicalsystems` artifact to
+`preview` after the `npm-release` environment approval. It never changes
+`latest`, republishes the audited runtime, or uses a long-lived npm token.
+Canary-approved promotion remains a separate maintainer action in
 [packages/cli/RELEASE.md](packages/cli/RELEASE.md).

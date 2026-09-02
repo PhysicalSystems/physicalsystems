@@ -1,10 +1,10 @@
 {
-  "name": "tinyedge",
-  "version": "0.1.5",
-  "description": "Secure Pi-powered terminal client for TinyEdge orchestration",
+  "name": "physicalsystems",
+  "version": "0.2.0",
+  "description": "Local Physical Systems Harness for real-world hardware",
   "type": "module",
   "bin": {
-    "tinyedge": "bin/tinyedge.js"
+    "physicalsystems": "bin/physicalsystems.js"
   },
   "exports": {
     ".": "./src/index.js",
