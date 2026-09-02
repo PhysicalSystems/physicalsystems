@@ -8,6 +8,8 @@ import {
   PHYSICAL_NODE_INTENT_REQUEST_VERSION,
   PHYSICAL_NODE_INTENT_VERSION,
   PHYSICAL_NODE_STATE_VERSION,
+  PHYSICAL_NODE_TIMEOUT,
+  PHYSICAL_NODE_UNAVAILABLE,
 } from '../src/physical/node-client.js'
 
 function jsonResponse(value, { status = 200, headers = {} } = {}) {
@@ -502,7 +504,11 @@ test('physical node client fails closed on remote redirects, oversized data, and
   const unavailable = createPhysicalNodeClient({
     fetchImpl: async () => { throw new Error('connect failed') },
   })
-  await assert.rejects(unavailable.inspect(), /unavailable at http:\/\/127\.0\.0\.1:8876/)
+  await assert.rejects(unavailable.inspect(), (error) => {
+    assert.match(error.message, /unavailable at http:\/\/127\.0\.0\.1:8876/)
+    assert.equal(error.code, PHYSICAL_NODE_UNAVAILABLE)
+    return true
+  })
 })
 
 test('physical intent is bounded before network access', async () => {
@@ -533,5 +539,9 @@ test('physical node timeout remains active while the response body is read', asy
       },
     }),
   })
-  await assert.rejects(client.inspect(), /before the timeout/)
+  await assert.rejects(client.inspect(), (error) => {
+    assert.match(error.message, /before the timeout/)
+    assert.equal(error.code, PHYSICAL_NODE_TIMEOUT)
+    return true
+  })
 })
