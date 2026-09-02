@@ -19,9 +19,9 @@ import {
 import { VERSION } from './version.js'
 
 function help() {
-  return `TinyEdge CLI ${VERSION}
+  return `Physical Systems Harness ${VERSION}
 
-Usage: tinyedge [--base-url URL] [command]
+Usage: physicalsystems [--base-url URL] [command]
 
 Commands:
   harness  Open the local Physical Systems Harness (default)
@@ -75,7 +75,7 @@ function parseProviderArgs(args) {
 function parseModelsArgs(args) {
   if (!args.length) return {}
   if (args.length !== 2 || args[0] !== '--provider' || !args[1]) {
-    throw new Error('Usage: tinyedge models [--provider PROVIDER]')
+    throw new Error('Usage: physicalsystems models [--provider PROVIDER]')
   }
   return { providerId: args[1] }
 }
@@ -220,7 +220,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   runCli().then((code) => {
     process.exitCode = code
   }).catch((error) => {
-    console.error(`TinyEdge: ${safeErrorMessage(error)}`)
+    console.error(`Physical Systems: ${safeErrorMessage(error)}`)
     process.exitCode = 1
   })
 }

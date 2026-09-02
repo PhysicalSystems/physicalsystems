@@ -1,0 +1,18 @@
+{
+  "name": "physicalsystems",
+  "version": "0.0.0",
+  "description": "Inert namespace bootstrap for the Physical Systems Harness",
+  "license": "Apache-2.0",
+  "files": [
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PhysicalSystems/tinyedge-edge.git",
+    "directory": "scripts/npm-bootstrap/physicalsystems-0.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

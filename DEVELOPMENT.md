@@ -78,17 +78,17 @@ v1 state route. Candidate discovery is read-only; a v1 `409` keeps planning
 blocked, while a valid commissioned state supplies the binding used by the v1
 intent route.
 
-The npm client owns the `tinyedge` command; Python benchmark tooling uses
-`tinydevice`. For the published npm release, prefer `npx --yes tinyedge` to
+The npm client owns the `physicalsystems` command; Python benchmark tooling uses
+`tinydevice`. For the published npm release, prefer `npx --yes physicalsystems` to
 avoid ambiguity with an unrelated executable on `PATH`. To inspect every
 PowerShell match, run:
 
 ```powershell
-Get-Command -All tinyedge
+Get-Command -All physicalsystems
 ```
 
 Use `npm start` when you intend to run the checked-out source. Use
-`npx --yes tinyedge` when you intend to run the current public npm release.
+`npx --yes physicalsystems` when you intend to run the current public npm release.
 
 Do not copy credentials into an issue, terminal transcript, or chat. Windows
 uses the current user's DPAPI boundary; Ubuntu uses the unlocked Secret Service

@@ -50,7 +50,7 @@
       },
       {
         "name": "tinyedge:sbom:composition",
-        "value": "tinyedge-edge-workspace@0.0.0 -> tinyedge plus its audited compatibility runtime"
+        "value": "tinyedge-edge-workspace@0.0.0 -> physicalsystems plus its audited compatibility runtime"
       },
       {
         "name": "tinyedge:sbom:default-install",
@@ -6412,6 +6412,51 @@
     },
     {
       "type": "library",
+      "bom-ref": "pkg:npm/physicalsystems@0.2.0",
+      "name": "physicalsystems",
+      "version": "0.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:npm/physicalsystems@0.2.0",
+      "properties": [
+        {
+          "name": "tinyedge:release:root-integrity-override",
+          "value": "npm shrinkwrap root records do not carry registry resolved/integrity metadata"
+        },
+        {
+          "name": "tinyedge:release:source-license-state",
+          "value": "Apache-2.0"
+        },
+        {
+          "name": "tinyedge:sbom:shrinkwrap-path",
+          "value": "packages/cli/npm-shrinkwrap.json"
+        },
+        {
+          "name": "tinyedge:sbom:shrinkwrap-sha256",
+          "value": "acbf96413845361d8958c1b39a7034c5265be0944db2300ef197792028d4bbc4"
+        },
+        {
+          "name": "tinyedge:workspace:package-json-path",
+          "value": "packages/cli/package.json"
+        },
+        {
+          "name": "tinyedge:workspace:package-json-sha256",
+          "value": "6dbf3a1a48bed59b8b5be8f4a53e879864b27e7afe18cffecbe7eb6df746f3d0"
+        },
+        {
+          "name": "tinyedge:workspace:package-root",
+          "value": "true"
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "library",
       "bom-ref": "pkg:npm/proper-lockfile@4.1.2",
       "name": "proper-lockfile",
       "version": "4.1.2",
@@ -6879,51 +6924,6 @@
           "value": "https://registry.npmjs.org/strnum/-/strnum-2.3.0.tgz"
         }
       ]
-    },
-    {
-      "type": "library",
-      "bom-ref": "pkg:npm/tinyedge@0.1.5",
-      "name": "tinyedge",
-      "version": "0.1.5",
-      "licenses": [
-        {
-          "license": {
-            "id": "Apache-2.0"
-          }
-        }
-      ],
-      "purl": "pkg:npm/tinyedge@0.1.5",
-      "properties": [
-        {
-          "name": "tinyedge:release:root-integrity-override",
-          "value": "npm shrinkwrap root records do not carry registry resolved/integrity metadata"
-        },
-        {
-          "name": "tinyedge:release:source-license-state",
-          "value": "Apache-2.0"
-        },
-        {
-          "name": "tinyedge:sbom:shrinkwrap-path",
-          "value": "packages/cli/npm-shrinkwrap.json"
-        },
-        {
-          "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "040c06b88aae480b84339200453e7178724a1a322efce778903f949dd3818af3"
-        },
-        {
-          "name": "tinyedge:workspace:package-json-path",
-          "value": "packages/cli/package.json"
-        },
-        {
-          "name": "tinyedge:workspace:package-json-sha256",
-          "value": "80530ce706f38d124205325dc84145e1701be8311aca92bbcb24d2bd0a9ce48b"
-        },
-        {
-          "name": "tinyedge:workspace:package-root",
-          "value": "true"
-        }
-      ],
-      "scope": "required"
     },
     {
       "type": "library",
@@ -8306,6 +8306,14 @@
       ]
     },
     {
+      "ref": "pkg:npm/physicalsystems@0.2.0",
+      "dependsOn": [
+        "pkg:npm/%40earendil-works/pi-tui@0.84.2",
+        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
+        "pkg:npm/proper-lockfile@4.1.2"
+      ]
+    },
+    {
       "ref": "pkg:npm/proper-lockfile@4.1.2",
       "dependsOn": [
         "pkg:npm/graceful-fs@4.2.11",
@@ -8367,15 +8375,7 @@
       "ref": "pkg:npm/tinyedge-edge-workspace@0.0.0",
       "dependsOn": [
         "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
-        "pkg:npm/tinyedge@0.1.5"
-      ]
-    },
-    {
-      "ref": "pkg:npm/tinyedge@0.1.5",
-      "dependsOn": [
-        "pkg:npm/%40earendil-works/pi-tui@0.84.2",
-        "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",
-        "pkg:npm/proper-lockfile@4.1.2"
+        "pkg:npm/physicalsystems@0.2.0"
       ]
     },
     {

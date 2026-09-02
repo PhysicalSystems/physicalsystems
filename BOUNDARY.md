@@ -5,7 +5,7 @@ the canonical public source for the device-side edge client.
 
 ## Public source
 
-- The `tinyedge` npm package: command, local credential, OAuth, MCP, Harness,
+- The `physicalsystems` npm package: command, local credential, OAuth, MCP, Harness,
   Pi extension, stable client/plugin contracts, and the bundled reviewed
   dependency closure required for deterministic npm 11/npm 12 installs.
 - The audited MIT Pi compatibility runtime used by the text-first Harness,
@@ -37,10 +37,12 @@ license. The self-contained licenses, notices, trademark policy, SBOMs, and
 third-party evidence are part of the public audit surface.
 
 Package manifests being publishable does not publish them. TinyEdge policy
-authorizes direct OIDC publication of the one `tinyedge` candidate to
+authorizes direct OIDC publication of the one `physicalsystems` candidate to
 `preview` through the manual, main-only workflow and protected `npm-release`
 environment. CI cannot change `latest` or republish the compatibility runtime;
 promotion remains a separate maintainer action with npm 2FA. An npm owner may
 technically retain interactive publication capability, but that is not an
-approved release route. Changes to this boundary require public review and
+approved release route for application code. The only exception is the
+reviewed, inert `physicalsystems@0.0.0` namespace bootstrap required before the
+first trusted-publisher release. Changes to this boundary require public review and
 must not be bundled with an unrelated feature or release.

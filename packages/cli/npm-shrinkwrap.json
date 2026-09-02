@@ -1,12 +1,12 @@
 {
-  "name": "tinyedge",
-  "version": "0.1.5",
+  "name": "physicalsystems",
+  "version": "0.2.0",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
-      "name": "tinyedge",
-      "version": "0.1.5",
+      "name": "physicalsystems",
+      "version": "0.2.0",
       "bundleDependencies": [
         "@earendil-works/pi-tui",
         "@tinyedge/pi-runtime",
@@ -14,7 +14,7 @@
       ],
       "license": "Apache-2.0",
       "bin": {
-        "tinyedge": "bin/tinyedge.js"
+        "physicalsystems": "bin/physicalsystems.js"
       },
       "os": [
         "win32",

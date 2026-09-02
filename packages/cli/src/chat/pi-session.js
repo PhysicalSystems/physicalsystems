@@ -404,7 +404,7 @@ export async function loadOfficialPiSdk() {
     return await import('@tinyedge/pi-runtime')
   } catch (error) {
     if (error?.code === 'ERR_MODULE_NOT_FOUND') {
-      throw new Error('TinyEdge Pi runtime is not installed. Reinstall the exact TinyEdge package before using `tinyedge chat`.')
+      throw new Error('The reviewed Pi runtime is not installed. Reinstall the exact Physical Systems package before using `physicalsystems chat`.')
     }
     throw error
   }

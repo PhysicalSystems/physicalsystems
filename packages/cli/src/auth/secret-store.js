@@ -187,7 +187,7 @@ export function createLinuxSecretServiceSecretStore({ run = execFileWithInput } 
       await secretTool(
         [
           'store',
-          '--label=TinyEdge CLI credential',
+          '--label=Physical Systems credential',
           ...secretToolAttributes(name),
         ],
         { input: requireSecretValue(value, SECRET_TOOL_VALUE_MAX_BYTES), run },

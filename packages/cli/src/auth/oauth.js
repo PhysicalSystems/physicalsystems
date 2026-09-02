@@ -121,7 +121,7 @@ export async function registerOAuthClient(
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
-      client_name: 'TinyEdge CLI',
+      client_name: 'Physical Systems Harness',
       redirect_uris: [redirect],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -207,7 +207,7 @@ export async function refreshAccessToken(
   now,
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
 ) {
-  if (!tokens?.refreshToken) throw new Error('TinyEdge connection cannot be refreshed; run `tinyedge login`')
+  if (!tokens?.refreshToken) throw new Error('TinyEdge connection cannot be refreshed; run `physicalsystems login`')
   const result = await fetchJson(tokens.tokenEndpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
@@ -225,7 +225,7 @@ export async function refreshAccessToken(
     previousScopes.size !== refreshedScopes.size
     || [...refreshedScopes].some((scope) => !previousScopes.has(scope))
   ) {
-    throw new Error('OAuth refresh changed the granted scopes; run `tinyedge login` again')
+    throw new Error('OAuth refresh changed the granted scopes; run `physicalsystems login` again')
   }
   return refreshed
 }

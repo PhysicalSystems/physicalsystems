@@ -1,6 +1,6 @@
 # Dependency and SBOM policy
 
-TinyEdge's npm release candidate is dependency-locked and reviewed offline.
+The Physical Systems npm release candidate is dependency-locked and reviewed offline.
 The executable inventory lives in `scripts/legal/reviewed-inventory.mjs`; the
 generated CycloneDX 1.6 documents are:
 
@@ -15,14 +15,14 @@ network access and rejects any drift.
 ## Current default-install closure
 
 The Pi compatibility runtime has 127 locked dependency artifacts. The
-`tinyedge` package adds the runtime itself for 128 locked dependency records.
+`physicalsystems` package adds the runtime itself for 128 locked dependency records.
 Every installed record has an exact version, registry URL, SRI integrity, and
 one of these reviewed license identifiers:
 
-`tinyedge` physically bundles this complete reviewed closure. This is a
+`physicalsystems` physically bundles this complete reviewed closure. This is a
 correctness boundary, not an optimization: npm 12 ignores a dependency
 package's shrinkwrap, so relying on the shrinkwrap alone can resolve a
-different graph. Release verification installs only the packed `tinyedge`
+different graph. Release verification installs only the packed `physicalsystems`
 tarball in offline mode with empty caches under npm 11.19.0 and npm 12.0.2 on
 Windows x64, Windows ARM64, and Ubuntu 22.04/24.04 desktop x64, then compares every
 installed name/version identity with the reviewed lock.
@@ -52,7 +52,7 @@ The current automation proves the locked graph, declared license identifiers,
 SRI metadata, reviewed vendored-file hashes, native-helper hashes, optional
 peer exclusion, and operative legal-file bytes. A complete artifact rescan
 found named top-level legal files (including accepted suffix variants) in 116
-of the 128 `tinyedge` dependency records.
+of the 128 `physicalsystems` dependency records.
 
 Twelve exact artifacts lack a named LICENSE, LICENCE, COPYING, or NOTICE file.
 Their version-, URL-, integrity-, license-, evidence-, limitation-, and
@@ -74,9 +74,10 @@ exactly with the recorded toolchain. The SBOM preserves both the evidence and
 the limitation. Approval applies only to its exact URL and SRI and does not
 claim that the candidate source commit originated the publication.
 
-The operative root Apache-2.0 license grants the source license. TinyEdge policy
-authorizes the one publishable `tinyedge` candidate through the protected,
+The operative root Apache-2.0 license grants the source license. Physical Systems policy
+authorizes the one publishable `physicalsystems` candidate through the protected,
 main-only direct OIDC workflow to `preview`. An npm owner may technically
 retain interactive 2FA publication capability, but that path is outside the
-approved procedure. SBOM presence does not independently authorize
+approved procedure for application code; the reviewed inert namespace
+bootstrap is the sole exception. SBOM presence does not independently authorize
 publication, promotion, or a repository-visibility change.

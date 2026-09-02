@@ -1,4 +1,4 @@
-name: Publish TinyEdge npm preview
+name: Publish Physical Systems npm preview
 
 on:
   workflow_dispatch:
@@ -7,11 +7,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: tinyedge-npm-preview-publish
+  group: physicalsystems-npm-preview-publish
   cancel-in-progress: false
 
 env:
-  RELEASE_VERSION: 0.1.5
+  RELEASE_VERSION: 0.2.0
   PI_RUNTIME_VERSION: 0.84.2-tinyedge.1
   NODE_VERSION: 22.19.0
   # Keep the exact packaging/publishing CLI fixed. Consumer verification also
@@ -21,7 +21,7 @@ env:
   NPM_REGISTRY: https://registry.npmjs.org/
   NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
   RELEASE_ARTIFACT_DIRECTORY: release-artifacts
-  RELEASE_ARTIFACT_NAME: tinyedge-npm-0.1.5-${{ github.sha }}-${{ github.run_attempt }}
+  RELEASE_ARTIFACT_NAME: physicalsystems-npm-0.2.0-${{ github.sha }}-${{ github.run_attempt }}
 
 jobs:
   require-main:
@@ -49,7 +49,7 @@ jobs:
             echo "::error title=License pending::LICENSE-PENDING.md is present; this export candidate must not build or publish release packages"
             exit 1
           fi
-      - name: Refuse every repository, event, or ref except TinyEdge main
+      - name: Refuse every repository, event, or ref except Physical Systems main
         shell: bash
         run: |
           set -euo pipefail
@@ -97,38 +97,38 @@ jobs:
           const root = process.env.GITHUB_WORKSPACE
           const expectedVersion = process.env.RELEASE_VERSION
           const expectedRuntimeVersion = process.env.PI_RUNTIME_VERSION
-          assert.equal(expectedVersion, '0.1.5')
+          assert.equal(expectedVersion, '0.2.0')
           assert.equal(expectedRuntimeVersion, '0.84.2-tinyedge.1')
 
           const readPackage = (directory) => JSON.parse(
             readFileSync(path.join(root, directory, 'package.json'), 'utf8'),
           )
-          const tinyedge = readPackage('packages/cli')
+          const physicalsystems = readPackage('packages/cli')
           const legacyPi = readPackage('packages/pi')
           const legacyFacade = readPackage('packages/npx')
           const runtime = readPackage('packages/pi-runtime')
 
-          assert.equal(tinyedge.name, 'tinyedge')
+          assert.equal(physicalsystems.name, 'physicalsystems')
           assert.equal(legacyPi.name, '@tinyedge/pi')
           assert.equal(legacyFacade.name, 'tinyedge')
           assert.equal(runtime.name, '@tinyedge/pi-runtime')
-          assert.deepEqual(tinyedge.bin, { tinyedge: 'bin/tinyedge.js' })
+          assert.deepEqual(physicalsystems.bin, { physicalsystems: 'bin/physicalsystems.js' })
           assert.equal(runtime.version, expectedRuntimeVersion)
           assert.equal(runtime.license, 'MIT')
           assert.equal(runtime.bin, undefined)
-          assert.equal(tinyedge.version, expectedVersion)
-          assert.deepEqual(tinyedge.os, ['win32', 'linux'])
-          assert.equal(tinyedge.engines?.node, '>=22.19.0')
-          assert.equal(tinyedge.publishConfig?.access, 'public')
-          assert.equal(tinyedge.bundleDependencies, true)
+          assert.equal(physicalsystems.version, expectedVersion)
+          assert.deepEqual(physicalsystems.os, ['win32', 'linux'])
+          assert.equal(physicalsystems.engines?.node, '>=22.19.0')
+          assert.equal(physicalsystems.publishConfig?.access, 'public')
+          assert.equal(physicalsystems.bundleDependencies, true)
           for (const legacy of [legacyPi, legacyFacade]) {
             assert.equal(legacy.version, '0.1.3')
             assert.equal(legacy.private, true)
           }
           assert.equal(runtime.engines?.node, '>=22.19.0')
           assert.equal(runtime.repository?.url, 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git')
-          assert.equal(tinyedge.dependencies?.['@tinyedge/pi-runtime'], expectedRuntimeVersion)
-          assert.equal(tinyedge.dependencies?.['@tinyedge/cli'], undefined)
+          assert.equal(physicalsystems.dependencies?.['@tinyedge/pi-runtime'], expectedRuntimeVersion)
+          assert.equal(physicalsystems.dependencies?.['@tinyedge/cli'], undefined)
 
           const lock = JSON.parse(
             readFileSync(path.join(root, 'packages/cli/package-lock.json'), 'utf8'),
@@ -148,7 +148,7 @@ jobs:
           $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
           npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Pack the runtime and one bundled TinyEdge tarball with a SHA-256 manifest
+      - name: Pack the runtime and one bundled Physical Systems tarball with a SHA-256 manifest
         shell: pwsh
         run: |
           $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE $env:RELEASE_ARTIFACT_DIRECTORY
@@ -289,7 +289,7 @@ jobs:
       - name: Upload architecture verification evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: tinyedge-npm-verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}-${{ github.sha }}-${{ github.run_attempt }}
+          name: physicalsystems-npm-verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}-${{ github.sha }}-${{ github.run_attempt }}
           path: verification-evidence/verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}.json
           if-no-files-found: error
           retention-days: 30
@@ -391,13 +391,13 @@ jobs:
       - name: Upload Linux verification evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: tinyedge-npm-verification-${{ matrix.runner }}-npm-${{ matrix.npm-version }}-${{ github.sha }}-${{ github.run_attempt }}
+          name: physicalsystems-npm-verification-${{ matrix.runner }}-npm-${{ matrix.npm-version }}-${{ github.sha }}-${{ github.run_attempt }}
           path: verification-evidence/verification-${{ matrix.runner }}-npm-${{ matrix.npm-version }}.json
           if-no-files-found: error
           retention-days: 30
 
   publish:
-    name: Publish 0.1.5 to preview with npm OIDC
+    name: Publish physicalsystems 0.2.0 to preview with npm OIDC
     needs:
       - build
       - verify
@@ -416,8 +416,8 @@ jobs:
           RELEASE_REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
         run: |
           set -euo pipefail
-          if [[ "$NPM_RELEASE_POLICY_VERSION" != "v2-direct-preview" ]]; then
-            echo "::error title=Unprotected release environment::The npm-release environment must provide NPM_RELEASE_POLICY_VERSION=v2-direct-preview after the tinyedge trusted publisher allows npm publish"
+          if [[ "$NPM_RELEASE_POLICY_VERSION" != "v3-physicalsystems-preview" ]]; then
+            echo "::error title=Unprotected release environment::The npm-release environment must provide NPM_RELEASE_POLICY_VERSION=v3-physicalsystems-preview after the physicalsystems trusted publisher allows npm publish"
             exit 1
           fi
           if [[ "$RELEASE_REPOSITORY_PRIVATE" != "false" ]]; then
@@ -534,10 +534,10 @@ jobs:
           const manifest = JSON.parse(manifestBytes.toString('utf8'))
           const expected = [
             ['pi-runtime', '@tinyedge/pi-runtime', process.env.PI_RUNTIME_VERSION, 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz'],
-            ['tinyedge', 'tinyedge', process.env.RELEASE_VERSION, 'tinyedge-0.1.5.tgz'],
+            ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, 'physicalsystems-0.2.0.tgz'],
           ]
 
-          assert.equal(process.env.RELEASE_VERSION, '0.1.5')
+          assert.equal(process.env.RELEASE_VERSION, '0.2.0')
           assert.equal(process.env.PI_RUNTIME_VERSION, '0.84.2-tinyedge.1')
           assert.equal(manifest.schemaVersion, 1)
           assert.equal(manifest.version, process.env.RELEASE_VERSION)
@@ -581,7 +581,7 @@ jobs:
               legalFiles: ['LICENSE', 'NOTICE', 'SBOM.cdx.json', 'UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM_README.md'],
             },
             ...[
-              ['tinyedge', 'tinyedge-0.1.5.tgz', 'packages/cli'],
+              ['physicalsystems', 'physicalsystems-0.2.0.tgz', 'packages/cli'],
             ].map(([name, filename, sourceDirectory]) => ({
               name,
               version: process.env.RELEASE_VERSION,
@@ -707,7 +707,7 @@ jobs:
           const manifest = JSON.parse(
             execFileSync(
               'tar',
-              ['-xOf', path.join(directory, 'tinyedge-0.1.5.tgz'), 'package/npm-shrinkwrap.json'],
+              ['-xOf', path.join(directory, 'physicalsystems-0.2.0.tgz'), 'package/npm-shrinkwrap.json'],
               { encoding: 'utf8' },
             ),
           )
@@ -723,22 +723,91 @@ jobs:
           )
           assert.equal(lockedRuntime?.integrity, runtimeArtifact.integrity)
           NODE
-      - name: Require the published runtime and an unpublished TinyEdge candidate
+      - name: Require the published runtime and an unpublished Physical Systems candidate
         shell: bash
         env:
+          PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY: ${{ vars.PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY }}
+          PHYSICALSYSTEMS_BOOTSTRAP_SHASUM: ${{ vars.PHYSICALSYSTEMS_BOOTSTRAP_SHASUM }}
           PI_RUNTIME_BOOTSTRAP_INTEGRITY: ${{ vars.PI_RUNTIME_BOOTSTRAP_INTEGRITY }}
           PI_RUNTIME_BOOTSTRAP_SHASUM: ${{ vars.PI_RUNTIME_BOOTSTRAP_SHASUM }}
         run: |
           set -euo pipefail
           mkdir -p publish-evidence
-          tinyedge_tags="$(npm view tinyedge dist-tags --json --registry="$NPM_REGISTRY" 2>&1)"
-          printf '%s\n' "$tinyedge_tags" | tee publish-evidence/tinyedge-dist-tags-before.json
-          TINYEDGE_TAGS_JSON="$tinyedge_tags" node --input-type=module <<'NODE'
+          if ! physicalsystems_metadata="$(npm view 'physicalsystems@0.0.0' name version license publishConfig bin dependencies optionalDependencies peerDependencies peerDependenciesMeta devDependencies bundledDependencies bundleDependencies scripts dist --json --registry="$NPM_REGISTRY" 2>&1)"; then
+            printf '%s\n' "$physicalsystems_metadata" | tee publish-evidence/physicalsystems-bootstrap-check.log
+            echo "::error title=Physical Systems package does not exist::Publish the separately approved no-code physicalsystems@0.0.0 bootstrap interactively with 2FA under the bootstrap tag first"
+            exit 1
+          fi
+          physicalsystems_tags="$(npm view physicalsystems dist-tags --json --registry="$NPM_REGISTRY" 2>&1)"
+          mkdir -p publish-evidence/physicalsystems-bootstrap
+          physicalsystems_pack="$(npm pack 'physicalsystems@0.0.0' --json --ignore-scripts --registry="$NPM_REGISTRY" --pack-destination publish-evidence/physicalsystems-bootstrap 2>&1)"
+          {
+            printf 'metadata=%s\n' "$physicalsystems_metadata"
+            printf 'dist-tags=%s\n' "$physicalsystems_tags"
+            printf 'pack=%s\n' "$physicalsystems_pack"
+          } | tee publish-evidence/physicalsystems-bootstrap-check.log
+          PHYSICALSYSTEMS_METADATA_JSON="$physicalsystems_metadata" PHYSICALSYSTEMS_TAGS_JSON="$physicalsystems_tags" PHYSICALSYSTEMS_PACK_JSON="$physicalsystems_pack" \
+            node --input-type=module <<'NODE'
           import assert from 'node:assert/strict'
+          import { execFileSync } from 'node:child_process'
+          import path from 'node:path'
 
-          const tags = JSON.parse(process.env.TINYEDGE_TAGS_JSON)
-          assert.equal(tags.latest, '0.1.3', 'tinyedge latest must still resolve to the approved 0.1.3 release')
-          assert.equal(tags.preview, '0.1.4', 'tinyedge preview must start from the approved Windows-only 0.1.4 release')
+          assert.match(process.env.PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY || '', /^sha512-[A-Za-z0-9+/]+={0,2}$/)
+          assert.match(process.env.PHYSICALSYSTEMS_BOOTSTRAP_SHASUM || '', /^[0-9a-f]{40}$/)
+          const metadata = JSON.parse(process.env.PHYSICALSYSTEMS_METADATA_JSON)
+          const assertInertBootstrap = (manifest, source) => {
+            assert.equal(manifest.name, 'physicalsystems', `${source} package name`)
+            assert.equal(manifest.version, '0.0.0', `${source} package version`)
+            assert.equal(manifest.license, 'Apache-2.0', `${source} package license`)
+            assert.deepEqual(manifest.publishConfig, { access: 'public' })
+            for (const field of [
+              'bin',
+              'dependencies',
+              'optionalDependencies',
+              'peerDependencies',
+              'peerDependenciesMeta',
+              'devDependencies',
+              'bundledDependencies',
+              'bundleDependencies',
+              'scripts',
+            ]) {
+              assert.equal(manifest[field], undefined, `${source} bootstrap must not declare ${field}`)
+            }
+          }
+          assertInertBootstrap(metadata, 'registry metadata')
+          assert.equal(metadata.dist?.integrity, process.env.PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY)
+          assert.equal(metadata.dist?.shasum, process.env.PHYSICALSYSTEMS_BOOTSTRAP_SHASUM)
+          assert.equal(
+            metadata.dist?.tarball,
+            'https://registry.npmjs.org/physicalsystems/-/physicalsystems-0.0.0.tgz',
+          )
+          const tags = JSON.parse(process.env.PHYSICALSYSTEMS_TAGS_JSON)
+          assert.deepEqual(
+            tags,
+            { bootstrap: '0.0.0', latest: '0.0.0' },
+            'npm first-publish behavior must expose only the inert physicalsystems bootstrap bytes',
+          )
+          const [packed] = JSON.parse(process.env.PHYSICALSYSTEMS_PACK_JSON)
+          assert.equal(packed.name, 'physicalsystems')
+          assert.equal(packed.version, '0.0.0')
+          assert.equal(packed.integrity, process.env.PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY)
+          assert.equal(packed.shasum, process.env.PHYSICALSYSTEMS_BOOTSTRAP_SHASUM)
+          assert.deepEqual(
+            packed.files.map(({ path }) => path).sort(),
+            ['LICENSE', 'README.md', 'package.json'],
+            'the namespace bootstrap must contain only its license, explanation, and inert manifest',
+          )
+          assert.deepEqual(packed.bundled || [], [])
+          const packedManifest = JSON.parse(execFileSync(
+            'tar',
+            [
+              '-xOf',
+              path.resolve('publish-evidence/physicalsystems-bootstrap/physicalsystems-0.0.0.tgz'),
+              'package/package.json',
+            ],
+            { encoding: 'utf8' },
+          ))
+          assertInertBootstrap(packedManifest, 'downloaded tarball')
           NODE
           if ! runtime_metadata="$(npm view '@tinyedge/pi-runtime@0.0.0' name version license publishConfig bin dependencies optionalDependencies peerDependencies peerDependenciesMeta devDependencies bundledDependencies bundleDependencies scripts dist --json --registry="$NPM_REGISTRY" 2>&1)"; then
             printf '%s\n' "$runtime_metadata" | tee publish-evidence/pi-runtime-bootstrap-check.log
@@ -842,7 +911,7 @@ jobs:
               return 1
             fi
           }
-          check_unpublished 'tinyedge' "$RELEASE_VERSION" tinyedge
+          check_unpublished 'physicalsystems' "$RELEASE_VERSION" physicalsystems
           if ! published_runtime="$(npm view "@tinyedge/pi-runtime@$PI_RUNTIME_VERSION" name version dist --json --registry="$NPM_REGISTRY" 2>&1)"; then
             printf '%s\n' "$published_runtime" | tee publish-evidence/pi-runtime-published-check.log
             echo "::error title=Audited runtime missing::@tinyedge/pi-runtime@$PI_RUNTIME_VERSION must already be published; this release reuses it and must not republish it"
@@ -869,29 +938,29 @@ jobs:
             'packed runtime tarball must match the already-published registry artifact',
           )
           NODE
-      - name: Publish tinyedge@0.1.5 directly to preview
+      - name: Publish physicalsystems@0.2.0 directly to preview
         shell: bash
         run: |
           set -euo pipefail
-          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-0.1.5.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
-            | tee publish-evidence/tinyedge-publish.log
+          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.0.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+            | tee publish-evidence/physicalsystems-publish.log
       - name: Verify preview isolation, registry bytes, and provenance signature
         shell: bash
         run: |
           set -euo pipefail
-          cat > publish-evidence/verify-published-tinyedge.mjs <<'NODE'
+          cat > publish-evidence/verify-published-physicalsystems.mjs <<'NODE'
           import assert from 'node:assert/strict'
           import { createHash } from 'node:crypto'
           import { readFileSync } from 'node:fs'
           import path from 'node:path'
 
-          const published = JSON.parse(process.env.PUBLISHED_TINYEDGE_JSON)
-          const tags = JSON.parse(process.env.PUBLISHED_TINYEDGE_TAGS_JSON)
+          const published = JSON.parse(process.env.PUBLISHED_PHYSICALSYSTEMS_JSON)
+          const tags = JSON.parse(process.env.PUBLISHED_PHYSICALSYSTEMS_TAGS_JSON)
           const tarball = readFileSync(path.join(
             process.env.RELEASE_ARTIFACT_DIRECTORY,
-            `tinyedge-${process.env.RELEASE_VERSION}.tgz`,
+            `physicalsystems-${process.env.RELEASE_VERSION}.tgz`,
           ))
-          assert.equal(published.name, 'tinyedge')
+          assert.equal(published.name, 'physicalsystems')
           assert.equal(published.version, process.env.RELEASE_VERSION)
           assert.equal(
             published.dist?.integrity,
@@ -905,7 +974,7 @@ jobs:
           )
           assert.match(
             published.dist?.attestations?.url || '',
-            /\/npm\/v1\/attestations\/tinyedge@0\.1\.5$/,
+            /\/npm\/v1\/attestations\/physicalsystems@0\.2\.0$/,
             'the registry must expose the npm provenance attestation',
           )
           assert.equal(
@@ -913,8 +982,9 @@ jobs:
             'https://slsa.dev/provenance/v1',
             'the registry must expose an SLSA v1 provenance predicate',
           )
-          assert.equal(tags.latest, '0.1.3', 'publishing preview must not move latest')
-          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.1.5')
+          assert.equal(tags.latest, '0.0.0', 'publishing preview must not move the inert initial latest tag')
+          assert.equal(tags.bootstrap, '0.0.0', 'the inert namespace bootstrap must remain isolated')
+          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.2.0')
           NODE
           mkdir -p publish-evidence/signature-audit
           (
@@ -925,20 +995,20 @@ jobs:
           published_tags=
           verification_succeeded=false
           for attempt in {1..12}; do
-            if published_metadata="$(npm view "tinyedge@$RELEASE_VERSION" name version dist --json --registry="$NPM_REGISTRY" 2>&1)" \
-              && published_tags="$(npm view tinyedge dist-tags --json --registry="$NPM_REGISTRY" 2>&1)" \
-              && PUBLISHED_TINYEDGE_JSON="$published_metadata" PUBLISHED_TINYEDGE_TAGS_JSON="$published_tags" \
-                node publish-evidence/verify-published-tinyedge.mjs 2>>publish-evidence/registry-convergence.log; then
-              printf '%s\n' "$published_metadata" > publish-evidence/tinyedge-registry-after.json
-              printf '%s\n' "$published_tags" > publish-evidence/tinyedge-dist-tags-after.json
+            if published_metadata="$(npm view "physicalsystems@$RELEASE_VERSION" name version dist --json --registry="$NPM_REGISTRY" 2>&1)" \
+              && published_tags="$(npm view physicalsystems dist-tags --json --registry="$NPM_REGISTRY" 2>&1)" \
+              && PUBLISHED_PHYSICALSYSTEMS_JSON="$published_metadata" PUBLISHED_PHYSICALSYSTEMS_TAGS_JSON="$published_tags" \
+                node publish-evidence/verify-published-physicalsystems.mjs 2>>publish-evidence/registry-convergence.log; then
+              printf '%s\n' "$published_metadata" > publish-evidence/physicalsystems-registry-after.json
+              printf '%s\n' "$published_tags" > publish-evidence/physicalsystems-dist-tags-after.json
               if (
                 cd publish-evidence/signature-audit
                 rm -rf node_modules package-lock.json
                 npm install --ignore-scripts --no-audit --no-fund \
-                  "tinyedge@$RELEASE_VERSION" --registry="$NPM_REGISTRY" 2>&1 \
-                  | tee "../tinyedge-install-attempt-${attempt}.log" &&
+                  "physicalsystems@$RELEASE_VERSION" --registry="$NPM_REGISTRY" 2>&1 \
+                  | tee "../physicalsystems-install-attempt-${attempt}.log" &&
                 npm audit signatures --registry="$NPM_REGISTRY" 2>&1 \
-                  | tee "../tinyedge-signature-audit-attempt-${attempt}.log"
+                  | tee "../physicalsystems-signature-audit-attempt-${attempt}.log"
               ); then
                 verification_succeeded=true
                 break
@@ -977,14 +1047,14 @@ jobs:
             echo "- Registry integrity, dist-tags, SLSA provenance metadata, and npm's cryptographic signature audit were rechecked after publication."
             echo "- @tinyedge/pi-runtime@$PI_RUNTIME_VERSION is already published; this workflow packs it for verification, matches the packed tarball to the live registry artifact, and never republishes it."
             echo "- @tinyedge/cli@0.1.3 and @tinyedge/pi@0.1.3 remain immutable compatibility releases and are not part of this candidate."
-            echo "- Automatic provenance applies to tinyedge@0.1.5 from this public repository, not to the earlier interactive runtime bootstrap publication."
+            echo "- Automatic provenance applies to physicalsystems@0.2.0 from this public repository, not to either earlier inert namespace bootstrap publication."
             echo "- Promotion from preview to latest remains a separate manual maintainer action with npm 2FA."
           } | tee publish-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload registry preflight and publication logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: tinyedge-npm-publish-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          name: physicalsystems-npm-publish-evidence-${{ github.sha }}-${{ github.run_attempt }}
           path: publish-evidence
           if-no-files-found: error
           retention-days: 30
