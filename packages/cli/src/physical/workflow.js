@@ -107,15 +107,15 @@ export function updatePhysicalWorkflow(state, event) {
 function stepStates(state) {
   const discovered = Boolean(state.snapshot)
   const interpretation = state.response?.interpretation
-  const intentKnown = Boolean(interpretation)
+  const intentSubmitted = Boolean(state.requestedIntent)
   const planReady = hasGroundedPlan(interpretation)
-  const planNeedsWork = (intentKnown && !planReady) || Boolean(state.snapshot && state.error)
+  const planNeedsWork = (intentSubmitted && !planReady) || Boolean(state.snapshot && state.error)
   const commissioningDraft = state.exploration?.status === 'draft'
   return [
     state.status === 'checking' ? 'working' : discovered ? 'done' : state.error ? 'blocked' : 'waiting',
-    intentKnown ? 'done' : 'waiting',
+    intentSubmitted ? 'done' : 'waiting',
     planReady ? 'done' : planNeedsWork ? 'blocked' : 'waiting',
-    commissioningDraft ? 'draft' : intentKnown ? 'blocked' : 'waiting',
+    commissioningDraft ? 'draft' : intentSubmitted ? 'blocked' : 'waiting',
     'locked',
     'locked',
   ]
@@ -137,10 +137,19 @@ function fit(value, width) {
 }
 
 function deviceDetail(device) {
-  if (!device.detected) return 'not detected'
-  if (!device.driverReady) return 'driver unavailable'
-  if (!device.calibrationReady) return 'calibration unavailable'
-  return device.ready ? 'ready' : 'not ready'
+  if (device.readiness === 'detected') return 'detected · adapter not found'
+  if (device.readiness === 'adapter-available') return 'detected · adapter available'
+  if (device.readiness === 'setup-required') return 'detected · adapter setup required'
+  if (device.readiness === 'commissioned') return 'commissioned · readiness checks pending'
+  if (device.readiness === 'ready') return 'ready'
+  if (!device.driverReady) return 'detected · adapter unavailable'
+  if (!device.calibrationReady) return 'detected · commissioning required'
+  return device.ready ? 'ready' : 'detected · not ready'
+}
+
+export function observedPhysicalDevices(snapshot) {
+  const devices = snapshot?.discovery?.devices
+  return Array.isArray(devices) ? devices.filter((device) => device?.detected === true) : []
 }
 
 function evidenceLine(response) {
@@ -156,12 +165,15 @@ function evidenceLine(response) {
 function planLine(response) {
   const interpretation = response?.interpretation
   const grounding = interpretation?.grounding
-  if (!interpretation || !grounding || !hasGroundedPlan(interpretation)) return null
+  if (!hasGroundedPlan(interpretation)) return null
   const action = cleanMessage(interpretation.action || 'workflow')
-  const objectId = cleanMessage(grounding.objectId || 'configured object')
-  const source = cleanMessage(grounding.sourceStationId || 'source')
-  const destination = cleanMessage(grounding.destinationStationId || 'destination')
-  return `Plan · ${action} ${objectId} · ${source} → ${destination}`
+  if (grounding?.objectId && grounding?.sourceStationId && grounding?.destinationStationId) {
+    return `Plan · ${action} ${cleanMessage(grounding.objectId)} · ${cleanMessage(grounding.sourceStationId)} → ${cleanMessage(grounding.destinationStationId)}`
+  }
+  const operationCount = Array.isArray(interpretation.requiredOperations)
+    ? interpretation.requiredOperations.length
+    : 0
+  return `Plan · ${action}${operationCount ? ` · ${operationCount} required operation${operationCount === 1 ? '' : 's'}` : ''}`
 }
 
 function groundingLine(response) {
@@ -190,15 +202,16 @@ function explorationLines(exploration) {
 }
 
 function hasGroundedPlan(interpretation) {
-  if (interpretation?.status !== 'ready' || !interpretation.workflowIntent) return false
-  const grounding = interpretation.grounding
-  return Boolean(grounding?.objectId && grounding?.sourceStationId && grounding?.destinationStationId)
+  return Boolean(interpretation?.status === 'ready' && interpretation.workflowIntent)
 }
 
 function nextLine(state) {
-  if (state.status === 'checking') return 'Checking the local Agent without opening hardware…'
-  if (state.status === 'unavailable') return `Agent unavailable · ${state.error} · run /physical to retry`
+  if (state.status === 'checking') return 'Checking the local Physical Systems node without opening hardware…'
+  if (state.status === 'unavailable') return `Physical Systems node unavailable · ${state.error} · run /physical to retry`
   if (!state.snapshot) return 'Run /physical, or describe a physical outcome in the editor.'
+  if (!observedPhysicalDevices(state.snapshot).length) {
+    return 'No hardware observed · connect a device and run /physical to refresh.'
+  }
   if (state.error) return `Planning blocked · ${state.error}`
   if (!state.response) return 'Describe the physical outcome in the editor, or run /physical.'
   const interpretation = state.response.interpretation
@@ -226,15 +239,22 @@ export function renderPhysicalWorkflow(state, width = 100) {
   ]
   if (state.snapshot) {
     const { snapshot } = state
+    const devices = observedPhysicalDevices(snapshot)
+    const ready = devices.filter((device) => device.ready).length
     lines.push(fit(
-      `${snapshot.system.displayName} · ${snapshot.nodeName} · ${snapshot.discovery.summary.ready}/${snapshot.discovery.summary.configured} components ready`,
+      `Physical Systems node · ${snapshot.nodeName} · ${ready}/${devices.length} devices ready`,
       safeWidth,
     ))
-    for (const device of snapshot.discovery.devices) {
-      lines.push(fit(`${device.ready ? '✓' : '!'} ${device.deviceId} · ${device.kind} · ${deviceDetail(device)}`, safeWidth))
+    for (const device of devices) {
+      const label = device.displayName || device.deviceId
+      lines.push(fit(`${device.ready ? '✓' : '!'} ${label} · ${device.kind} · ${deviceDetail(device)}`, safeWidth))
+    }
+    const providerErrors = snapshot.discovery.providerErrors || []
+    if (providerErrors.length) {
+      lines.push(fit(`Discovery partial · ${providerErrors.length} provider${providerErrors.length === 1 ? '' : 's'} reported issues`, safeWidth))
     }
   } else {
-    lines.push(fit(`Local Agent · ${state.nodeOrigin}`, safeWidth))
+    lines.push(fit(`Physical Systems node · ${state.nodeOrigin}`, safeWidth))
   }
   const observation = evidenceLine(state.response)
   if (state.requestedIntent) lines.push(fit(`Intent · ${state.requestedIntent}`, safeWidth))
@@ -249,20 +269,29 @@ export function renderPhysicalWorkflow(state, width = 100) {
 }
 
 export function compactPhysicalSnapshotForModel(snapshot) {
+  const devices = observedPhysicalDevices(snapshot)
   return {
-    nodeName: snapshot.nodeName,
-    system: snapshot.system,
     discovery: {
       observedAt: snapshot.discovery.observedAt,
       snapshotDigest: snapshot.discovery.snapshotDigest,
       bindingDigest: snapshot.discoveryBindingDigest,
-      summary: snapshot.discovery.summary,
-      devices: snapshot.discovery.devices.map((device) => ({
+      summary: {
+        observed: devices.length,
+        adapterReady: devices.filter((device) => device.driverReady).length,
+        commissioned: devices.filter((device) => device.calibrationReady).length,
+        ready: devices.filter((device) => device.ready).length,
+        allReady: devices.length > 0 && devices.every((device) => device.ready),
+      },
+      devices: devices.map((device) => ({
         deviceId: device.deviceId,
         kind: device.kind,
+        transport: device.transport ?? null,
         roles: device.roles,
         capabilities: device.capabilities,
         detected: device.detected,
+        adapterStatus: device.adapterStatus ?? null,
+        commissioningStatus: device.commissioningStatus ?? null,
+        readiness: device.readiness ?? (device.ready ? 'ready' : 'setup-required'),
         driverReady: device.driverReady,
         calibrationReady: device.calibrationReady,
         ready: device.ready,
@@ -325,7 +354,7 @@ export function createPhysicalPiTools({
     defineTool({
       name: PHYSICAL_DISCOVERY_TOOL,
       label: 'Inspect physical system',
-      description: 'Read the local Physical Systems Agent discovery snapshot. This checks enrolled device identity, driver, and calibration evidence without opening hardware or authorizing movement.',
+      description: 'Read the local Physical Systems node discovery snapshot. It reports only observed device candidates and their adapter, commissioning, and readiness state without opening hardware or authorizing movement.',
       parameters: { type: 'object', additionalProperties: false },
       async execute() {
         const snapshot = await inspect()
@@ -352,7 +381,11 @@ export function createPhysicalPiTools({
       async execute(_toolCallId, params) {
         const snapshot = await inspect()
         try {
-          const response = await client.interpret(params?.intent, snapshot.discoveryBindingDigest)
+          const response = await client.interpret(
+            params?.intent,
+            snapshot.discoveryBindingDigest,
+            snapshot,
+          )
           onIntent?.(response, params?.intent)
           return result(compactPhysicalIntentForModel(response), 'Grounded physical workflow intent')
         } catch (error) {

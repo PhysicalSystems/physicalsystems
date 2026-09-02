@@ -67,7 +67,7 @@ test('existing Pi extension registers commands and scope-bound TinyEdge tools', 
 
   extension(pi)
   assert.deepEqual([...pi.commands.keys()], [
-    'tinyedge-login', 'tinyedge-status', 'tinyedge-tools', 'tinyedge-devices', 'tinyedge-logout',
+    'tinyedge-login', 'tinyedge-status', 'tinyedge-tools', 'tinyedge-logout',
   ])
   await pi.commands.get('tinyedge-login').handler('--allow-run', fakeContext(messages))
   assert.deepEqual(loginScopesSeen, ['tinyedge:read', 'tinyedge:run'])
@@ -104,21 +104,24 @@ test('existing Pi extension uses the Pi-compatible identity tool definition by d
   assert.deepEqual([...pi.tools.keys()], ['ask_choice', 'list_devices'])
 })
 
-test('standalone Harness blocks direct shell and non-TinyEdge tools', async () => {
+test('standalone Harness is local-only and blocks shell and unreviewed tools', async () => {
   const pi = fakePi()
   createTinyEdgePiExtension({
     standalone: true,
-    createConfigImpl: () => ({
-      baseUrl: 'https://tinyedge.ai', mcpUrl: 'https://tinyedge.ai/api/mcp', configDir: 'C:\\test', scopes: ['tinyedge:read'],
-    }),
-    createSecretStoreImpl: () => createMemorySecretStore(),
-    createTokenStoreImpl: () => ({ async summary() { return { connected: false } } }),
+    createConfigImpl: () => { throw new Error('standalone Harness must not load cloud config') },
+    createSecretStoreImpl: () => { throw new Error('standalone Harness must not load cloud credentials') },
+    createTokenStoreImpl: () => { throw new Error('standalone Harness must not load cloud tokens') },
     defineToolImpl: (value) => value,
   })(pi)
 
+  assert.deepEqual([...pi.commands.keys()], ['physical'])
+  assert.deepEqual([...pi.tools.keys()], [
+    'ask_choice', 'inspect_physical_system', 'plan_physical_workflow',
+  ])
+
   assert.deepEqual(await pi.handlers.get('user_bash')({ command: 'whoami' }), {
     result: {
-      output: 'Shell access is disabled in TinyEdge Harness.',
+      output: 'Shell access is disabled in Physical Systems Harness.',
       exitCode: 126,
       cancelled: false,
       truncated: false,
@@ -126,7 +129,7 @@ test('standalone Harness blocks direct shell and non-TinyEdge tools', async () =
   })
   assert.deepEqual(await pi.handlers.get('tool_call')({ toolName: 'bash' }), {
     block: true,
-    reason: 'Only reviewed TinyEdge tools are available in this Harness.',
+    reason: 'Only reviewed Physical Systems tools are available in this Harness.',
   })
 })
 
@@ -167,8 +170,8 @@ test('standalone Harness renders and drives the local physical workflow inside P
       grounding: { objectId: 'cup-one', sourceStationId: 'source', destinationStationId: 'destination' },
       workflowIntent: null,
       requiredOperations: [
-        { operationId: 'pick-container', effect: 'actuating' },
-        { operationId: 'place-container', effect: 'actuating' },
+        { deviceRole: 'robot-follower', operationId: 'pick-container', effect: 'actuating' },
+        { deviceRole: 'robot-follower', operationId: 'place-container', effect: 'actuating' },
       ],
       gaps: [{
         gapId: 'robot-manipulation-commissioning',
@@ -188,7 +191,10 @@ test('standalone Harness renders and drives the local physical workflow inside P
   const physicalClient = {
     origin: 'http://127.0.0.1:8876',
     async inspect() { calls.push('inspect'); return snapshot },
-    async interpret(intent, digest) { calls.push(['interpret', intent, digest]); return response },
+    async interpret(intent, digest, inspected) {
+      calls.push(['interpret', intent, digest, inspected === snapshot])
+      return response
+    },
   }
   createTinyEdgePiExtension({
     standalone: true,
@@ -218,6 +224,7 @@ test('standalone Harness renders and drives the local physical workflow inside P
 
   await pi.handlers.get('session_start')({}, ctx)
   assert.deepEqual(calls, ['inspect'])
+  assert.doesNotMatch(messages.map((entry) => entry.message).join('\n'), /TinyEdge account|tinyedge-login|Connect TinyEdge/i)
   assert.equal(pi.commands.has('physical'), true)
   assert.equal(pi.tools.has('inspect_physical_system'), true)
   assert.equal(pi.tools.has('plan_physical_workflow'), true)
@@ -226,7 +233,7 @@ test('standalone Harness renders and drives the local physical workflow inside P
 
   const theme = { fg: (_name, value) => value }
   let widget = widgets.get('tinyedge-physical-workflow')(null, theme).render(120).join('\n')
-  assert.match(widget, /2\/2 components ready/)
+  assert.match(widget, /2\/2 devices ready/)
   assert.match(widget, /✓ overhead-camera/)
   assert.doesNotMatch(widget, /yellow cup|taught motion/i)
 
@@ -237,7 +244,7 @@ test('standalone Harness renders and drives the local physical workflow inside P
   assert.deepEqual(calls, [
     'inspect',
     'inspect',
-    ['interpret', 'Move the cup from source station to destination station.', snapshot.discoveryBindingDigest],
+    ['interpret', 'Move the cup from source station to destination station.', snapshot.discoveryBindingDigest, true],
   ])
   widget = widgets.get('tinyedge-physical-workflow')(null, theme).render(120).join('\n')
   assert.match(widget, /✓ Intent/)
@@ -252,7 +259,7 @@ test('standalone Harness renders and drives the local physical workflow inside P
   assert.match(messages.at(-1).message, /No method, bounds, or motion was selected/)
 })
 
-test('Harness gives a fresh benchmark request a deterministic question-first tool boundary', async () => {
+test('cloud Pi extension gives a fresh benchmark request a deterministic question-first tool boundary', async () => {
   assert.equal(isFreshBenchmarkRequest('Can you benchmark my Basler camera on my Raspberry Pi?'), true)
   assert.equal(isFreshBenchmarkRequest('Resume my existing Basler benchmark task'), false)
   assert.equal(isFreshBenchmarkRequest('Show the results from my previous benchmark run'), false)
@@ -260,7 +267,6 @@ test('Harness gives a fresh benchmark request a deterministic question-first too
   const pi = fakePi()
   const messages = []
   createTinyEdgePiExtension({
-    standalone: true,
     createConfigImpl: () => ({
       baseUrl: 'https://tinyedge.ai', mcpUrl: 'https://tinyedge.ai/api/mcp', configDir: 'C:\\test', scopes: ['tinyedge:read'],
     }),

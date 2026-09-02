@@ -47,8 +47,8 @@ Get-Command -All tinyedge
 
 ## What is included
 
-- `tinyedge`: the command, OAuth, credential, MCP, provider, Harness, and Pi
-  extension logic in one package.
+- `tinyedge`: the local-first Physical Systems Harness plus optional OAuth,
+  credential, MCP, provider, command, and Pi extension logic in one package.
 - `@tinyedge/pi-runtime`: the separately versioned audited MIT Pi compatibility
   runtime, bundled into `tinyedge` so the one-package install retains the
   reviewed graph under npm 11 and npm 12.

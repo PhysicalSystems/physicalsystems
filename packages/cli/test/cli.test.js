@@ -21,17 +21,19 @@ test('bare tinyedge opens the native Harness while explicit help stays one-shot'
   const calls = []
   const dependencies = {
     config: { configDir: 'C:\\TinyEdge' },
-    tokenStore: { summary: async () => ({ connected: false }) },
-    harnessCommand: async (options) => calls.push(options.config.configDir),
+    harnessCommand: async (options) => calls.push({
+      configDir: options.config.configDir,
+      tokenStore: options.tokenStore,
+    }),
     io: captureIo().io,
   }
   assert.equal(await runCli([], dependencies), 0)
-  assert.deepEqual(calls, ['C:\\TinyEdge'])
+  assert.deepEqual(calls, [{ configDir: 'C:\\TinyEdge', tokenStore: null }])
 
   const capture = captureIo()
   assert.equal(await runCli(['help'], { io: capture.io }), 0)
-  assert.match(capture.out[0], /harness\s+Open the native TinyEdge Harness/)
-  assert.deepEqual(calls, ['C:\\TinyEdge'])
+  assert.match(capture.out[0], /harness\s+Open the local Physical Systems Harness/)
+  assert.deepEqual(calls, [{ configDir: 'C:\\TinyEdge', tokenStore: null }])
 })
 
 test('CLI login requests read-only scope unless elevation is explicit', async () => {

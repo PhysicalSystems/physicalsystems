@@ -46,8 +46,9 @@ the reviewed Pi 0.84.2 artifact. The complete locked closure is bundled inside
 user-facing package. Its text-first default install excludes the optional
 native clipboard and Photon/WASM image-processing peers. Every Pi built-in tool
 is disabled. Ambient extensions, context files, skills, templates, and themes
-are disabled too. Pi can call only a fixed TinyEdge MCP allowlist selected from
-the scopes explicitly granted at login.
+are disabled too. The standalone Harness can call only its local discovery and
+intent-planning tools. The separate cloud commands retain their fixed TinyEdge
+MCP allowlist selected from scopes explicitly granted at login.
 Run- and task-specific tools accept only exact IDs returned by discovery in the
 same chat. It cannot access a shell, filesystem, SSH, or credentials. Every
 consequential operation remains subject to TinyEdge's immutable plan,
@@ -55,35 +56,47 @@ idempotency, cost hold, and browser-approval boundary.
 
 ## Harness behavior
 
-Bare `tinyedge` opens the native Pi terminal interface with a Physical Systems header,
-the devices paired to the signed-in account, and only the reviewed TinyEdge
-MCP tools. If the terminal is not connected yet, authorization opens from
-inside the Harness. Model-provider onboarding also happens in the Harness.
-The terminal stays open after either flow completes.
+Bare `tinyedge` opens the native Pi terminal interface as a local-first Physical
+Systems Harness. It checks the loopback Physical Systems node and shows only
+device candidates that node actually observed. It does not connect a TinyEdge
+account, open TinyEdge OAuth, or populate a cloud device-family table.
+Model-provider onboarding remains separate and happens through Pi's `/login`.
 
 The explicit commands below remain available for scripting, diagnostics, and
 credential administration.
 
 ### Physical Systems workflow
 
-The standalone Harness also contains the first local Physical Systems workflow.
-It connects only to a loopback TinyEdge Agent (default
+The standalone Harness contains the local Physical Systems workflow. It
+connects only to a loopback Physical Systems node (default
 `http://127.0.0.1:8876`) and renders actual evidence as:
 
 ```text
 Discover → Intent → Plan → Commission → Run → Verify
 ```
 
-On startup the widget distinguishes an enrolled component from a detected,
-driver-ready, calibrated, fully ready component. It does not invent an object,
-motion, or workflow. The operator can describe an outcome in the normal Pi
-editor, or use `/physical <outcome>` for the same bounded local flow without a
-model. The Harness refreshes discovery, binds the request to that exact device
-evidence, and shows the grounded plan, question, or commissioning gap returned
-by the Agent. When the intent is grounded but the physical setup still needs
+On startup the client first requests the enrollment-free
+`GET /v2/physical/candidates` endpoint.
+It distinguishes detected, adapter-available, setup-required, commissioned,
+and ready devices. Only observed candidates are rendered; configured but absent
+demo devices are not shown. Older nodes that do not implement candidate
+discovery can still serve the enrollment-bound state endpoint, but the Harness
+filters that response to physically detected devices. Because a commissioned
+node also exposes candidate discovery, the Harness checks the v1 state endpoint
+after v2 discovery and uses its enrolled snapshot and binding when available.
+A documented `409` means the node is candidate-only. It does not invent an
+object, motion, or workflow. The operator can describe an outcome in the normal
+Pi editor, or use `/physical <outcome>` for the same bounded local flow without
+a model. In candidate-only mode the Harness records that intent and explicitly
+blocks planning until the observed devices have been selected and commissioned;
+it never submits a candidate snapshot digest to the enrollment-bound v1 intent
+route. Once the node has a commissioned configuration, the Harness refreshes
+discovery, binds the request to that exact evidence, and shows the grounded
+plan, question, or commissioning gap returned by the node. When the intent is
+grounded but the physical setup still needs
 learning or validation, the Harness can prepare a commissioning draft bound to
 the exact interpretation digest, gap, device, and operation evidence returned
-by the Agent. The current Agent contract does not say whether a gap should be
+by the node. The current node contract does not say whether a gap should be
 resolved by teaching, installing, importing, or qualifying a skill, and it does
 not provide safe time or trial bounds. The Harness therefore does not infer a
 method or budget. Those choices require a future versioned commissioning-plan
@@ -94,14 +107,20 @@ and the commissioning draft is non-authorizing: neither the model nor
 `/physical` can select a method, set movement bounds, open the robot, start
 exploration, or authorize movement.
 The separate Python `tinyedge-agent serve-physical-node` process owns local
-camera and device discovery; it serves JSON only and must run on the same host.
+camera and device discovery; port `8876` is a JSON API, not a second Harness UI,
+and the process must run on the same host.
+
+```bash
+tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
+```
+
 `TINYEDGE_PHYSICAL_NODE_URL` may override the origin, but non-loopback
 origins and plaintext LAN connections are rejected.
 
 ## Commands
 
 ```text
-tinyedge         Open the native Pi-powered TinyEdge Harness
+tinyedge         Open the native Pi-powered Physical Systems Harness
 tinyedge login   Authorize read-only access through TinyEdge OAuth + PKCE
 tinyedge login --allow-write  Explicitly request write access
 tinyedge login --allow-run    Explicitly request workload-run access
@@ -137,8 +156,7 @@ tools appear only after a deliberate `login --allow-write` or
 consequential work.
 
 The native Harness preserves Pi's editor, model picker, action rendering,
-session UI, and token/cost footer. `/tinyedge-devices` refreshes the account's
-device inventory. Direct shell commands, built-in Pi tools, ambient extensions,
+session UI, and token/cost footer. Direct shell commands, built-in Pi tools, ambient extensions,
 skills, templates, themes, and context files remain disabled in the standalone
 TinyEdge Harness. Authoritative state and evidence stay in TinyEdge rather
 than Pi's local session.
@@ -156,7 +174,8 @@ not disable inference through the model deliberately selected for the session.
   support for headless Linux, Raspberry Pi, other Linux targets, or macOS.
 - Ubuntu qualification uses the exact packed artifact for normal local,
   global, and npm-exec installs, native Secret Service storage, and an
-  interactive pseudo-terminal Harness render/input/exit smoke test.
+  interactive pseudo-terminal Harness render/input/exit smoke test. The npm
+  package does not yet install or supervise the separate Python physical node.
 - Packed-artifact, native-binding, and command-shim checks do not validate
   production OAuth, provider onboarding, MCP execution, or browser approval.
   Those paths require separate canaries with disposable accounts.

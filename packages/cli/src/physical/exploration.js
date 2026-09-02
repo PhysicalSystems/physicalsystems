@@ -2,14 +2,9 @@ export const PHYSICAL_COMMISSIONING_DECLINE_LABEL = 'Not now · keep physical ex
 
 const PREPARE_DRAFT_LABEL = 'Prepare a gap-bound commissioning draft · no method or motion selected'
 
-function grounded(interpretation) {
-  const value = interpretation?.grounding
-  return Boolean(value?.objectId && value?.sourceStationId && value?.destinationStationId)
-}
-
 function commissioningEvidence(response) {
   const interpretation = response?.interpretation
-  if (interpretation?.status !== 'needs-clarification' || !grounded(interpretation)) return null
+  if (interpretation?.status !== 'needs-clarification') return null
   if (!interpretation.interpretationDigest) return null
   if (Array.isArray(interpretation.questions) && interpretation.questions.length) return null
   const gaps = Array.isArray(interpretation.gaps) ? interpretation.gaps : []

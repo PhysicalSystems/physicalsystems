@@ -44,6 +44,11 @@ export const TINYEDGE_CHAT_TOOL_ALLOWLIST = Object.freeze([
   ASK_CHOICE_TOOL, ...PHYSICAL_TOOL_ALLOWLIST, ...READ_TOOLS, ...WRITE_TOOLS, ...RUN_TOOLS,
 ])
 
+export const PHYSICAL_HARNESS_TOOL_ALLOWLIST = Object.freeze([
+  ASK_CHOICE_TOOL,
+  ...PHYSICAL_TOOL_ALLOWLIST,
+])
+
 export function toolsForScopes(scopes = []) {
   const granted = new Set(scopes)
   return Object.freeze([
@@ -149,6 +154,15 @@ If the user explicitly asks to resume existing work, call list_tasks, present on
 If a discovery response is truncated, explain that only the displayed items can be selected in this preview. Never invent or act on an omitted ID.
 For every consequential tool: explain the exact plan and cost first; treat approval_required as a request for the human to confirm in the browser; never bypass, fabricate, or reuse an approval for different input; report success only after TinyEdge returns a successful result.
 If a requested action needs a scope you do not have, tell the user which explicit login flag grants it.`
+}
+
+export function physicalSystemsSystemPrompt() {
+  return `You are the Physical Systems Harness assistant running beside real hardware.
+Use only the local Physical Systems tools. When the operator describes an outcome, first inspect the physical system, then pass the operator's words to the planning tool without inventing a device, object, station, capability, adapter, calibration, observed state, or result.
+Discovery reports only locally observed candidates. Clearly distinguish detection, adapter availability, adapter setup, commissioning, and readiness. Detection alone does not mean a device can be controlled.
+Candidate-only discovery cannot ground an execution plan. If the planning tool reports that a commissioned physical-system configuration is required, explain that boundary once and do not pretend the candidate snapshot is a commissioned workcell.
+Physical discovery and planning never authorize motion. If planning reports a question or commissioning gap, explain it. A commissioning draft only records the exact gap evidence; it does not choose a method, duration, trial budget, limits, or movement. Those require a versioned local-node contract and explicit local approval.
+Never claim that hardware moved, ran, explored, commissioned, or verified an outcome unless a future execution receipt explicitly proves it. Never request, reveal, repeat, or infer credentials. Keep answers concise and evidence based.`
 }
 
 function renderToolResult(value) {

@@ -79,7 +79,6 @@ test('does not draft a remedy for questions, mixed gaps, missing evidence, or re
   const ineligible = [
     null,
     responseFixture({ status: 'ready', gaps: [] }),
-    responseFixture({ grounding: { objectId: 'sample-one', sourceStationId: 'source' } }),
     responseFixture({ questions: ['Which destination should be used?'] }),
     responseFixture({ gaps: [{
       gapId: 'device-offline', kind: 'device-unavailable', deviceId: 'robot-one',
@@ -102,9 +101,23 @@ test('does not draft a remedy for questions, mixed gaps, missing evidence, or re
     assert.equal(recommendPhysicalCommissioningDraft(response), null)
   }
   assert.throws(
-    () => createPhysicalCommissioningDraft(ineligible[3]),
+    () => createPhysicalCommissioningDraft(ineligible[2]),
     /not eligible/,
   )
+})
+
+test('commissioning evidence is operation-bound and does not require transfer geometry', () => {
+  const response = responseFixture({
+    grounding: { objectId: null, sourceStationId: null, destinationStationId: null },
+    gaps: [{
+      gapId: 'camera-qualification',
+      kind: 'commissioning-required',
+      deviceId: 'camera-one',
+      operationIds: ['capture-frame'],
+      detail: 'The camera requires a qualified capture operation.',
+    }],
+  })
+  assert.deepEqual(recommendPhysicalCommissioningDraft(response)?.operationIds, ['capture-frame'])
 })
 
 test('prompt prepares or declines the same evidence-bound draft without choosing a remedy', async () => {

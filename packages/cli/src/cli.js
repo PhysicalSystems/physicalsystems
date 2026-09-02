@@ -24,8 +24,8 @@ function help() {
 Usage: tinyedge [--base-url URL] [command]
 
 Commands:
-  harness  Open the native TinyEdge Harness (default)
-  login    Connect with read-only access by default
+  harness  Open the local Physical Systems Harness (default)
+  login    Connect optional TinyEdge cloud tools with read-only access
   chat     Inspect, plan, or run work allowed by the saved OAuth scopes
   provider Configure the model provider used by the terminal assistant
   models   List authenticated Pi models
@@ -140,10 +140,11 @@ export async function runCli(argv = process.argv.slice(2), dependencies = {}) {
 
   const env = baseUrl ? { ...process.env, TINYEDGE_BASE_URL: baseUrl } : process.env
   const config = dependencies.config || createConfig(env)
-  const tokenStore = dependencies.tokenStore || createTokenStore({
+  const needsAccountStore = ['login', 'chat', 'logout', 'whoami', 'doctor'].includes(command)
+  const tokenStore = dependencies.tokenStore || (needsAccountStore ? createTokenStore({
     ...config,
     secretStore: dependencies.secretStore,
-  })
+  }) : null)
   const shared = { config, tokenStore, io, fetchImpl: dependencies.fetchImpl || fetch }
 
   if (command === 'harness') {
