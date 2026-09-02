@@ -711,6 +711,11 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.match(packageChecker, /local\/global\/npm-exec commands/)
   assert.match(packageChecker, /check-linux-harness-pty\.py/)
   assert.match(packageChecker, /createLinuxSecretServiceSecretStore/)
+  assert.match(
+    packageChecker,
+    /path\.join\(installedPhysicalSystemsDirectory, 'src\/auth\/secret-store\.js'\)/,
+  )
+  assert.doesNotMatch(packageChecker, /installedTinyEdgeDirectory/)
   assert.match(packageChecker, /const NPM_INSTALL_TIMEOUT_MS = 10 \* 60_000/)
   assert.match(
     packageChecker,

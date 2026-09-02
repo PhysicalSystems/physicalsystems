@@ -1092,7 +1092,7 @@ async function verifyRelease(artifactDirectory) {
         timeout: 120_000,
       })
     } else {
-      const secretStoreEntry = path.join(installedTinyEdgeDirectory, 'src/auth/secret-store.js')
+      const secretStoreEntry = path.join(installedPhysicalSystemsDirectory, 'src/auth/secret-store.js')
       const secretServiceCheck = `
         import assert from 'node:assert/strict';
         const { createLinuxSecretServiceSecretStore } = await import(
