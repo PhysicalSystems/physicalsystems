@@ -3,10 +3,9 @@ import path from 'node:path'
 import { createPiCredentialStore } from '../chat/pi-credential-store.js'
 import {
   loadOfficialPiSdk,
-  TINYEDGE_CHAT_TOOL_ALLOWLIST,
-  tinyEdgeSystemPrompt,
+  PHYSICAL_HARNESS_TOOL_ALLOWLIST,
+  physicalSystemsSystemPrompt,
 } from '../chat/pi-session.js'
-import { READ_SCOPE } from '../config.js'
 import { createHarnessMode } from '../harness/interactive-mode.js'
 import { createTinyEdgePiExtension } from '../pi-extension.js'
 
@@ -50,7 +49,6 @@ function isolatePiStartupEnvironment(environment = process.env) {
 
 async function runHarnessCommand({
   config,
-  tokenStore,
   secretStore,
   sdk: suppliedSdk,
   cwd = process.cwd(),
@@ -59,10 +57,6 @@ async function runHarnessCommand({
   createMode,
 }) {
   const sdk = suppliedSdk || await loadOfficialPiSdk()
-  const summary = await tokenStore.summary().catch(() => ({ connected: false }))
-  const grantedScopes = summary.connected && Array.isArray(summary.scope) && summary.scope.length
-    ? summary.scope
-    : [READ_SCOPE]
   const agentDir = path.join(config.configDir, 'pi-internal')
   const sessionDir = path.join(config.configDir, 'harness-sessions')
   const credentials = createPiCredentialStore({ configDir: config.configDir, secretStore })
@@ -74,7 +68,7 @@ async function runHarnessCommand({
   const sessionManager = sdk.SessionManager.create(cwd, sessionDir)
   const extensionFactory = createExtension({
     standalone: true,
-    autoLogin: true,
+    cloudEnabled: false,
     showHeader: true,
     createConfigImpl: () => config,
     ...(secretStore ? { createSecretStoreImpl: () => secretStore } : {}),
@@ -96,7 +90,7 @@ async function runHarnessCommand({
         noPromptTemplates: true,
         noThemes: true,
         noContextFiles: true,
-        systemPrompt: tinyEdgeSystemPrompt(grantedScopes),
+        systemPrompt: physicalSystemsSystemPrompt(),
         extensionFactories: [extensionFactory],
       },
     })
@@ -110,7 +104,7 @@ async function runHarnessCommand({
       sessionStartEvent,
       // This explicit set is both the initial registry allowlist and the
       // permanent ceiling for tools registered by the reviewed extension.
-      tools: [...TINYEDGE_CHAT_TOOL_ALLOWLIST],
+      tools: [...PHYSICAL_HARNESS_TOOL_ALLOWLIST],
     })
     return { ...created, services, diagnostics }
   }

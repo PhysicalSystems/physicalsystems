@@ -12,7 +12,7 @@ import { createConfig, loginScopes, withScopes } from './config.js'
 import { loginCommand } from './commands/login.js'
 import { logoutCommand } from './commands/logout.js'
 import { ASK_CHOICE_TOOL, createAskChoiceTool } from './harness/ask-choice.js'
-import { createHarnessHeader, summarizeDeviceInventory } from './harness/header.js'
+import { createHarnessHeader } from './harness/header.js'
 import {
   promptPhysicalCommissioningDraft,
   recommendPhysicalCommissioningDraft,
@@ -22,6 +22,7 @@ import {
   createPhysicalPiTools,
   createPhysicalWorkflowState,
   createPhysicalWorkflowWidget,
+  observedPhysicalDevices,
   PHYSICAL_TOOL_ALLOWLIST,
   updatePhysicalWorkflow,
 } from './physical/workflow.js'
@@ -107,12 +108,17 @@ export function createTinyEdgePiExtension({
   physicalFetchImpl = globalThis.fetch,
   standalone = false,
   autoLogin = false,
+  cloudEnabled = !standalone,
   showHeader = false,
 } = {}) {
   return function tinyEdgeExtension(pi) {
-    const config = createConfigImpl(env, platform)
-    const secretStore = createSecretStoreImpl({ configDir: config.configDir, platform })
-    const tokenStore = createTokenStoreImpl({ configDir: config.configDir, secretStore })
+    const config = cloudEnabled ? createConfigImpl(env, platform) : null
+    const secretStore = cloudEnabled
+      ? createSecretStoreImpl({ configDir: config.configDir, platform })
+      : null
+    const tokenStore = cloudEnabled
+      ? createTokenStoreImpl({ configDir: config.configDir, secretStore })
+      : null
     const askChoiceTool = createAskChoiceTool(defineToolImpl)
     pi.registerTool(askChoiceTool)
     const physicalEnabled = standalone
@@ -131,9 +137,9 @@ export function createTinyEdgePiExtension({
     let freshBenchmarkTurn = false
     let freshDeviceCheckStarted = false
     const headerState = {
-      connected: false,
-      connecting: false,
-      deviceGroups: [],
+      nodeStatus: physicalState?.status || 'unchecked',
+      nodeOrigin: physicalClient?.origin,
+      candidateCount: 0,
     }
 
     function renderPhysicalWorkflowWidget(ctx = physicalContext) {
@@ -148,6 +154,10 @@ export function createTinyEdgePiExtension({
     function transitionPhysical(event, ctx = physicalContext) {
       if (!physicalEnabled) return
       physicalState = updatePhysicalWorkflow(physicalState, event)
+      updateHeader({
+        nodeStatus: physicalState.status,
+        candidateCount: observedPhysicalDevices(physicalState.snapshot).length,
+      }, ctx)
       renderPhysicalWorkflowWidget(ctx)
     }
 
@@ -204,23 +214,6 @@ export function createTinyEdgePiExtension({
       return { ...auth, allowedTools, summary }
     }
 
-    async function refreshDeviceInventory(client, advertisedTools, ctx) {
-      if (!advertisedTools.some((tool) => tool.name === 'list_devices')) {
-        updateHeader({ deviceGroups: [] }, ctx)
-        return []
-      }
-      try {
-        const result = await client.callTool('list_devices', {})
-        const deviceGroups = summarizeDeviceInventory(result)
-        updateHeader({ deviceGroups }, ctx)
-        return deviceGroups
-      } catch (error) {
-        updateHeader({ deviceGroups: [] }, ctx)
-        ctx.ui.notify(`Device inventory unavailable: ${error?.message || String(error)}`, 'warning')
-        return []
-      }
-    }
-
     async function registerCurrentTools(ctx, announce = true) {
       const { client, allowedTools } = await authenticatedForCurrentScopes()
       const advertisedTools = await client.listTools()
@@ -244,33 +237,29 @@ export function createTinyEdgePiExtension({
         ? [ASK_CHOICE_TOOL, ...PHYSICAL_TOOL_ALLOWLIST, ...registeredTools]
         : [...new Set([...pi.getActiveTools(), ASK_CHOICE_TOOL, ...registeredTools])]
       pi.setActiveTools(active)
-      updateHeader({ connected: true, connecting: false }, ctx)
-      await refreshDeviceInventory(client, advertisedTools, ctx)
       if (announce) ctx.ui.notify(`TinyEdge connected: ${registeredTools.length} tools available`, 'info')
       return registeredTools
     }
 
     async function connect(ctx, flags = { allowWrite: false, allowRun: false }) {
-      updateHeader({ connecting: true }, ctx)
       const scopedConfig = withScopes(config, loginScopes(flags))
       await loginImpl({ config: scopedConfig, tokenStore, io: uiIo(ctx) })
       return registerCurrentTools(ctx)
     }
 
-    pi.registerCommand('tinyedge-login', {
+    if (cloudEnabled) pi.registerCommand('tinyedge-login', {
       description: 'Connect TinyEdge: /tinyedge-login [--allow-write] [--allow-run]',
       handler: async (args, ctx) => {
         try {
           const flags = loginFlags(args)
           await connect(ctx, flags)
         } catch (error) {
-          updateHeader({ connecting: false }, ctx)
           ctx.ui.notify(error?.message || String(error), 'error')
         }
       },
     })
 
-    pi.registerCommand('tinyedge-status', {
+    if (cloudEnabled) pi.registerCommand('tinyedge-status', {
       description: 'Show the TinyEdge connection and granted scopes',
       handler: async (_args, ctx) => {
         const summary = await tokenStore.summary()
@@ -282,7 +271,7 @@ export function createTinyEdgePiExtension({
       },
     })
 
-    pi.registerCommand('tinyedge-tools', {
+    if (cloudEnabled) pi.registerCommand('tinyedge-tools', {
       description: 'Show TinyEdge tools enabled for this Pi session',
       handler: async (_args, ctx) => {
         const tools = [
@@ -293,20 +282,7 @@ export function createTinyEdgePiExtension({
       },
     })
 
-    pi.registerCommand('tinyedge-devices', {
-      description: 'Refresh paired TinyEdge devices shown in the Harness header',
-      handler: async (_args, ctx) => {
-        try {
-          await registerCurrentTools(ctx, false)
-          const total = headerState.deviceGroups.reduce((sum, group) => sum + group.total, 0)
-          ctx.ui.notify(`${total} paired TinyEdge device${total === 1 ? '' : 's'}`, 'info')
-        } catch (error) {
-          ctx.ui.notify(error?.message || String(error), 'error')
-        }
-      },
-    })
-
-    pi.registerCommand('tinyedge-logout', {
+    if (cloudEnabled) pi.registerCommand('tinyedge-logout', {
       description: 'Revoke TinyEdge authorization and remove local credentials',
       handler: async (_args, ctx) => {
         await logoutImpl({ tokenStore, io: uiIo(ctx) })
@@ -321,7 +297,6 @@ export function createTinyEdgePiExtension({
           )),
         ].filter((name, index, names) => names.indexOf(name) === index))
         registeredTools = []
-        updateHeader({ connected: false, connecting: false, deviceGroups: [] }, ctx)
         ctx.ui.notify('TinyEdge disconnected. Registered tools now fail closed.', 'info')
       },
     })
@@ -335,6 +310,10 @@ export function createTinyEdgePiExtension({
             snapshot = await refreshPhysicalSystem(ctx)
           } catch (error) {
             ctx.ui.notify(error?.message || String(error), 'warning')
+            return
+          }
+          if (!observedPhysicalDevices(snapshot).length) {
+            ctx.ui.notify('No hardware was observed. Connect a device and run /physical again.', 'warning')
             return
           }
           const supplied = String(args || '').replace(/\s+/g, ' ').trim()
@@ -355,6 +334,7 @@ export function createTinyEdgePiExtension({
             const response = await physicalClient.interpret(
               intent,
               snapshot.discoveryBindingDigest,
+              snapshot,
             )
             transitionPhysical({ type: 'intent', response, requestedIntent: intent }, ctx)
             const interpretation = response.interpretation
@@ -395,7 +375,7 @@ export function createTinyEdgePiExtension({
     }
 
     pi.on('before_agent_start', (event) => {
-      freshBenchmarkTurn = isFreshBenchmarkRequest(event.prompt)
+      freshBenchmarkTurn = cloudEnabled && isFreshBenchmarkRequest(event.prompt)
       freshDeviceCheckStarted = false
     })
 
@@ -413,7 +393,7 @@ export function createTinyEdgePiExtension({
     if (standalone) {
       pi.on('user_bash', () => ({
         result: {
-          output: 'Shell access is disabled in TinyEdge Harness.',
+          output: 'Shell access is disabled in Physical Systems Harness.',
           exitCode: 126,
           cancelled: false,
           truncated: false,
@@ -438,7 +418,7 @@ export function createTinyEdgePiExtension({
       }
       if (!standalone || registeredTools.includes(event.toolName)
         || PHYSICAL_TOOL_ALLOWLIST.includes(event.toolName)) return undefined
-      return { block: true, reason: 'Only reviewed TinyEdge tools are available in this Harness.' }
+      return { block: true, reason: 'Only reviewed Physical Systems tools are available in this Harness.' }
     })
 
     pi.on('session_start', async (_event, ctx) => {
@@ -454,27 +434,24 @@ export function createTinyEdgePiExtension({
           await refreshPhysicalSystem(ctx)
         } catch {
           // The persistent widget carries the unavailable state. The Harness
-          // remains usable for cloud work and /physical can retry explicitly.
+          // remains usable for local intent entry and /physical can retry explicitly.
         }
       }
-      try {
-        const summary = await tokenStore.summary()
-        updateHeader({ connected: summary.connected, connecting: false }, ctx)
-        if (summary.connected) await registerCurrentTools(ctx, false)
-        else if (autoLogin) {
-          ctx.ui.notify('Connect TinyEdge in the browser to load your account and devices.', 'info')
-          try {
-            await connect(ctx)
-          } catch (error) {
-            updateHeader({ connected: false, connecting: false }, ctx)
-            ctx.ui.notify(`TinyEdge is not connected: ${error?.message || String(error)}. Run /tinyedge-login to try again.`, 'warning')
+      if (cloudEnabled) {
+        try {
+          const summary = await tokenStore.summary()
+          if (summary.connected) await registerCurrentTools(ctx, false)
+          else if (autoLogin) {
+            ctx.ui.notify('Connect TinyEdge in the browser to load cloud tools.', 'info')
+            try {
+              await connect(ctx)
+            } catch (error) {
+              ctx.ui.notify(`TinyEdge is not connected: ${error?.message || String(error)}. Run /tinyedge-login to try again.`, 'warning')
+            }
           }
-        } else {
-          ctx.ui.notify('TinyEdge is not connected. Run /tinyedge-login.', 'warning')
+        } catch (error) {
+          ctx.ui.notify(`TinyEdge tools unavailable: ${error?.message || String(error)}`, 'warning')
         }
-      } catch (error) {
-        updateHeader({ connected: false, connecting: false }, ctx)
-        ctx.ui.notify(`TinyEdge tools unavailable: ${error?.message || String(error)}`, 'warning')
       }
       if (!ctx.model) {
         ctx.ui.notify('Choose a model provider with /login to start chatting.', 'warning')

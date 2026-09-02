@@ -5,6 +5,7 @@ const MAX_INTENT_CHARACTERS = 500
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
 export const PHYSICAL_NODE_STATE_VERSION = 'experimental-physical-node-state-v1'
+export const PHYSICAL_CANDIDATE_SNAPSHOT_VERSION = 'experimental-physical-candidates-v1'
 export const PHYSICAL_NODE_INTENT_REQUEST_VERSION = 'experimental-physical-node-intent-request-v1'
 export const PHYSICAL_NODE_INTENT_VERSION = 'experimental-physical-node-intent-response-v1'
 
@@ -54,6 +55,12 @@ function clone(value) {
 function digest(value, label) {
   const result = text(value, label, 80)
   if (!/^sha256:[0-9a-f]{64}$/.test(result)) throw new Error(`${label} must be a sha256 digest`)
+  return result
+}
+
+function oneOf(value, allowed, label) {
+  const result = text(value, label, 64)
+  if (!allowed.includes(result)) throw new Error(`${label} is unsupported`)
   return result
 }
 
@@ -175,6 +182,202 @@ export function normalizePhysicalNodeState(value) {
   return Object.freeze(normalized)
 }
 
+const ADAPTER_STATUSES = Object.freeze(['unavailable', 'available', 'setup-required'])
+const PROVIDER_STATUSES = Object.freeze(['ok', 'degraded', 'unavailable', 'error'])
+
+function normalizeCandidate(value, index) {
+  const candidate = object(value, `physical candidate ${index}`)
+  const adapter = object(candidate.adapter, `physical candidate ${index}.adapter`)
+  const adapterStatus = oneOf(
+    adapter.status,
+    ADAPTER_STATUSES,
+    `physical candidate ${index}.adapter.status`,
+  )
+  const adapterId = optionalIdentifier(
+    adapter.adapterId,
+    `physical candidate ${index}.adapter.adapterId`,
+  )
+  if (adapterStatus !== 'unavailable' && adapterId === null) {
+    throw new Error(`physical candidate ${index} available adapter requires an ID`)
+  }
+  if (adapter.detail !== null) {
+    text(adapter.detail, `physical candidate ${index}.adapter.detail`, 512)
+  }
+  if (!bool(candidate.detected, `physical candidate ${index}.detected`)) {
+    throw new Error(`physical candidate ${index} must be observed`)
+  }
+  const commissioned = bool(candidate.commissioned, `physical candidate ${index}.commissioned`)
+  const ready = bool(candidate.ready, `physical candidate ${index}.ready`)
+  if (ready && !commissioned) {
+    throw new Error(`physical candidate ${index} cannot be ready before commissioning`)
+  }
+  if (ready && adapterStatus !== 'available') {
+    throw new Error(`physical candidate ${index} ready state requires an available adapter`)
+  }
+  const capabilities = array(
+    candidate.capabilities,
+    `physical candidate ${index}.capabilities`,
+    128,
+  )
+    .map((capability, capabilityIndex) => identifier(
+      capability,
+      `physical candidate ${index}.capabilities[${capabilityIndex}]`,
+    ))
+  if (new Set(capabilities).size !== capabilities.length) {
+    throw new Error(`physical candidate ${index}.capabilities must be distinct`)
+  }
+  const properties = object(candidate.properties, `physical candidate ${index}.properties`)
+  if (Object.keys(properties).length > 32) {
+    throw new Error(`physical candidate ${index}.properties must be bounded`)
+  }
+  for (const [key, value] of Object.entries(properties)) {
+    identifier(key, `physical candidate ${index}.properties key`)
+    text(value, `physical candidate ${index}.properties.${key}`, 1024)
+  }
+  const providerId = identifier(candidate.providerId, `physical candidate ${index}.providerId`)
+  text(candidate.observedIdentity, `physical candidate ${index}.observedIdentity`, 1024)
+  oneOf(
+    candidate.identityStability,
+    ['stable', 'network', 'session'],
+    `physical candidate ${index}.identityStability`,
+  )
+  const readiness = ready
+    ? 'ready'
+    : adapterStatus === 'unavailable'
+      ? 'detected'
+      : adapterStatus === 'setup-required'
+        ? 'setup-required'
+        : commissioned
+          ? 'commissioned'
+          : 'adapter-available'
+  return {
+    deviceId: identifier(candidate.candidateId, `physical candidate ${index}.candidateId`),
+    displayName: text(candidate.displayName, `physical candidate ${index}.displayName`, 512),
+    kind: identifier(candidate.deviceClass, `physical candidate ${index}.deviceClass`),
+    transport: identifier(candidate.transport, `physical candidate ${index}.transport`),
+    presence: 'observed',
+    roles: [],
+    capabilities,
+    adapterId,
+    adapterStatus,
+    commissioningStatus: commissioned ? 'commissioned' : 'not-commissioned',
+    readiness,
+    providerId,
+    configured: commissioned,
+    detected: true,
+    driverReady: adapterStatus === 'available',
+    calibrationReady: commissioned,
+    ready,
+  }
+}
+
+function candidateSummary(devices) {
+  const summary = {
+    configured: devices.filter((device) => device.configured).length,
+    detected: devices.length,
+    driverReady: devices.filter((device) => device.driverReady).length,
+    calibrationReady: devices.filter((device) => device.calibrationReady).length,
+    ready: devices.filter((device) => device.ready).length,
+  }
+  return {
+    ...summary,
+    allReady: devices.length > 0 && summary.ready === devices.length,
+  }
+}
+
+export function normalizePhysicalCandidateSnapshot(value) {
+  const snapshot = object(value, 'physical candidate snapshot')
+  if (snapshot.contractVersion !== PHYSICAL_CANDIDATE_SNAPSHOT_VERSION) {
+    throw new Error(`physical candidate snapshot must use ${PHYSICAL_CANDIDATE_SNAPSHOT_VERSION}`)
+  }
+  const nodeName = text(snapshot.nodeName, 'physical candidate snapshot.nodeName', 512)
+  const devices = array(snapshot.candidates, 'physical candidate snapshot.candidates', 512)
+    .map(normalizeCandidate)
+  if (new Set(devices.map((device) => device.deviceId)).size !== devices.length) {
+    throw new Error('physical candidate IDs must be distinct')
+  }
+  const providers = array(snapshot.providers, 'physical candidate snapshot.providers', 64)
+    .map((value, index) => {
+      const provider = object(value, `physical candidate provider ${index}`)
+      const providerId = identifier(
+        provider.providerId,
+        `physical candidate provider ${index}.providerId`,
+      )
+      const status = oneOf(
+        provider.status,
+        PROVIDER_STATUSES,
+        `physical candidate provider ${index}.status`,
+      )
+      if (!Number.isInteger(provider.candidateCount)
+        || provider.candidateCount < 0
+        || provider.candidateCount > devices.length) {
+        throw new Error(`physical candidate provider ${index}.candidateCount is invalid`)
+      }
+      if (provider.detail !== null) {
+        text(provider.detail, `physical candidate provider ${index}.detail`, 512)
+      }
+      return { providerId, status, candidateCount: provider.candidateCount }
+    })
+  if (new Set(providers.map((provider) => provider.providerId)).size !== providers.length) {
+    throw new Error('physical candidate provider IDs must be distinct')
+  }
+  const providerCounts = new Map(providers.map((provider) => [provider.providerId, 0]))
+  for (const device of devices) {
+    if (!providerCounts.has(device.providerId)) {
+      throw new Error('physical candidate references an unknown provider')
+    }
+    providerCounts.set(device.providerId, providerCounts.get(device.providerId) + 1)
+  }
+  if (providers.some((provider) => providerCounts.get(provider.providerId) !== provider.candidateCount)) {
+    throw new Error('physical candidate provider counts do not match candidates')
+  }
+  const rawSummary = object(snapshot.summary, 'physical candidate snapshot.summary')
+  const expectedRawSummary = {
+    detected: devices.length,
+    adapterAvailable: devices.filter((device) => device.adapterStatus === 'available').length,
+    setupRequired: devices.filter((device) => device.adapterStatus === 'setup-required').length,
+    commissioned: devices.filter((device) => device.configured).length,
+    ready: devices.filter((device) => device.ready).length,
+  }
+  for (const [name, expected] of Object.entries(expectedRawSummary)) {
+    if (rawSummary[name] !== expected) {
+      throw new Error(`physical candidate snapshot.summary.${name} does not match candidates`)
+    }
+  }
+  const publicDevices = devices.map(({ providerId: _providerId, ...device }) => device)
+  const snapshotDigest = digest(snapshot.snapshotDigest, 'physical candidate snapshot.snapshotDigest')
+  const normalized = {
+    contractVersion: PHYSICAL_CANDIDATE_SNAPSHOT_VERSION,
+    nodeName,
+    system: {
+      systemId: null,
+      displayName: nodeName,
+      workcellId: null,
+    },
+    discovery: {
+      schemaVersion: PHYSICAL_CANDIDATE_SNAPSHOT_VERSION,
+      enrollmentId: null,
+      mode: 'candidates',
+      observedAt: text(snapshot.observedAt, 'physical candidate snapshot.observedAt', 64),
+      snapshotDigest,
+      devices: publicDevices,
+      summary: candidateSummary(publicDevices),
+      providerErrors: providers
+        .filter((provider) => provider.status !== 'ok')
+        .map((provider) => ({ status: provider.status })),
+    },
+    discoveryBindingDigest: snapshotDigest,
+    physicalExecutionAuthorized: bool(
+      snapshot.physicalExecutionAuthorized,
+      'physical candidate snapshot.physicalExecutionAuthorized',
+    ),
+  }
+  if (normalized.physicalExecutionAuthorized) {
+    throw new Error('physical candidate discovery cannot authorize execution')
+  }
+  return Object.freeze(normalized)
+}
+
 function normalizeInterpretation(value) {
   const interpretation = object(value, 'physical intent interpretation')
   const status = text(interpretation.status, 'physical intent status', 64)
@@ -199,6 +402,43 @@ function normalizeInterpretation(value) {
       grounding.destinationStationId,
       'physical intent grounding.destinationStationId',
     ),
+  }
+  if (interpretation.workflowIntent === null) {
+    normalized.workflowIntent = null
+  } else {
+    const workflowIntent = object(interpretation.workflowIntent, 'physical intent workflowIntent')
+    if (!Object.keys(workflowIntent).length) {
+      throw new Error('physical intent workflowIntent must not be empty')
+    }
+    normalized.workflowIntent = clone(workflowIntent)
+  }
+  normalized.requiredOperations = array(
+    interpretation.requiredOperations,
+    'physical intent requiredOperations',
+    8,
+  ).map((value, index) => {
+    const operation = object(value, `physical intent requiredOperations[${index}]`)
+    return {
+      ...clone(operation),
+      deviceRole: identifier(
+        operation.deviceRole,
+        `physical intent requiredOperations[${index}].deviceRole`,
+      ),
+      operationId: identifier(
+        operation.operationId,
+        `physical intent requiredOperations[${index}].operationId`,
+      ),
+      effect: oneOf(
+        operation.effect,
+        ['read-only', 'actuating'],
+        `physical intent requiredOperations[${index}].effect`,
+      ),
+    }
+  })
+  const operationKeys = normalized.requiredOperations
+    .map((operation) => `${operation.deviceRole}\0${operation.operationId}`)
+  if (new Set(operationKeys).size !== operationKeys.length) {
+    throw new Error('physical intent requiredOperations must be distinct')
   }
   normalized.physicalExecutionAuthorized = bool(
     interpretation.physicalExecutionAuthorized,
@@ -231,8 +471,15 @@ function normalizeInterpretation(value) {
   })
   normalized.questions = array(interpretation.questions, 'physical intent questions', 16)
     .map((question, index) => text(question, `physical intent question ${index}`, 500))
-  if (status === 'ready' && !interpretation.workflowIntent) {
-    throw new Error('ready physical intent must contain a workflow intent')
+  if (status === 'ready') {
+    if (!normalized.workflowIntent) {
+      throw new Error('ready physical intent must contain a workflow intent')
+    }
+    if (normalized.gaps.length || normalized.questions.length) {
+      throw new Error('ready physical intent cannot contain unresolved gaps or questions')
+    }
+  } else if (normalized.workflowIntent !== null) {
+    throw new Error('only a ready physical intent may contain a workflow intent')
   }
   return normalized
 }
@@ -333,7 +580,9 @@ export function createPhysicalNodeClient({
     } catch (error) {
       clearTimeout(timer)
       if (error?.name === 'AbortError') throw new Error('Physical node did not respond before the timeout')
-      throw new Error(`Physical node is unavailable at ${origin}`)
+      throw new Error(
+        `Physical Systems node is unavailable at ${origin}; start tinyedge-agent serve-physical-node locally`,
+      )
     }
     let raw
     try {
@@ -351,6 +600,7 @@ export function createPhysicalNodeClient({
       }
     } catch (error) {
       if (error?.name === 'AbortError') throw new Error('Physical node did not respond before the timeout')
+      if (Number.isInteger(response?.status)) error.status = response.status
       throw error
     } finally {
       clearTimeout(timer)
@@ -363,7 +613,9 @@ export function createPhysicalNodeClient({
     }
     if (!response.ok) {
       const detail = typeof payload?.error === 'string' ? payload.error.slice(0, 300) : `HTTP ${response.status}`
-      throw new Error(`Physical node request failed: ${detail}`)
+      const error = new Error(`Physical node request failed: ${detail}`)
+      error.status = response.status
+      throw error
     }
     return payload
   }
@@ -371,18 +623,41 @@ export function createPhysicalNodeClient({
   return Object.freeze({
     origin,
     async inspect() {
-      return normalizePhysicalNodeState(await request('/v1/physical/state'))
+      let candidates
+      try {
+        candidates = normalizePhysicalCandidateSnapshot(await request('/v2/physical/candidates'))
+      } catch (error) {
+        if (error?.status !== 404) throw error
+        return normalizePhysicalNodeState(await request('/v1/physical/state'))
+      }
+      try {
+        return normalizePhysicalNodeState(await request('/v1/physical/state'))
+      } catch (error) {
+        if (![404, 409].includes(error?.status)) throw error
+        return candidates
+      }
     },
-    async interpret(intent, expectedDiscoveryBindingDigest) {
+    async interpret(intent, expectedDiscoveryBindingDigest, snapshot = null) {
       const expectedBinding = digest(
         expectedDiscoveryBindingDigest,
         'expected discovery binding digest',
       )
+      const normalizedIntent = normalizeIntent(intent)
+      if (snapshot?.discovery?.mode === 'candidates') {
+        if (snapshot.discoveryBindingDigest !== expectedBinding) {
+          throw new Error('Physical candidate snapshot does not match the inspected discovery')
+        }
+        const error = new Error(
+          'Planning requires a commissioned physical-system configuration; candidate discovery alone cannot ground this intent.',
+        )
+        error.code = 'PHYSICAL_COMMISSIONING_REQUIRED'
+        throw error
+      }
       const response = normalizePhysicalIntentResponse(await request('/v1/physical/intents:interpret', {
         method: 'POST',
         body: {
           contractVersion: PHYSICAL_NODE_INTENT_REQUEST_VERSION,
-          text: normalizeIntent(intent),
+          text: normalizedIntent,
           expectedDiscoveryBindingDigest: expectedBinding,
         },
       }))

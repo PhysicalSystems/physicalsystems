@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   createPhysicalNodeClient,
   normalizePhysicalNodeUrl,
+  PHYSICAL_CANDIDATE_SNAPSHOT_VERSION,
   PHYSICAL_NODE_INTENT_REQUEST_VERSION,
   PHYSICAL_NODE_INTENT_VERSION,
   PHYSICAL_NODE_STATE_VERSION,
@@ -60,6 +61,106 @@ function stateFixture() {
   }
 }
 
+function candidateFixture() {
+  // Mirrors tinyedge-agent/examples/physical-systems/physical-candidates.example.json
+  // from the producer contract introduced by TIN-392.
+  return {
+    contractVersion: PHYSICAL_CANDIDATE_SNAPSHOT_VERSION,
+    nodeName: 'ubuntu-workstation',
+    observedAt: '2026-09-02T12:00:00.000Z',
+    snapshotDigest: `sha256:${'e'.repeat(64)}`,
+    candidates: [
+      {
+        candidateId: 'candidate-89429c72a0d023d8170f',
+        displayName: 'USB serial controller',
+        deviceClass: 'serial-device',
+        transport: 'serial',
+        providerId: 'fixture-provider',
+        detected: true,
+        observedIdentity: '/dev/serial/by-id/usb-controller',
+        identityStability: 'stable',
+        adapter: {
+          status: 'unavailable',
+          adapterId: null,
+          detail: 'hardware identity has not been matched to an adapter',
+        },
+        capabilities: [],
+        properties: { 'device-path': '/dev/ttyACM0' },
+        commissioned: false,
+        ready: false,
+      },
+      {
+        candidateId: 'candidate-af82c39fa1321a42639b',
+        displayName: 'tinyedge-thor.local',
+        deviceClass: 'compute-node',
+        transport: 'network',
+        providerId: 'fixture-provider',
+        detected: true,
+        observedIdentity: 'mac:aa:bb:cc:dd:ee:ff',
+        identityStability: 'network',
+        adapter: { status: 'available', adapterId: 'tinyedge-physical-node', detail: null },
+        capabilities: ['physical-node-api'],
+        properties: {
+          address: '10.42.71.92',
+          hostname: 'tinyedge-thor.local',
+          interface: 'enp1s0',
+          'service-port': '8876',
+          'service-type': '_tinyedge-physical._tcp',
+        },
+        commissioned: false,
+        ready: false,
+      },
+      {
+        candidateId: 'candidate-ef0da69ca0e2229db21b',
+        displayName: 'Mounted USB camera',
+        deviceClass: 'camera',
+        transport: 'v4l2',
+        providerId: 'fixture-provider',
+        detected: true,
+        observedIdentity: '/dev/v4l/by-id/usb-camera',
+        identityStability: 'stable',
+        adapter: { status: 'available', adapterId: 'tinyedge-v4l2-camera', detail: null },
+        capabilities: ['capture-frame'],
+        properties: { 'device-path': '/dev/video0' },
+        commissioned: false,
+        ready: false,
+      },
+    ],
+    providers: [{
+      providerId: 'fixture-provider', status: 'ok', candidateCount: 3, detail: null,
+    }],
+    summary: {
+      detected: 3, adapterAvailable: 2, setupRequired: 0, commissioned: 0, ready: 0,
+    },
+    physicalExecutionAuthorized: false,
+    evidenceBoundary: {
+      claim: 'read-only candidate inventory; identity and readiness are not established',
+      deviceNodesOpened: false,
+      serialOpened: false,
+      cameraOpened: false,
+      activePortScan: false,
+      remoteLogin: false,
+      networkMessagesSent: false,
+      commandsIssued: 0,
+    },
+  }
+}
+
+function legacyStateFetch(value) {
+  return async (url) => url.pathname.endsWith('/candidates')
+    ? jsonResponse({ error: 'not found' }, { status: 404 })
+    : jsonResponse(value)
+}
+
+function candidateOnlyFetch(value, requests = null) {
+  return async (url) => {
+    requests?.push(url.toString())
+    return url.pathname.endsWith('/candidates')
+      ? jsonResponse(value)
+      : jsonResponse({ error: 'commissioned physical system is not configured' }, { status: 409 })
+  }
+}
+
 function intentFixture() {
   return {
     contractVersion: PHYSICAL_NODE_INTENT_VERSION,
@@ -101,7 +202,10 @@ test('physical node client inspects and interprets through exact versioned route
   const client = createPhysicalNodeClient({
     async fetchImpl(url, options) {
       requests.push({ url: url.toString(), options })
-      return options.method === 'POST' ? jsonResponse(intentFixture()) : jsonResponse(stateFixture())
+      if (options.method === 'POST') return jsonResponse(intentFixture())
+      return url.pathname.endsWith('/candidates')
+        ? jsonResponse({ error: 'not found' }, { status: 404 })
+        : jsonResponse(stateFixture())
     },
   })
 
@@ -113,15 +217,135 @@ test('physical node client inspects and interprets through exact versioned route
   assert.equal(state.discovery.devices[0].ready, true)
   assert.equal(intent.interpretation.status, 'ready')
   assert.deepEqual(requests.map((item) => item.url), [
+    'http://127.0.0.1:8876/v2/physical/candidates',
     'http://127.0.0.1:8876/v1/physical/state',
     'http://127.0.0.1:8876/v1/physical/intents:interpret',
   ])
-  assert.deepEqual(JSON.parse(requests[1].options.body), {
+  assert.deepEqual(JSON.parse(requests[2].options.body), {
     contractVersion: PHYSICAL_NODE_INTENT_REQUEST_VERSION,
     text: 'Move the cup from source to destination.',
     expectedDiscoveryBindingDigest: `sha256:${'c'.repeat(64)}`,
   })
-  assert.equal(requests[1].options.redirect, 'error')
+  assert.equal(requests[2].options.redirect, 'error')
+})
+
+test('physical node client consumes enrollment-free observed candidates first', async () => {
+  const requests = []
+  const client = createPhysicalNodeClient({
+    fetchImpl: candidateOnlyFetch(candidateFixture(), requests),
+  })
+  const state = await client.inspect()
+  assert.deepEqual(requests, [
+    'http://127.0.0.1:8876/v2/physical/candidates',
+    'http://127.0.0.1:8876/v1/physical/state',
+  ])
+  assert.equal(state.contractVersion, PHYSICAL_CANDIDATE_SNAPSHOT_VERSION)
+  assert.equal(state.discovery.enrollmentId, null)
+  assert.equal(state.discovery.devices.length, 3)
+  assert.equal(state.discovery.devices[0].displayName, 'USB serial controller')
+  assert.equal(state.discovery.devices[0].readiness, 'detected')
+  assert.equal(state.discovery.devices[1].readiness, 'adapter-available')
+  assert.equal(state.discovery.devices[1].configured, false)
+  assert.equal(state.discovery.summary.detected, 3)
+  assert.equal(state.discovery.summary.ready, 0)
+  assert.equal(state.discovery.providerErrors.length, 0)
+})
+
+test('commissioned state takes precedence when candidate and v1 routes are both available', async () => {
+  const requests = []
+  const client = createPhysicalNodeClient({
+    async fetchImpl(url, options) {
+      requests.push(url.toString())
+      if (options.method === 'POST') return jsonResponse(intentFixture())
+      if (url.pathname.endsWith('/candidates')) return jsonResponse(candidateFixture())
+      return jsonResponse(stateFixture())
+    },
+  })
+  const state = await client.inspect()
+  assert.equal(state.contractVersion, PHYSICAL_NODE_STATE_VERSION)
+  assert.equal(state.discoveryBindingDigest, `sha256:${'c'.repeat(64)}`)
+  const intent = await client.interpret(
+    'Move the cup from source to destination',
+    state.discoveryBindingDigest,
+    state,
+  )
+  assert.equal(intent.interpretation.status, 'ready')
+  assert.deepEqual(requests, [
+    'http://127.0.0.1:8876/v2/physical/candidates',
+    'http://127.0.0.1:8876/v1/physical/state',
+    'http://127.0.0.1:8876/v1/physical/intents:interpret',
+  ])
+})
+
+test('candidate readiness preserves adapter setup, commissioning, and ready as separate states', async () => {
+  const cases = [
+    {
+      mutate(value) {
+        value.candidates[2].adapter.status = 'setup-required'
+        value.summary.adapterAvailable = 1
+        value.summary.setupRequired = 1
+      },
+      expected: 'setup-required',
+    },
+    {
+      mutate(value) {
+        value.candidates[2].commissioned = true
+        value.summary.commissioned = 1
+      },
+      expected: 'commissioned',
+    },
+    {
+      mutate(value) {
+        value.candidates[2].commissioned = true
+        value.candidates[2].ready = true
+        value.summary.commissioned = 1
+        value.summary.ready = 1
+      },
+      expected: 'ready',
+    },
+  ]
+  for (const { mutate, expected } of cases) {
+    const fixture = candidateFixture()
+    mutate(fixture)
+    const client = createPhysicalNodeClient({ fetchImpl: candidateOnlyFetch(fixture) })
+    const state = await client.inspect()
+    assert.equal(state.discovery.devices[2].readiness, expected)
+  }
+})
+
+test('candidate discovery never crosses into the enrollment-bound intent route', async () => {
+  const requests = []
+  const client = createPhysicalNodeClient({
+    fetchImpl: candidateOnlyFetch(candidateFixture(), requests),
+  })
+  const state = await client.inspect()
+  await assert.rejects(
+    client.interpret(
+      'Inspect the sample with the mounted camera',
+      state.discoveryBindingDigest,
+      state,
+    ),
+    (error) => error?.code === 'PHYSICAL_COMMISSIONING_REQUIRED'
+      && /commissioned physical-system configuration/.test(error.message),
+  )
+  assert.deepEqual(requests, [
+    'http://127.0.0.1:8876/v2/physical/candidates',
+    'http://127.0.0.1:8876/v1/physical/state',
+  ])
+})
+
+test('candidate discovery rejects unobserved, inconsistent readiness, and authorization', async () => {
+  for (const mutate of [
+    (value) => { value.candidates[0].detected = false },
+    (value) => { value.candidates[0].adapter.status = 'ready' },
+    (value) => { value.candidates[0].ready = true },
+    (value) => { value.physicalExecutionAuthorized = true },
+  ]) {
+    const invalid = candidateFixture()
+    mutate(invalid)
+    const client = createPhysicalNodeClient({ fetchImpl: async () => jsonResponse(invalid) })
+    await assert.rejects(client.inspect(), /observed|unsupported|before commissioning|cannot authorize/)
+  }
 })
 
 test('physical node client rejects configured-only readiness and authorization claims', async () => {
@@ -132,7 +356,7 @@ test('physical node client rejects configured-only readiness and authorization c
   invalidState.discovery.summary.ready = 0
   invalidState.discovery.summary.allReady = false
   const client = createPhysicalNodeClient({
-    fetchImpl: async () => jsonResponse(invalidState),
+    fetchImpl: legacyStateFetch(invalidState),
   })
   const state = await client.inspect()
   assert.equal(state.discovery.devices[0].configured, true)
@@ -154,7 +378,7 @@ test('physical node client rejects inconsistent readiness and changed intent bin
   const inconsistent = stateFixture()
   inconsistent.discovery.devices[0].ready = false
   const stateClient = createPhysicalNodeClient({
-    fetchImpl: async () => jsonResponse(inconsistent),
+    fetchImpl: legacyStateFetch(inconsistent),
   })
   await assert.rejects(stateClient.inspect(), /readiness is inconsistent/)
 
@@ -167,6 +391,32 @@ test('physical node client rejects inconsistent readiness and changed intent bin
     'Move cup from source to destination',
     `sha256:${'c'.repeat(64)}`,
   ), /does not match the inspected discovery/)
+})
+
+test('physical intent validates workflow and required-operation structure before showing a plan', async () => {
+  for (const mutate of [
+    (value) => { value.interpretation.workflowIntent = 'not-a-workflow' },
+    (value) => { value.interpretation.workflowIntent = {} },
+    (value) => {
+      value.interpretation.requiredOperations = [{
+        deviceRole: 'camera', operationId: 'capture-frame', effect: 'observing',
+      }]
+    },
+    (value) => {
+      value.interpretation.requiredOperations = [
+        { deviceRole: 'camera', operationId: 'capture-frame', effect: 'read-only' },
+        { deviceRole: 'camera', operationId: 'capture-frame', effect: 'read-only' },
+      ]
+    },
+  ]) {
+    const invalid = intentFixture()
+    mutate(invalid)
+    const client = createPhysicalNodeClient({ fetchImpl: async () => jsonResponse(invalid) })
+    await assert.rejects(client.interpret(
+      'Inspect the sample',
+      `sha256:${'c'.repeat(64)}`,
+    ), /object|must not be empty|unsupported|requiredOperations must be distinct/)
+  }
 })
 
 test('physical node client validates commissioning binding evidence at the loopback boundary', async () => {

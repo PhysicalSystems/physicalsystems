@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { TINYEDGE_CHAT_TOOL_ALLOWLIST } from '../src/chat/pi-session.js'
+import { PHYSICAL_HARNESS_TOOL_ALLOWLIST } from '../src/chat/pi-session.js'
 import { harnessCommand } from '../src/commands/harness.js'
 import { createTinyEdgeInteractiveMode } from '../src/harness/interactive-mode.js'
 
@@ -69,7 +69,7 @@ test('native Harness uses Pi runtime with only reviewed TinyEdge resources and t
   let ran = false
   await harnessCommand({
     config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
-    tokenStore: { async summary() { return { connected: true, scope: ['tinyedge:read'] } } },
+    tokenStore: { async summary() { throw new Error('standalone Harness must not read cloud auth') } },
     secretStore: { read: async () => null, write: async () => {}, delete: async () => {} },
     sdk,
     cwd: 'C:\\work',
@@ -86,7 +86,7 @@ test('native Harness uses Pi runtime with only reviewed TinyEdge resources and t
 
   assert.equal(ran, true)
   assert.equal(calls.disposed, true)
-  assert.deepEqual(calls.session.tools, [...TINYEDGE_CHAT_TOOL_ALLOWLIST])
+  assert.deepEqual(calls.session.tools, [...PHYSICAL_HARNESS_TOOL_ALLOWLIST])
   assert.deepEqual(calls.services.resourceLoaderOptions, {
     noExtensions: true,
     noSkills: true,
@@ -96,8 +96,11 @@ test('native Harness uses Pi runtime with only reviewed TinyEdge resources and t
     systemPrompt: calls.services.resourceLoaderOptions.systemPrompt,
     extensionFactories: [calls.services.resourceLoaderOptions.extensionFactories[0]],
   })
+  assert.match(calls.services.resourceLoaderOptions.systemPrompt, /Physical Systems Harness assistant/)
+  assert.doesNotMatch(calls.services.resourceLoaderOptions.systemPrompt, /signed-in user's TinyEdge account/)
   assert.equal(extensionOptions.standalone, true)
-  assert.equal(extensionOptions.autoLogin, true)
+  assert.equal(extensionOptions.cloudEnabled, false)
+  assert.equal(extensionOptions.autoLogin, undefined)
   assert.equal(extensionOptions.showHeader, true)
 })
 

@@ -11,8 +11,8 @@ alternative to the published npm release. It does not change npm's `latest` or
 - Git.
 - On Ubuntu: `secret-tool`, D-Bus, an unlocked Secret Service keyring, and
   `xdg-open` in the desktop session.
-- A TinyEdge account and a supported model-provider credential for
-  authenticated use.
+- A supported model-provider credential for conversational Harness use. A
+  TinyEdge account is required only for the separate cloud commands.
 
 ## Clone and verify
 
@@ -41,8 +41,8 @@ verifies byte identity against the CLI lock, seeds an isolated npm cache, and
 installs the CLI from the checked-out runtime instead of consuming registry
 runtime bytes. It does not stage or publish any package.
 
-`doctor` should confirm Node.js, the platform credential store, OAuth discovery,
-and MCP discovery. An absent TinyEdge login is a warning during this first check.
+`doctor` checks Node.js and the optional cloud credential/OAuth/MCP route. Its
+TinyEdge-login warning does not block the local-first Physical Systems Harness.
 
 ## Launch
 
@@ -50,8 +50,9 @@ and MCP discovery. An absent TinyEdge login is a warning during this first check
 npm start
 ```
 
-The first interactive launch can guide TinyEdge authorization and model
-provider onboarding. The explicit commands are also available:
+The first interactive Harness launch checks the local Physical Systems node and
+can guide model-provider onboarding. It does not open TinyEdge account OAuth.
+The explicit cloud and provider commands remain separately available:
 
 ```powershell
 node packages/cli/src/cli.js login
@@ -59,6 +60,23 @@ node packages/cli/src/cli.js provider list
 node packages/cli/src/cli.js provider login PROVIDER
 node packages/cli/src/cli.js
 ```
+
+Physical discovery requires the separate `tinyedge-agent
+serve-physical-node` process on the same host. This npm package consumes its
+loopback JSON API; it does not install Python, hardware adapters, or the node
+service. Without that process the Harness remains open and reports the node as
+unavailable instead of inventing devices.
+
+On the Ubuntu equipment host, the enrollment-free discovery node starts with:
+
+```bash
+tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
+```
+
+The Harness consumes `GET /v2/physical/candidates`, then probes the versioned
+v1 state route. Candidate discovery is read-only; a v1 `409` keeps planning
+blocked, while a valid commissioned state supplies the binding used by the v1
+intent route.
 
 The npm client owns the `tinyedge` command; Python benchmark tooling uses
 `tinydevice`. For the published npm release, prefer `npx --yes tinyedge` to
