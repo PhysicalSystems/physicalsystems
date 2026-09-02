@@ -46,12 +46,12 @@
   "bundleDependencies": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PhysicalSystems/tinyedge-edge.git",
+    "url": "git+https://github.com/PhysicalSystems/physicalsystems.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/PhysicalSystems/tinyedge-edge/tree/main/packages/cli#readme",
+  "homepage": "https://github.com/PhysicalSystems/physicalsystems/tree/main/packages/cli#readme",
   "bugs": {
-    "url": "https://github.com/PhysicalSystems/tinyedge-edge/issues"
+    "url": "https://github.com/PhysicalSystems/physicalsystems/issues"
   },
   "publishConfig": {
     "access": "public"

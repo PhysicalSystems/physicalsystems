@@ -601,7 +601,7 @@ function validatePackageContracts(packages) {
     'physicalsystems must bundle its reviewed dependency closure for npm 12 consumers',
   )
   assert.equal(physicalsystems.dependencies['@tinyedge/cli'], undefined)
-  assert.equal(physicalsystems.repository?.url, 'git+https://github.com/PhysicalSystems/tinyedge-edge.git')
+  assert.equal(physicalsystems.repository?.url, 'git+https://github.com/PhysicalSystems/physicalsystems.git')
   assert.deepEqual(
     physicalsystems.publishConfig,
     { access: 'public' },

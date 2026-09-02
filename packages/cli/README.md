@@ -1,185 +1,118 @@
 # `physicalsystems`
 
-A local-first Physical Systems Harness built on the reviewed Pi terminal
-runtime. Here, “Pi” names that terminal runtime; it is not a claim of Raspberry
-Pi hardware support. This package contains the client library, Pi extension,
-and user-facing command shim. Optional TinyEdge cloud commands remain available
-but are not required to start or use local physical discovery.
+The `physicalsystems` command opens the local-first operator Harness for real
+equipment. It discovers observed hardware through a separate local node,
+captures the operator's intended outcome, and exposes the gaps that must be
+commissioned before an operation can run.
 
-Version `0.2.0` introduces the `physicalsystems` package identity on Windows and Ubuntu
-22.04 and 24.04 desktop x64. The Ubuntu route uses the session's native Secret Service keyring
-and requires `secret-tool`, D-Bus, an unlocked desktop keyring, and `xdg-open`.
-Headless Linux, Raspberry Pi, other Linux distributions and architectures, and
-macOS remain outside the qualified support boundary.
+The package is designed for Windows x64/ARM64 and Ubuntu 22.04/24.04 desktop
+x64 with Node.js 22.19.0 or newer. Headless Linux, Raspberry Pi, other Linux
+targets and macOS have not yet passed the package qualification boundary.
 
-Source-code availability is not registry evidence. Before using the commands
-below, require `npm view physicalsystems@0.2.0 version --json` to return
-`"0.2.0"`.
+## Install version 0.2.0
 
-Run the exact `0.2.0` package without installing a persistent command:
+Registry tags can change. Require the following check to succeed before
+treating `0.2.0` as a published application:
+
+```bash
+npm view physicalsystems@0.2.0 version --json
+```
+
+Run that exact version without a persistent installation:
 
 ```bash
 npx physicalsystems@0.2.0
 ```
 
-`npx` may cache package files, but it does not add a global `physicalsystems` command.
-For a persistent command in new terminals, install the exact package globally:
+`npx` runs an isolated package command; it does not create a global or
+persistent `physicalsystems` installation.
+
+Or install an exact persistent command:
 
 ```bash
 npm install --global physicalsystems@0.2.0
 physicalsystems
 ```
 
-Unversioned commands follow npm's current dist-tags and are not evidence for a
-specific release. Version `0.1.5` remains the final TinyEdge-branded preview. The
-`0.1.3` release used separate `tinyedge`,
-`@tinyedge/cli`, and `@tinyedge/pi` artifacts; those immutable versions remain
-available for compatibility but are not part of the `physicalsystems` release graph.
-Historical package checks did not validate production OAuth, login, or live
-MCP execution.
+The immutable `tinyedge@0.1.3` and `tinyedge@0.1.5` releases are historical
+product identities. They are not part of the `physicalsystems@0.2.0` package
+graph and are not recommended for a new Physical Systems installation.
 
-The chat command depends on the exact MIT-licensed
-`@tinyedge/pi-runtime@0.84.2-tinyedge.1` compatibility package derived from
-the reviewed Pi 0.84.2 artifact. The complete locked closure is bundled inside
-`physicalsystems` so npm 11 and npm 12 install the same reviewed bytes from the one
-user-facing package. Its text-first default install excludes the optional
-native clipboard and Photon/WASM image-processing peers. Every Pi built-in tool
-is disabled. Ambient extensions, context files, skills, templates, and themes
-are disabled too. The standalone Harness can call only its local discovery and
-intent-planning tools. The separate cloud commands retain their fixed TinyEdge
-MCP allowlist selected from scopes explicitly granted at login.
-Run- and task-specific tools accept only exact IDs returned by discovery in the
-same chat. It cannot access a shell, filesystem, SSH, or credentials. Every
-consequential operation remains subject to TinyEdge's immutable plan,
-idempotency, cost hold, and browser-approval boundary.
+For source development, follow the repository's
+[DEVELOPMENT.md](../../DEVELOPMENT.md).
 
-## Harness behavior
+## Physical workflow
 
-Bare `physicalsystems` opens the native Pi terminal interface as a local-first Physical
-Systems Harness. It checks the loopback Physical Systems node and shows only
-device candidates that node actually observed. It does not connect a TinyEdge
-account, open TinyEdge OAuth, or populate a cloud device-family table.
-Model-provider onboarding remains separate and happens through Pi's `/login`.
-
-The explicit commands below remain available for scripting, diagnostics, and
-credential administration.
-
-### Physical Systems workflow
-
-The standalone Harness contains the local Physical Systems workflow. It
-connects only to a loopback Physical Systems node (default
-`http://127.0.0.1:8876`) and renders actual evidence as:
+The Harness renders:
 
 ```text
-Discover → Intent → Plan → Commission → Run → Verify
+Discover -> Intent -> Plan -> Commission -> Run -> Verify
 ```
 
-On startup the client first requests the enrollment-free
-`GET /v2/physical/candidates` endpoint.
-It distinguishes detected, adapter-available, setup-required, commissioned,
-and ready devices. Only observed candidates are rendered; configured but absent
-demo devices are not shown. Older nodes that do not implement candidate
-discovery can still serve the enrollment-bound state endpoint, but the Harness
-filters that response to physically detected devices. Because a commissioned
-node also exposes candidate discovery, the Harness checks the v1 state endpoint
-after v2 discovery and uses its enrolled snapshot and binding when available.
-A documented `409` means the node is candidate-only. It does not invent an
-object, motion, or workflow. The operator can describe an outcome in the normal
-Pi editor, or use `/physical <outcome>` for the same bounded local flow without
-a model. In candidate-only mode the Harness records that intent and explicitly
-blocks planning until the observed devices have been selected and commissioned;
-it never submits a candidate snapshot digest to the enrollment-bound v1 intent
-route. Once the node has a commissioned configuration, the Harness refreshes
-discovery, binds the request to that exact evidence, and shows the grounded
-plan, question, or commissioning gap returned by the node. When the intent is
-grounded but the physical setup still needs
-learning or validation, the Harness can prepare a commissioning draft bound to
-the exact interpretation digest, gap, device, and operation evidence returned
-by the node. The current node contract does not say whether a gap should be
-resolved by teaching, installing, importing, or qualifying a skill, and it does
-not provide safe time or trial bounds. The Harness therefore does not infer a
-method or budget. Those choices require a future versioned commissioning-plan
-contract from the local node.
+It connects to the local node at `http://127.0.0.1:8876` and first requests
+`GET /v2/physical/candidates`. Only observed candidates are shown. Detection,
+adapter availability, configuration and commissioned readiness are represented
+separately so the UI does not claim that a device works merely because its USB
+identity or network endpoint was found.
 
-This source increment has no motion endpoint. `Run` and `Verify` remain locked,
-and the commissioning draft is non-authorizing: neither the model nor
-`/physical` can select a method, set movement bounds, open the robot, start
-exploration, or authorize movement.
-The separate Python `tinyedge-agent serve-physical-node` process owns local
-camera and device discovery; port `8876` is a JSON API, not a second Harness UI,
-and the process must run on the same host.
+An operator can describe an outcome in the normal editor or use:
+
+```text
+/physical <outcome>
+```
+
+When a commissioned state exists, intent planning is bound to that exact state
+evidence. In candidate-only mode the outcome is retained, but planning remains
+blocked until the selected devices have the necessary adapters, configuration
+and commissioned capabilities.
+
+The current release has no motion endpoint. A commissioning draft does not
+authorize teaching, exploration or robot movement. `Run` and `Verify` stay
+locked until a future versioned executor contract provides explicit limits and
+result evidence.
+
+## Local node
+
+The Python node must run on the equipment host. Its current compatibility
+command is:
 
 ```bash
 tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
 ```
 
-`TINYEDGE_PHYSICAL_NODE_URL` may override the origin, but non-loopback
-origins and plaintext LAN connections are rejected.
+The npm package does not install Python, drivers, adapters or the node service.
+`TINYEDGE_PHYSICAL_NODE_URL` can override the origin for development, but
+non-loopback or plaintext LAN connections are rejected. The environment
+variable and Python executable retain historical names until their own package
+migration is complete.
 
 ## Commands
 
 ```text
-physicalsystems         Open the native Pi-powered Physical Systems Harness
-physicalsystems login   Authorize optional read-only TinyEdge cloud access
-physicalsystems login --allow-write  Explicitly request cloud write access
-physicalsystems login --allow-run    Explicitly request cloud workload-run access
-physicalsystems provider list        Show supported model providers and auth methods
-physicalsystems provider login ID    Connect a model provider using OAuth or API key
-physicalsystems provider logout ID   Remove that provider credential
-physicalsystems models [--provider ID]  List authenticated provider models
-physicalsystems chat [--model PROVIDER/MODEL] [PROMPT]
-physicalsystems whoami  Verify the optional cloud connection without exposing credentials
-physicalsystems doctor  Check Node, OAuth discovery, saved auth, and MCP reachability
-physicalsystems logout  Revoke saved cloud OAuth grants and remove local credentials
+physicalsystems                  Open the Physical Systems Harness
+physicalsystems provider list    List model-provider authentication options
+physicalsystems provider login ID
+physicalsystems provider logout ID
+physicalsystems models [--provider ID]
+physicalsystems doctor           Check the local installation
 ```
 
-The default service is `https://tinyedge.ai`. For local tests only, set
-`TINYEDGE_BASE_URL` to an HTTP loopback origin such as `http://127.0.0.1:3000`.
-Remote plaintext HTTP origins are rejected.
+Historical cloud login, identity and MCP commands remain available for clients
+that already depend on them, but they are not required by the local physical
+workflow and are not presented as its product architecture.
 
-On Windows, OAuth and model-provider credentials are encrypted with DPAPI for
-the current Windows user. Only ciphertext is stored beneath
-`%APPDATA%/TinyEdge/cli/secrets`; secret plaintext is never placed in process
-arguments or printed.
+On Windows, model-provider credentials use DPAPI for the current user. On
+Ubuntu desktop, they use `secret-tool` and the unlocked Secret Service keyring.
+There is no plaintext fallback.
 
-On Ubuntu desktop, credentials are stored through `secret-tool` directly,
-without a shell, and secret values are sent only over standard input. The
-client fails closed when the helper, Secret Service, or an unlocked keyring is
-unavailable; there is no plaintext fallback or headless file-store fallback.
+## Included compatibility runtime
 
-TinyEdge OAuth authorizes access to the TinyEdge MCP service. Pi model-provider
-authentication is separate and is managed by the provider commands above.
-`physicalsystems chat` refuses to start without TinyEdge read scope. Write and run
-tools appear only after a deliberate `login --allow-write` or
-`login --allow-run`; the server still requires exact browser approval for
-consequential work.
-
-The native Harness preserves Pi's editor, model picker, action rendering,
-session UI, and token/cost footer. Direct shell commands, built-in Pi tools, ambient extensions,
-skills, templates, themes, and context files remain disabled in the standalone
-TinyEdge Harness. Authoritative state and evidence stay in TinyEdge rather
-than Pi's local session.
-
-During the standalone Harness lifecycle, TinyEdge also enables Pi's official
-offline-startup mode and suppresses its ambient tmux probe. That prevents Pi
-from downloading helper tools, refreshing remote catalogs, checking package or
-Pi versions, sending install telemetry, or spawning a tmux subprocess. It does
-not disable inference through the model deliberately selected for the session.
-
-## Release and validation boundaries
-
-- Package metadata accepts Windows and Linux. Release qualification covers
-  Windows x64, native Windows ARM64, and Ubuntu 22.04/24.04 desktop x64; it does not imply
-  support for headless Linux, Raspberry Pi, other Linux targets, or macOS.
-- Ubuntu qualification uses the exact packed artifact for normal local,
-  global, and npm-exec installs, native Secret Service storage, and an
-  interactive pseudo-terminal Harness render/input/exit smoke test. The npm
-  package does not yet install or supervise the separate Python physical node.
-- Packed-artifact, native-binding, and command-shim checks do not validate
-  production OAuth, provider onboarding, MCP execution, or browser approval.
-  Those paths require separate canaries with disposable accounts.
-- Release evidence must identify the exact artifacts and accepted provenance;
-  a GitHub artifact checksum is not npm provenance.
+The package bundles the exact MIT-licensed
+`@tinyedge/pi-runtime@0.84.2-tinyedge.1` terminal compatibility artifact. The
+historical package name is immutable. Built-in shell and filesystem tools,
+ambient extensions, context files, skills, templates and themes are disabled
+inside the standalone Harness. The physical workflow receives only its bounded
+local discovery and intent tools.
 
 ## Development
 
@@ -189,6 +122,7 @@ npm run check
 npm run pack:check
 ```
 
-Tests use local fixtures and injected `fetch` implementations. They never call
-TinyEdge production or use real credentials, so they do not constitute live
-OAuth or provider validation.
+Tests use fixtures and injected requests. They do not call production services,
+operate hardware or publish packages. These package checks do not validate live
+OAuth, provider onboarding or production hardware execution; those require
+separate canaries with disposable credentials and controlled equipment.

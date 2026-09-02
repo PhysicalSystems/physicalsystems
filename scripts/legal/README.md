@@ -1,7 +1,7 @@
 # Legal review tooling
 
 This directory contains the approved canonical legal inputs and deterministic
-SBOM tooling for the public edge-client source. The operative repository
+SBOM tooling for the public Physical Systems Harness source. The operative repository
 license is the root `LICENSE`; canonical inputs under `templates/` are used to
 enforce its exact bytes and the package notice bundle.
 

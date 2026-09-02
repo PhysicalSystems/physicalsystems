@@ -78,7 +78,7 @@ before the first OIDC release:
    environment values `PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY` and
    `PHYSICALSYSTEMS_BOOTSTRAP_SHASUM`.
 5. Configure the npm trusted publisher for package `physicalsystems`, GitHub
-   organization `PhysicalSystems`, repository `tinyedge-edge`, workflow
+   organization `PhysicalSystems`, repository `physicalsystems`, workflow
    `npm-release.yml`, and environment `npm-release`, allowing `npm publish`.
 
 The interactive exception is only for the inert namespace proof. It is not an

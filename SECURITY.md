@@ -23,8 +23,8 @@ Linux targets, and macOS are not currently supported.
 
 Do not disclose a suspected vulnerability in a public issue, discussion,
 pull request, or chat transcript. Use GitHub's
-[private vulnerability reporting](https://github.com/PhysicalSystems/tinyedge-edge/security/advisories/new).
-If that route is unavailable, email <lienert@tinyedge.ai> with `[SECURITY]` in
+[private vulnerability reporting](https://github.com/PhysicalSystems/physicalsystems/security/advisories/new).
+If that route is unavailable, email <lienert@physicalsystems.ai> with `[SECURITY]` in
 the subject and only the minimum information needed to establish contact.
 
 Include the affected commit or package version, platform and architecture,
@@ -39,5 +39,5 @@ and disclosure plan. We do not promise a bounty or a particular response time.
 
 Reports about the `physicalsystems` client/command/extension package, compatibility runtime,
 packaging, OAuth client boundary, local credential storage, or release workflow
-belong here. Reports about a TinyEdge account, billing, or the hosted service
+belong here. Reports about a historical account, billing, or a hosted service
 should use the private support route described in [SUPPORT.md](SUPPORT.md).

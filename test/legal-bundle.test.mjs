@@ -79,7 +79,7 @@ test('reviewed shrinkwrap graphs produce deterministic CycloneDX 1.6 output offl
 
 test('workspace SBOM composes tinyedge and its runtime without duplicate identities', async () => {
   const bom = await buildSbomForTarget('workspace', { root })
-  assert.equal(bom.metadata.component.name, 'tinyedge-edge-workspace')
+  assert.equal(bom.metadata.component.name, 'physicalsystems-workspace')
   assert.equal(bom.metadata.component.version, '0.0.0')
   assert.deepEqual(bom.metadata.component.licenses, [{ license: { id: 'Apache-2.0' } }])
   const componentRefs = bom.components.map((component) => component['bom-ref'])

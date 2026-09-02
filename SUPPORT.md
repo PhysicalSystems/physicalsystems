@@ -2,7 +2,7 @@
 
 ## Bugs and feature requests
 
-Search the [GitHub issue tracker](https://github.com/PhysicalSystems/tinyedge-edge/issues)
+Search the [GitHub issue tracker](https://github.com/PhysicalSystems/physicalsystems/issues)
 before opening a new issue. Include the Physical Systems command and version, Node.js
 version, operating-system version, CPU architecture, expected behavior, actual behavior,
 and a minimal reproduction.
@@ -16,8 +16,8 @@ Historical `tinyedge` releases remain immutable. Use `npm view physicalsystems d
 Remove credentials, tokens, account details, device identifiers, private URLs,
 customer data, model artifacts, and session transcripts before posting. This
 repository does not provide support for headless Linux, Raspberry Pi, other
-Linux targets, macOS, a public PowerShell installer, or the hosted TinyEdge
-service. Historical TinyEdge package problems should include
+Linux targets, macOS, or a public PowerShell installer. Historical TinyEdge
+package or hosted-service problems should include
 `npm view tinyedge dist-tags --json` separately.
 
 ## Security issues
@@ -25,12 +25,12 @@ service. Historical TinyEdge package problems should include
 Do not open a public issue for a vulnerability. Follow
 [SECURITY.md](SECURITY.md) to report it privately.
 
-## Accounts and hosted-service support
+## Historical accounts and hosted-service support
 
 Questions involving account access, billing, approvals, private device or
 fleet state, or production service behavior do not belong in this public
-repository. Use the private support route provided by the TinyEdge website and
-do not paste sensitive information into GitHub.
+repository. Use the relevant private support route and do not paste sensitive
+information into GitHub.
 
 Community support is best effort. Opening an issue does not guarantee a fix,
 timeline, service-level agreement, or compatibility commitment.

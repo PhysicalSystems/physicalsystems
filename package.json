@@ -1,8 +1,8 @@
 {
-  "name": "tinyedge-edge-workspace",
+  "name": "physicalsystems-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "Guarded TinyEdge edge-client release workspace",
+  "description": "Guarded Physical Systems Harness release workspace",
   "type": "module",
   "scripts": {
     "start": "node packages/cli/src/cli.js",
@@ -20,11 +20,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PhysicalSystems/tinyedge-edge.git"
+    "url": "git+https://github.com/PhysicalSystems/physicalsystems.git"
   },
-  "homepage": "https://github.com/PhysicalSystems/tinyedge-edge#readme",
+  "homepage": "https://github.com/PhysicalSystems/physicalsystems#readme",
   "bugs": {
-    "url": "https://github.com/PhysicalSystems/tinyedge-edge/issues"
+    "url": "https://github.com/PhysicalSystems/physicalsystems/issues"
   },
   "license": "Apache-2.0"
 }

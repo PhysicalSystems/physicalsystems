@@ -1,6 +1,6 @@
-# TinyEdge edge-client workspace
+# Physical Systems Harness workspace
 
-This is the canonical public source workspace for the TinyEdge edge client.
+This is the canonical public source workspace for the Physical Systems Harness.
 
 ## Source boundary
 

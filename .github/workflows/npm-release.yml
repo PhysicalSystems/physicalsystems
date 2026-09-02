@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$GITHUB_REPOSITORY" = "PhysicalSystems/tinyedge-edge"
+          test "$GITHUB_REPOSITORY" = "PhysicalSystems/physicalsystems"
           test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
           test "$GITHUB_REF_TYPE" = "branch"
           test "$GITHUB_REF" = "refs/heads/main"
@@ -456,7 +456,7 @@ jobs:
           }
           const repositoryPath = `/repos/${process.env.GITHUB_REPOSITORY}`
           const repository = await get(repositoryPath, 'GitHub visibility lookup')
-          assert.equal(repository.full_name, 'PhysicalSystems/tinyedge-edge')
+          assert.equal(repository.full_name, 'PhysicalSystems/physicalsystems')
           assert.equal(repository.private, false, 'the release repository must still be public')
           assert.equal(repository.visibility, 'public', 'the release repository must still be public')
 

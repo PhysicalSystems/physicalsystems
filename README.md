@@ -1,119 +1,156 @@
-# Physical Systems Harness
+# Physical Systems
 
-This repository contains the public device-side source for the local Physical
-Systems Harness, its embedded Pi extension, and the audited text-first Pi
-compatibility runtime. Optional TinyEdge cloud commands remain isolated from
-the local physical workflow. The repository does not contain the hosted control
-plane, scheduler, billing system, fleet data, production operations, or private
-optimization intelligence.
+Physical Systems is a local Harness for turning an operator's intent into a
+grounded, checked workflow for real equipment. The npm application provides the
+operator interface. A separate local node discovers hardware, exposes device
+capabilities and state, and will ultimately own execution beside the machines.
 
-## Current status
-
-The source is available under the licenses in this repository. TinyEdge-authored
-client code uses Apache License 2.0; the Pi compatibility runtime remains MIT.
-The immutable `tinyedge@0.1.3` package remains under `latest`, and
-`tinyedge@0.1.5` remains under `preview`. This source prepares the new unscoped
-`physicalsystems@0.2.0` package identity; source availability is not evidence
-that the new package has been published. Until `npm view physicalsystems@0.2.0`
-succeeds, use the existing preview with:
-
-```powershell
-npx --yes tinyedge@preview
+```text
+operator intent
+      |
+      v
+Physical Systems Harness (this repository)
+      |
+      v  loopback API
+local Physical Systems node
+      |
+      v  adapters
+cameras, robots, instruments and compute devices
 ```
 
-After the separately approved `physicalsystems` preview is published, the
-branded one-shot command will be:
+The Raspberry Pi is one possible deployment target, not the product identity.
+The Harness is intended to run on the desktop or workstation from which the
+physical setup is commissioned, while the local node stays close to the
+equipment.
+
+## What the current version does
+
+The Harness presents the workflow:
+
+```text
+Discover -> Intent -> Plan -> Commission -> Run -> Verify
+```
+
+Today it can:
+
+- ask the local node for devices it actually observed;
+- distinguish detected hardware from installed adapters and commissioned
+  capabilities;
+- accept a natural-language outcome from the operator;
+- bind planning to the latest observed state;
+- show missing adapters, configuration and skills before execution; and
+- keep `Run` and `Verify` locked when no authorized executor exists.
+
+It does not infer devices from a fixed enrollment file, install arbitrary
+hardware drivers, or move a robot merely because an operator entered a prompt.
+The current npm source has no motion endpoint. Commissioning and controlled
+execution are the next contract boundary, not hidden demo behavior.
+
+## Installation status
+
+The npm name [`physicalsystems`](https://www.npmjs.com/package/physicalsystems)
+currently contains only the reviewed inert `0.0.0` namespace bootstrap. The
+functional `0.2.0` package is prepared in this repository but is not public
+until this command returns `"0.2.0"`:
+
+```bash
+npm view physicalsystems@0.2.0 version --json
+```
+
+After the separately approved preview release, the one-shot command will be:
 
 ```bash
 npx --yes physicalsystems@preview
 ```
 
-The former `tinyedge` package consolidated the command, client, and Pi
-extension into one artifact and qualified that package for Windows and Ubuntu.
-The `physicalsystems` package carries that reviewed one-package structure under
-the product's public identity.
-The immutable
-`@tinyedge/cli@0.1.3` and `@tinyedge/pi@0.1.3` releases remain available for
-compatibility but are no longer ordinary release artifacts.
+Until then, run the application from source. Do not use the old
+`tinyedge@preview` package as though it were the current Physical Systems
+product.
 
-## Command ownership
+## Run from source
 
-The npm client owns the product-level `physicalsystems` command. TinyEdge's Python
-benchmark tooling uses `tinydevice`, so the two entry points do not compete for
-the same executable name. In PowerShell, diagnose an unrelated executable or
-stale global installation on `PATH` with:
+Requirements:
 
-```powershell
-Get-Command -All physicalsystems
-```
-
-## What is included
-
-- `physicalsystems`: the local-first Physical Systems Harness plus optional OAuth,
-  credential, MCP, provider, command, and Pi extension logic in one package.
-- `@tinyedge/pi-runtime`: the separately versioned audited MIT Pi compatibility
-  runtime, bundled into `physicalsystems` so the one-package install retains the
-  reviewed graph under npm 11 and npm 12.
-- Frozen `0.1.3` facade and existing-Pi source records for compatibility.
-- Deterministic package, legal, dependency, SBOM, and release checks.
-
-The `0.2.0` release target and current source-development targets are Windows x64, native
-Windows ARM64, and Ubuntu 22.04/24.04 desktop x64 with Node.js 22.19.0 or newer. Windows
-uses DPAPI; Ubuntu uses `secret-tool` with an unlocked Secret Service keyring.
-Headless Linux, Raspberry Pi, other Linux targets, and macOS remain outside the
-qualified package boundary.
-
-## Develop and validate
-
-Clone this repository on a supported desktop and run:
+- Node.js 22.19.0 or newer;
+- Windows x64/ARM64, or Ubuntu 22.04/24.04 desktop x64;
+- on Ubuntu, `secret-tool`, D-Bus, an unlocked Secret Service keyring and
+  `xdg-open` for model-provider credentials and browser onboarding.
 
 ```bash
-npx --yes npm@11.19.0 --prefix packages/cli run bootstrap:pi-runtime -- --cache /tmp/tinyedge-pi-runtime-cache --install-cli
-npm test
-npx --yes npm@11.19.0 run check:release-packages
+git clone https://github.com/PhysicalSystems/physicalsystems.git
+cd physicalsystems
+npx --yes npm@11.19.0 --prefix packages/cli run bootstrap:pi-runtime -- --cache /tmp/physicalsystems-runtime-cache --install-cli
 npm start
 ```
 
-On Windows, replace the cache path with
-`$env:TEMP\tinyedge-pi-runtime-cache` in PowerShell.
+On Windows PowerShell, use
+`$env:TEMP\physicalsystems-runtime-cache` for the cache path. See
+[DEVELOPMENT.md](DEVELOPMENT.md) for validation and platform-specific setup.
 
-The bootstrap packs the local audited runtime, verifies its identity, seeds an
-isolated cache, and installs the CLI from the checked-out source instead of
-consuming registry runtime bytes. These commands do not stage, publish, deploy,
-or change GitHub or npm settings. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
-complete source workflow.
+The source bootstrap installs the reviewed terminal compatibility runtime from
+this checkout. It does not publish packages, install Python, install device
+drivers, or install the local Physical Systems node.
 
-## Source and legal boundary
+## Connect a local node
 
-TinyEdge uses an open-edge, proprietary-cloud architecture. The public client
-may consume stable service contracts and signed plans, but private orchestration,
-fleet policy, quantization and runtime selection intelligence, billing, and
-production data stay outside this repository. See [BOUNDARY.md](BOUNDARY.md).
+Hardware discovery requires the separate Python node on the same Linux host as
+the equipment. In the current implementation its compatibility command is:
 
-`npm run check:legal` verifies deterministic CycloneDX SBOMs, exact dependency
-graphs and integrities, vendored payloads, Pi TUI native helpers, approved legal
-evidence, and the default exclusion of Clipboard and Photon. Twelve exact
-artifacts lack a named legal file; one carries full MIT text in its README,
-while `ignore@7.0.5` carries `LICENSE-MIT`. See [DEPENDENCIES.md](DEPENDENCIES.md),
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the package-level notices
-and SBOMs.
+```bash
+tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
+```
 
-The files under `scripts/legal/templates/` are canonical executable review
-inputs. Automation requires the live licenses, notices, third-party bundle, and
-trademark policy to match the reviewed templates byte-for-byte.
+The Harness connects only to its loopback API at `http://127.0.0.1:8876` by
+default. If no node is running, the application remains usable for explanation
+but reports discovery as unavailable. If hardware is present without a matching
+adapter, it reports the observed device and the adapter gap separately.
 
-## Contributing and support
+The Python command retains its historical name until the node package completes
+its own repository and distribution migration. That name is an implementation
+detail, not a second product or an account requirement.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and sign off every commit under the
-[Developer Certificate of Origin](DCO). Report security issues privately using
-[SECURITY.md](SECURITY.md); use [SUPPORT.md](SUPPORT.md) for the correct public
-or private support route.
+## Package contents
 
-## npm release gate
+- `physicalsystems`: the local-first operator Harness and command.
+- `@tinyedge/pi-runtime`: a frozen, separately versioned MIT compatibility
+  runtime bundled for a deterministic terminal install.
+- frozen `tinyedge@0.1.3`, `@tinyedge/cli@0.1.3` and
+  `@tinyedge/pi@0.1.3` source records retained only for published-package
+  compatibility and auditability.
+- deterministic dependency, license, SBOM, package and release checks.
 
-The existing `tinyedge` releases remain immutable. The protected workflow is
-being migrated to publish one OIDC-authenticated `physicalsystems` artifact to
-`preview` after the `npm-release` environment approval. It never changes
-`latest`, republishes the audited runtime, or uses a long-lived npm token.
-Canary-approved promotion remains a separate maintainer action in
-[packages/cli/RELEASE.md](packages/cli/RELEASE.md).
+The historical `tinyedge` names above are immutable npm identities. They do not
+mean that a TinyEdge account, cloud connection or device-family enrollment is
+required for the local Physical Systems workflow.
+
+## Security and authority boundary
+
+Discovery is read-only. Intent does not authorize motion. A physical operation
+must be grounded in observed state, an installed adapter and a commissioned
+skill, and future execution must remain inside explicit local limits with
+recorded results. Non-loopback plaintext node connections are rejected.
+
+This public repository contains the local client and its release evidence. It
+does not contain a hosted control plane, fleet data, billing, production
+credentials, private optimization systems or customer telemetry. See
+[BOUNDARY.md](BOUNDARY.md), [SECURITY.md](SECURITY.md) and
+[SUPPORT.md](SUPPORT.md).
+
+## Develop and validate
+
+```bash
+npm test
+npx --yes npm@11.19.0 run check:release-packages
+git diff --check
+```
+
+These checks do not publish or promote an npm package. Publication is restricted
+to the protected, main-only OIDC workflow described in
+[packages/cli/RELEASE.md](packages/cli/RELEASE.md). The workflow publishes only
+`physicalsystems` to `preview`; changing `latest` remains a separate maintainer
+decision.
+
+TinyEdge-authored client code is licensed under Apache License 2.0. The frozen
+Pi compatibility runtime remains under MIT with its upstream notices. See
+[DEPENDENCIES.md](DEPENDENCIES.md), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+and [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -99,7 +99,7 @@ function refreshFixtureProvenance(fixtureRoot) {
     schemaVersion: 2,
     exportKind: 'public-clean-root-snapshot',
     destination: {
-      repository: 'https://github.com/PhysicalSystems/tinyedge-edge.git',
+      repository: 'https://github.com/PhysicalSystems/physicalsystems.git',
       status: 'public-canonical',
     },
     candidatePayload: {
@@ -110,8 +110,8 @@ function refreshFixtureProvenance(fixtureRoot) {
 }
 
 function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPending }) {
-  const repository = { url: 'git+https://github.com/PhysicalSystems/tinyedge-edge.git' }
-  const bugs = { url: 'https://github.com/PhysicalSystems/tinyedge-edge/issues' }
+  const repository = { url: 'git+https://github.com/PhysicalSystems/physicalsystems.git' }
+  const bugs = { url: 'https://github.com/PhysicalSystems/physicalsystems/issues' }
   const frozenRepository = { url: 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git' }
   const frozenBugs = { url: 'https://github.com/TinyEdgeAI/tinyedge-edge/issues' }
   writeFixtureFile(fixtureRoot, 'package.json', JSON.stringify({
@@ -119,7 +119,7 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
     license: licenseIsPending ? 'UNLICENSED' : 'Apache-2.0',
     repository,
     bugs,
-    homepage: 'https://github.com/PhysicalSystems/tinyedge-edge#readme',
+    homepage: 'https://github.com/PhysicalSystems/physicalsystems#readme',
   }, null, 2) + '\n')
   const tinyedgePackages = ['cli', 'npx', 'pi']
   for (const packageName of tinyedgePackages) {
@@ -131,7 +131,9 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
       license: licenseIsPending ? 'UNLICENSED' : 'Apache-2.0',
       repository: frozen ? frozenRepository : repository,
       bugs: frozen ? frozenBugs : bugs,
-      homepage: `https://github.com/${frozen ? 'TinyEdgeAI' : 'PhysicalSystems'}/tinyedge-edge/tree/main/packages/${packageName}#readme`,
+      homepage: frozen
+        ? `https://github.com/TinyEdgeAI/tinyedge-edge/tree/main/packages/${packageName}#readme`
+        : `https://github.com/PhysicalSystems/physicalsystems/tree/main/packages/${packageName}#readme`,
       files: licenseIsPending ? [] : legalFiles,
     }, null, 2) + '\n')
     for (const legalFile of legalFiles) {
@@ -821,20 +823,20 @@ test('the compatibility runtime is an exact MIT artifact without default native 
 })
 
 test('the clean export uses the standalone identity while preserving the frozen runtime artifact', () => {
-  const expectedRepository = 'git+https://github.com/PhysicalSystems/tinyedge-edge.git'
-  const expectedBugs = 'https://github.com/PhysicalSystems/tinyedge-edge/issues'
+  const expectedRepository = 'git+https://github.com/PhysicalSystems/physicalsystems.git'
+  const expectedBugs = 'https://github.com/PhysicalSystems/physicalsystems/issues'
   assert.equal(cliPackage.repository.url, expectedRepository)
   assert.equal(cliPackage.bugs.url, expectedBugs)
   assert.deepEqual(cliPackage.publishConfig, { access: 'public' })
-  assert.match(workflow, /GITHUB_REPOSITORY" = "PhysicalSystems\/tinyedge-edge"/)
-  assert.match(releaseGuide, /repository `tinyedge-edge`/)
-  assert.match(packageChecker, /PhysicalSystems\/tinyedge-edge\.git/)
+  assert.match(workflow, /GITHUB_REPOSITORY" = "PhysicalSystems\/physicalsystems"/)
+  assert.match(releaseGuide, /repository `physicalsystems`/)
+  assert.match(packageChecker, /PhysicalSystems\/physicalsystems\.git/)
   assert.equal(provenance.source, undefined)
   assert.equal(provenance.schemaVersion, 2)
   assert.equal(provenance.exportKind, 'public-clean-root-snapshot')
   assert.equal(
     provenance.destination.repository,
-    'https://github.com/PhysicalSystems/tinyedge-edge.git',
+    'https://github.com/PhysicalSystems/physicalsystems.git',
   )
   assert.equal(provenance.destination.status, 'public-canonical')
   assert.match(provenance.candidatePayload.canonicalization, /normalize CRLF or CR to LF/)
@@ -842,13 +844,13 @@ test('the clean export uses the standalone identity while preserving the frozen 
 })
 
 test('released documentation is truthful and the export boundary is executable', () => {
-  assert.match(rootReadme, /immutable `tinyedge@0\.1\.3` package remains under `latest`/)
+  assert.match(rootReadme, /historical `tinyedge` names above are immutable npm identities/i)
   assert.match(rootReadme, /npx --yes physicalsystems@preview/)
-  assert.match(rootReadme, /`0\.2\.0` release target and current source-development targets are Windows x64, native/)
-  assert.match(rootReadme, /does not contain the hosted control/)
+  assert.match(rootReadme, /functional `0\.2\.0` package is prepared in this repository but is not public/)
+  assert.match(rootReadme, /does not contain a hosted control plane/)
   assert.match(rootReadme, /DEVELOPMENT\.md/)
-  assert.match(rootReadme, /source is available under the licenses in this repository/i)
-  assert.match(rootReadme, /protected workflow[\s\S]{0,100}publish one OIDC-authenticated `physicalsystems` artifact to[\s\S]{0,30}`preview`/i)
+  assert.match(rootReadme, /licensed under Apache License 2\.0/i)
+  assert.match(rootReadme, /Publication is restricted[\s\S]{0,120}main-only OIDC workflow[\s\S]{0,160}only[\s\S]{0,30}`physicalsystems` to `preview`/i)
   assert.match(releaseGuide, /Package transition/)
   assert.match(releaseGuide, /rollback/)
   assert.match(releaseGuide, /npm audit signatures/)
@@ -881,7 +883,7 @@ test('the packed README describes the one-package physicalsystems 0.2.0 release'
   assert.match(packedReadme, /npx physicalsystems@0\.2\.0/)
   assert.match(packedReadme, /npm view physicalsystems@0\.2\.0 version --json/)
   assert.match(packedReadme, /npm install --global physicalsystems@0\.2\.0/)
-  assert.match(packedReadme, /package contains the client library, Pi extension,[\s\S]{0,40}user-facing command shim/i)
+  assert.match(packedReadme, /command opens the local-first operator Harness/i)
 })
 
 test('pull-request CI covers release-workflow changes and its regression test', () => {

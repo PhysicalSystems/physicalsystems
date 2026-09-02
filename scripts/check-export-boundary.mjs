@@ -7,8 +7,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const expectedRepository = 'git+https://github.com/PhysicalSystems/tinyedge-edge.git'
-const expectedBugs = 'https://github.com/PhysicalSystems/tinyedge-edge/issues'
+const expectedRepository = 'git+https://github.com/PhysicalSystems/physicalsystems.git'
+const expectedBugs = 'https://github.com/PhysicalSystems/physicalsystems/issues'
 const frozenRepository = 'git+https://github.com/TinyEdgeAI/tinyedge-edge.git'
 const frozenBugs = 'https://github.com/TinyEdgeAI/tinyedge-edge/issues'
 const tinyedgePackageFiles = ['packages/cli/package.json']
@@ -106,7 +106,7 @@ assert.equal(workspaceManifest.repository?.url, expectedRepository, 'workspace r
 assert.equal(workspaceManifest.bugs?.url, expectedBugs, 'workspace issue tracker identity')
 assert.equal(
   workspaceManifest.homepage,
-  'https://github.com/PhysicalSystems/tinyedge-edge#readme',
+  'https://github.com/PhysicalSystems/physicalsystems#readme',
   'workspace homepage identity',
 )
 assert.equal(
@@ -120,7 +120,7 @@ for (const packageFile of tinyedgePackageFiles) {
   assert.equal(manifest.bugs?.url, expectedBugs, packageFile + ' issue tracker identity')
   assert.match(
     manifest.homepage || '',
-    /^https:\/\/github\.com\/PhysicalSystems\/tinyedge-edge(?:\/tree\/main\/packages\/[^#]+)?#readme$/,
+    /^https:\/\/github\.com\/PhysicalSystems\/physicalsystems(?:\/tree\/main\/packages\/[^#]+)?#readme$/,
     packageFile + ' homepage identity',
   )
 }
@@ -243,7 +243,7 @@ const provenance = JSON.parse(readFileSync(path.join(root, 'EXPORT-PROVENANCE.js
 assert.equal(provenance.schemaVersion, 2)
 assert.equal(provenance.exportKind, 'public-clean-root-snapshot')
 assert.equal(provenance.source, undefined, 'public provenance must not disclose the private source record')
-assert.equal(provenance.destination?.repository, 'https://github.com/PhysicalSystems/tinyedge-edge.git')
+assert.equal(provenance.destination?.repository, 'https://github.com/PhysicalSystems/physicalsystems.git')
 assert.equal(provenance.destination?.status, 'public-canonical')
 for (const forbiddenField of ['branchAtExport', 'sourceCommitTimestamp', 'gitObject']) {
   assert.ok(
@@ -293,4 +293,4 @@ for (const governanceFile of [
   assert.ok(existsSync(path.join(root, governanceFile)), 'public repository is missing ' + governanceFile)
 }
 
-console.log('Verified public TinyEdge edge-client source boundary')
+console.log('Verified public Physical Systems Harness source boundary')
