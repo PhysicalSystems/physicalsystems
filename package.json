@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node packages/cli/src/cli.js",
+    "release:prepare": "node scripts/prepare-product-candidate.mjs",
     "doctor": "node packages/cli/src/cli.js doctor",
     "check:boundary": "node scripts/check-export-boundary.mjs",
     "generate:provenance": "node scripts/refresh-public-provenance.mjs",

@@ -18,6 +18,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { stageNodeBundle } from './node-bundle-stage.js'
+import { verifyNodeBundle } from '../src/physical/node-bundle.js'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
@@ -280,6 +282,15 @@ function sha512Integrity(file) {
 }
 
 function removeTemporaryDirectory(directory) {
+  // Delete only expected native temp roots, never an alias, replaced junction,
+  // or a caller-selected parent directory. Match the promise-based bundle guard.
+  assert.ok(
+    path.dirname(directory) === realpathSync.native(tmpdir())
+      && /^(?:tinyedge-(?:pi-runtime-pack|release-verify|release-pack)|physicalsystems-npm-exec)-[A-Za-z0-9]{6}$/.test(path.basename(directory))
+      && lstatSync(directory).isDirectory() && !lstatSync(directory).isSymbolicLink()
+      && realpathSync.native(directory) === directory,
+    'Unexpected release temporary directory',
+  )
   rmSync(directory, {
     recursive: true,
     force: true,
@@ -725,7 +736,7 @@ function assertPackedPiRuntime(tarball, files) {
       `the packed runtime UPSTREAM.md must record ${exactProvenance}`,
     )
   }
-  const extractionRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-pi-runtime-pack-'))
+  const extractionRoot = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'tinyedge-pi-runtime-pack-'))
   try {
     run('tar', ['-xf', tarball, '-C', extractionRoot])
     runNpm(['test'], { cwd: path.join(extractionRoot, 'package') })
@@ -742,8 +753,13 @@ function ensureOutputDirectory(directory) {
   }
 }
 
-function packRelease(outputDirectory) {
+function packRelease(outputDirectory, bundledPackageDirectory) {
   const packages = PACKAGES.map(packageMetadata)
+  if (bundledPackageDirectory) {
+    const item = packages.find(({ key }) => key === 'physicalsystems')
+    item.directory = bundledPackageDirectory
+    item.metadata = readJson(path.join(bundledPackageDirectory, 'package.json'))
+  }
   const version = validatePackageContracts(packages)
   validateReleaseReadmes(packages)
   ensureOutputDirectory(outputDirectory)
@@ -843,7 +859,7 @@ function packRelease(outputDirectory) {
   console.log(`Packed Physical Systems ${version} release artifacts in ${outputDirectory}`)
 }
 
-async function verifyRelease(artifactDirectory) {
+async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = {}) {
   assert.match(process.platform, /^(?:win32|linux)$/, 'release packages must be verified on Windows or Linux')
   if (process.platform === 'linux') {
     assert.equal(process.arch, 'x64', 'the qualified Linux package route is Ubuntu desktop x64')
@@ -867,8 +883,10 @@ async function verifyRelease(artifactDirectory) {
     assert.equal(sha512Integrity(file), artifact.integrity, `integrity mismatch for ${artifact.filename}`)
     return { ...artifact, file }
   })
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-verify-'))
-  const npmExecRoot = mkdtempSync(path.join(tmpdir(), 'physicalsystems-npm-exec-'))
+  // Windows TEMP may be a SUBST drive. Allocate through its native backing path
+  // so local/global installs and npm-exec caches satisfy strict bundle checks.
+  const temporaryRoot = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'tinyedge-release-verify-'))
+  const npmExecRoot = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'physicalsystems-npm-exec-'))
   try {
     const physicalSystemsArtifact = candidateArtifacts.find(({ key }) => key === 'physicalsystems')
     const runtimeArtifact = candidateArtifacts.find(({ key }) => key === 'pi-runtime')
@@ -899,6 +917,26 @@ async function verifyRelease(artifactDirectory) {
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
     const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')
+    if (requireNodeBundle) {
+      assert.equal(installed.physicalsystemsNodeBundle, 'node-bundle', 'Product verification requires the included Python backend')
+    }
+    if (installed.physicalsystemsNodeBundle) {
+      assert.equal(installed.physicalsystemsNodeBundle, 'node-bundle')
+      await verifyNodeBundle(path.join(installedPhysicalSystemsDirectory, 'node-bundle'))
+      assert.ok(existsSync(path.join(installedPhysicalSystemsDirectory, 'BACKEND-NOTICE.txt')))
+      if (process.arch === 'x64') {
+        const pythonArguments = process.env.pythonLocation
+          ? [path.join(process.env.pythonLocation, process.platform === 'win32' ? 'python.exe' : 'bin/python')]
+          : []
+        const evidence = run(process.execPath, [path.join(REPOSITORY_ROOT, 'scripts/check-bundled-node.mjs'), installedPhysicalSystemsDirectory, ...pythonArguments], {
+          phase: 'offline bundled backend installation and verified reuse',
+          timeout: 10 * 60_000,
+        })
+        console.log(evidence)
+      } else {
+        console.log('Backend installation not qualified on this architecture; Harness and exact bundle bytes are still verified')
+      }
+    }
     const installedRuntimeDirectory = path.join(
       installedPhysicalSystemsDirectory,
       'node_modules/@tinyedge/pi-runtime',
@@ -1140,11 +1178,13 @@ async function verifyRelease(artifactDirectory) {
 }
 
 function usage() {
-  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory]')
+  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory] [--node-bundle ABSOLUTE_DIRECTORY | --require-node-bundle]')
 }
 
-const [mode, directoryArgument] = process.argv.slice(2)
+const [mode, directoryArgument, bundleFlag, bundleArgument, ...extra] = process.argv.slice(2)
 if (!['pack', 'verify', 'check'].includes(mode)) usage()
+const requireNodeBundle = mode === 'verify' && bundleFlag === '--require-node-bundle' && !bundleArgument
+if (extra.length || (bundleFlag && !requireNodeBundle && (mode !== 'pack' || bundleFlag !== '--node-bundle' || !bundleArgument || !path.isAbsolute(bundleArgument))) || (!bundleFlag && bundleArgument)) usage()
 const npmVersion = runNpm(['--version'])
 if (mode === 'verify') {
   assert.ok(
@@ -1160,7 +1200,7 @@ if (mode === 'verify') {
 }
 
 if (mode === 'check') {
-  const temporaryArtifacts = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-pack-'))
+  const temporaryArtifacts = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'tinyedge-release-pack-'))
   try {
     packRelease(temporaryArtifacts)
     await verifyRelease(temporaryArtifacts)
@@ -1170,6 +1210,8 @@ if (mode === 'check') {
 } else {
   if (!directoryArgument) usage()
   const artifactDirectory = path.resolve(process.cwd(), directoryArgument)
-  if (mode === 'pack') packRelease(artifactDirectory)
-  else await verifyRelease(artifactDirectory)
+  if (mode === 'pack') {
+    const stage = bundleArgument ? await stageNodeBundle(path.join(REPOSITORY_ROOT, 'packages/cli'), bundleArgument) : null
+    try { packRelease(artifactDirectory, stage?.directory) } finally { stage?.dispose() }
+  } else await verifyRelease(artifactDirectory, { requireNodeBundle })
 }

@@ -144,18 +144,15 @@ jobs:
           )
           '@ | node --input-type=module
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Bootstrap the reviewed dependency tree from the locally packed runtime
+      - name: Prepare one complete product with exact backend wheels and a SHA-256 manifest
         shell: pwsh
         run: |
-          $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
-          npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Pack the runtime and one bundled Physical Systems tarball with a SHA-256 manifest
-        shell: pwsh
-        run: |
+          $productDirectory = Join-Path $env:RUNNER_TEMP 'physicalsystems-product'
           $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE $env:RELEASE_ARTIFACT_DIRECTORY
-          npm --prefix packages/cli run release:pack -- $artifactDirectory
+          npm run release:prepare -- --output $productDirectory
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (Test-Path -LiteralPath $artifactDirectory) { throw 'Candidate output already exists' }
+          Copy-Item -LiteralPath (Join-Path $productDirectory 'candidate') -Destination $artifactDirectory -Recurse
       - name: Run package source and SDK checks
         shell: pwsh
         run: |
@@ -237,6 +234,11 @@ jobs:
           if ($actualNodeArchitecture -ne '${{ matrix.architecture }}') {
             throw "Expected a ${{ matrix.architecture }} Node.js runtime, received $actualNodeArchitecture"
           }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        if: matrix.architecture == 'x64'
+        with:
+          python-version: '3.12'
+          architecture: x64
       - name: Download the build job's exact tarballs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -253,7 +255,7 @@ jobs:
           if ($actualManifestSha256 -ne $env:EXPECTED_MANIFEST_SHA256) {
             throw "Downloaded release manifest digest $actualManifestSha256 does not match trusted build output $env:EXPECTED_MANIFEST_SHA256"
           }
-          npm --prefix packages/cli run release:verify -- $artifactDirectory
+          npm --prefix packages/cli run release:verify -- $artifactDirectory --require-node-bundle
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Record architecture verification evidence
         shell: pwsh
@@ -367,7 +369,7 @@ jobs:
           trap 'rm -rf "$runtime_directory"' EXIT
           dbus-run-session -- bash -euo pipefail -c '
             eval "$(printf "%s" "tinyedge-ephemeral-keyring" | gnome-keyring-daemon --unlock --components=secrets)"
-            npm --prefix packages/cli run release:verify -- "$GITHUB_WORKSPACE/$RELEASE_ARTIFACT_DIRECTORY"
+            npm --prefix packages/cli run release:verify -- "$GITHUB_WORKSPACE/$RELEASE_ARTIFACT_DIRECTORY" --require-node-bundle
           '
       - name: Record Linux verification evidence
         shell: bash

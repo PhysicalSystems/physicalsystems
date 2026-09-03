@@ -108,10 +108,10 @@ does not dispatch anything. The separate operator run channel below requires
 an available Node-owned executor, an exact local configuration and a fresh
 approval for one invocation. The assistant has no approval or execution tool.
 
-The external Python routing dependency and equipment host remain separate from
-the npm Harness. This source implementation does not establish a clean-user
-routing release: packaged Agent Skills neither install the host dependency nor
-provide trusted observations or controller supervision.
+The Python routing library and equipment host remain separate components of
+the product. Bundling their approved distributions does not establish hardware
+readiness: packaged Agent Skills neither provide trusted observations nor
+commission controller supervision.
 
 The node routing extra expects `tinyedge-runtime==0.2.0`, separate from the npm
 Pi compatibility runtime. The local node's route bridge also requires a trusted
@@ -256,9 +256,11 @@ command is:
 tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
 ```
 
-The npm package never installs system Python or robot drivers. The managed
-first-run path below can install a separately distributed, approved Node wheel
-set into a private Python environment; the Node code is not bundled into npm.
+The npm package never installs system Python or robot drivers. The product
+candidate includes the separately licensed, approved Node wheel set and its
+dependencies; the managed first-run path installs them into a private Python
+environment without fetching Python packages. This is one installation with
+modular internals, not a merger of the private Node source into this repository.
 `TINYEDGE_PHYSICAL_NODE_URL` can override the origin for development, but
 non-loopback or plaintext LAN connections are rejected. The environment
 variable and Python executable retain historical names until their own package
@@ -275,7 +277,7 @@ Python wheels contain readable source, irrespective of their licensing terms.
 
 When this npm release contains an approved Node manifest for the current
 platform/Python version, first launch offers to install its exact wheel set.
-The operator sees the release and download size. Setup creates an isolated,
+The operator sees the release and wheel size. Setup creates an isolated,
 versioned user environment, verifies every wheel's SHA-256 and size, installs
 offline with hash checking, checks dependencies, native-library imports and the installed API version,
 then records the successful selection. No `postinstall` or other npm lifecycle
@@ -304,15 +306,21 @@ physicalsystems
 
 The new Node starts in discovery-only mode with no fabricated devices or
 execution configurations. A saved, verified environment is reused on subsequent
-launches. A damaged installation is not silently repaired, an interrupted setup
-lock is not stolen, and upgrading does not replace a running physical controller.
+launches. A 0.2.0 selection is checked before offering the bundled 0.2.1 update;
+approval is required even if that newer environment is already installed.
+Declining or failing the update blocks managed startup and retains the previous
+installation and selection. Same-version custom selections are not replaced,
+and an older product does not downgrade a newer selection. A damaged installation
+is not silently repaired, an interrupted setup lock is not stolen, and upgrading
+does not replace a running physical controller.
 `PHYSICAL_NODE_EXECUTABLE` and an explicit external Node URL preserve the manual
 host paths. Physical commissioning and execution remain separate.
 
-**Current release gate:** `src/physical/node-releases.json` pins the published
-Node 0.2.0 wheel and its complete dependency set for Windows/Linux x64 with
-CPython 3.10–3.12. The descriptors were generated after exact public PyPI
-readback. The npm candidate still requires its own packaged installation checks
+**Current release gate:** `src/physical/node-releases.json` pins the exact reviewed
+Node wheel and its complete dependency set for Windows/Linux x64 with
+CPython 3.10–3.12. Protected npm publication requires the corrected Node 0.2.1
+descriptor set and its exact approved bytes. The npm package still requires
+its own packaged installation checks
 and protected publication; published Python dependencies alone do not prove
 that the npm release is available.
 

@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -14,11 +16,116 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const workflow = readFileSync(path.join(root, '.github/workflows/npm-release.yml'), 'utf8')
 const cliWorkflow = readFileSync(path.join(root, '.github/workflows/cli.yml'), 'utf8')
+
+test('PR checks build once and verify the same candidate on every platform without changing publish authority', () => {
+  assert.equal((cliWorkflow.match(/run release:prepare --/g) || []).length, 1)
+  assert.doesNotMatch(cliWorkflow, /run release:pack --|bootstrap:pi-runtime --/)
+  assert.doesNotMatch(cliWorkflow, /run check:release-packages|npm publish|id-token: write|environment: npm-release/)
+  assert.match(cliWorkflow, /needs: candidate/)
+  assert.match(cliWorkflow, /hydrate-review-dependencies\.mjs candidate-artifacts \$\{\{ github.sha \}\}/)
+  assert.match(cliWorkflow, /actions\/download-artifact@[a-f0-9]{40}/)
+  assert.equal((cliWorkflow.match(/run release:verify --/g) || []).length, 2)
+  assert.match(cliWorkflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
+})
+
+test('both candidate routes require included backend bytes and native offline installation evidence', () => {
+  const prepare = readFileSync(path.join(root, 'scripts/prepare-product-candidate.mjs'), 'utf8')
+  const canary = readFileSync(path.join(root, 'scripts/check-bundled-node.mjs'), 'utf8')
+  const checker = readFileSync(path.join(root, 'packages/cli/scripts/check-release-packages.js'), 'utf8')
+  assert.match(prepare, /assembleNodeBundle/)
+  assert.match(prepare, /'--node-bundle', bundle\.output/)
+  for (const candidateWorkflow of [cliWorkflow, workflow]) {
+    assert.equal((candidateWorkflow.match(/run release:prepare --/g) || []).length, 1)
+    const verifiers = candidateWorkflow.match(/npm --prefix packages\/cli run release:verify --[^\n]+/g) || []
+    assert.equal(verifiers.length, 2)
+    for (const verifier of verifiers) assert.match(verifier, /--require-node-bundle/)
+    assert.match(candidateWorkflow, /actions\/setup-python@[a-f0-9]{40}/)
+    assert.match(candidateWorkflow, /if: matrix\.architecture == 'x64'/)
+  }
+  assert.match(checker, /if \(requireNodeBundle\)[\s\S]{0,150}installed\.physicalsystemsNodeBundle, 'node-bundle'/)
+  assert.match(checker, /if \(process\.arch === 'x64'\)[\s\S]{0,450}scripts\/check-bundled-node\.mjs/)
+  assert.match(canary, /import\(pathToFileURL\(path\.join\(packageDirectory, 'src\/physical\/node-installation\.js'\)\)\)/)
+  assert.match(canary, /fetchImpl\(\) \{ assert\.fail\('Bundled Node installation attempted a network download'\)/)
+  assert.match(canary, /assert\.equal\(reused\.reused, true\)/)
+  assert.match(canary, /hardwareAccess: false/)
+  const releaseIndex = readFileSync(path.join(root, 'scripts/check-node-release-index.mjs'), 'utf8')
+  assert.match(releaseIndex, /checkBundledNodeReleaseIndex\(sourceDirectory, \{ expectedRelease: '0\.2\.1' \}\)/)
+})
+
+test('CI dependency hydration checks source SHA and artifact hash before extraction and refuses overwrite', () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'ps-hydrate-'))
+  try {
+    writeFixtureFile(fixture, 'scripts/hydrate-review-dependencies.mjs', readFileSync(path.join(root, 'scripts/hydrate-review-dependencies.mjs')))
+    writeFixtureFile(fixture, 'payload/package/node_modules/demo/index.js', 'export default 42\n')
+    mkdirSync(path.join(fixture, 'candidate'))
+    mkdirSync(path.join(fixture, 'packages/cli'), { recursive: true })
+    const archive = path.join(fixture, 'candidate/physicalsystems-0.2.0.tgz')
+    const packed = spawnSync('tar', ['-czf', archive, '-C', path.join(fixture, 'payload'), 'package'], { encoding: 'utf8' })
+    assert.equal(packed.status, 0, packed.stderr)
+    const commit = 'a'.repeat(40), sha256 = createHash('sha256').update(readFileSync(archive)).digest('hex')
+    const manifest = { commit, artifacts: [{ key: 'physicalsystems', filename: path.basename(archive), sha256 }] }
+    const writeManifest = () => writeFixtureFile(fixture, 'candidate/release-manifest.json', JSON.stringify(manifest))
+    writeManifest()
+    const hydrate = (sha = commit) => spawnSync(process.execPath, [path.join(fixture, 'scripts/hydrate-review-dependencies.mjs'), path.join(fixture, 'candidate'), sha], { encoding: 'utf8' })
+    assert.notEqual(hydrate('b'.repeat(40)).status, 0)
+    assert.equal(existsSync(path.join(fixture, 'packages/cli/node_modules')), false)
+    manifest.artifacts[0].sha256 = '0'.repeat(64); writeManifest()
+    assert.notEqual(hydrate().status, 0)
+    assert.equal(existsSync(path.join(fixture, 'packages/cli/node_modules')), false)
+    manifest.artifacts[0].sha256 = sha256; writeManifest()
+    const success = hydrate()
+    assert.equal(success.status, 0, success.stderr)
+    assert.equal(readFileSync(path.join(fixture, 'packages/cli/node_modules/demo/index.js'), 'utf8'), 'export default 42\n')
+    assert.notEqual(hydrate().status, 0)
+  } finally {
+    assert.equal(path.dirname(path.resolve(fixture)), path.resolve(tmpdir()))
+    assert.ok(path.basename(fixture).startsWith('ps-hydrate-'))
+    rmSync(fixture, { recursive: true, force: true })
+  }
+})
+
+test('CI dependency hydration refuses traversal and links before extracting any dependencies', () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'ps-hydrate-'))
+  const tarEntry = (name, type = '0', link = '') => {
+    const header = Buffer.alloc(512)
+    const field = (offset, length, value) => header.write(value, offset, length, 'ascii')
+    field(0, 100, name); field(100, 8, '0000644\0'); field(108, 8, '0000000\0')
+    field(116, 8, '0000000\0'); field(124, 12, '00000000000\0'); field(136, 12, '00000000000\0')
+    header.fill(32, 148, 156); field(156, 1, type); field(157, 100, link)
+    field(257, 6, 'ustar\0'); field(263, 2, '00')
+    const checksum = header.reduce((sum, byte) => sum + byte, 0)
+    field(148, 8, checksum.toString(8).padStart(6, '0') + '\0 ')
+    return header
+  }
+  try {
+    writeFixtureFile(fixture, 'scripts/hydrate-review-dependencies.mjs', readFileSync(path.join(root, 'scripts/hydrate-review-dependencies.mjs')))
+    mkdirSync(path.join(fixture, 'candidate'))
+    mkdirSync(path.join(fixture, 'packages/cli'), { recursive: true })
+    const filename = 'physicalsystems-0.2.1.tgz', commit = 'a'.repeat(40)
+    for (const unsafe of [tarEntry('package/node_modules/../../escape.txt'),
+      tarEntry('package/node_modules/demo/link', '2', '../../../../escape.txt')]) {
+      // tar recognizes this deliberately tiny uncompressed ustar fixture by
+      // its bytes; the product filename remains subject to the normal checks.
+      const archive = Buffer.concat([tarEntry('package/node_modules/demo/index.js'), unsafe, Buffer.alloc(1024)])
+      writeFileSync(path.join(fixture, 'candidate', filename), archive)
+      writeFixtureFile(fixture, 'candidate/release-manifest.json', JSON.stringify({ commit,
+        artifacts: [{ key: 'physicalsystems', filename, sha256: createHash('sha256').update(archive).digest('hex') }] }))
+      const result = spawnSync(process.execPath, [path.join(fixture, 'scripts/hydrate-review-dependencies.mjs'), path.join(fixture, 'candidate'), commit], { encoding: 'utf8' })
+      assert.notEqual(result.status, 0)
+      assert.equal(existsSync(path.join(fixture, 'packages/cli/node_modules')), false)
+      assert.equal(existsSync(path.join(fixture, 'escape.txt')), false)
+    }
+  } finally {
+    assert.equal(path.dirname(path.resolve(fixture)), path.resolve(tmpdir()))
+    assert.ok(path.basename(fixture).startsWith('ps-hydrate-'))
+    rmSync(fixture, { recursive: true, force: true })
+  }
+})
 
 test('protected npm publication requires bundled Node manifests before build, not source candidates', () => {
   const requireMain = workflow.slice(workflow.indexOf('  require-main:'), workflow.indexOf('\n  build:'))
@@ -653,7 +760,7 @@ test('the physicalsystems namespace bootstrap is inert and reproducible from sou
 })
 
 test('one candidate is reused for Windows, Ubuntu, npm 11/12, and direct preview publishing', () => {
-  assert.match(workflow, /run release:pack --/)
+  assert.match(workflow, /run release:prepare --/)
   assert.match(workflow, /run release:verify --/)
   assert.match(workflow, /runner: windows-latest/)
   assert.match(workflow, /runner: windows-11-arm/)
@@ -767,10 +874,11 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.equal(cliPackage.bundleDependencies, true)
   assert.doesNotMatch(packageChecker, /'install',\s*'--ignore-scripts'/)
   assert.doesNotMatch(workflow, /npm ci --prefix packages\/cli/)
-  assert.match(workflow, /Bootstrap the reviewed dependency tree from the locally packed runtime/)
+  const prepare = readFileSync(path.join(root, 'scripts/prepare-product-candidate.mjs'), 'utf8')
+  assert.match(workflow, /Prepare one complete product with exact backend wheels/)
   assert.ok(
-    workflow.indexOf('run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli')
-      < workflow.indexOf('run release:pack -- $artifactDirectory'),
+    prepare.indexOf("runNpm(['run', 'bootstrap:pi-runtime'")
+      < prepare.indexOf("runNpm(['run', 'release:pack'"),
     'the reviewed dependency tree must be installed before npm pack bundles it',
   )
   assert.match(packageChecker, /function npmFileSpec\(file\)/)
@@ -780,7 +888,7 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.match(packageChecker, /'--offline'/)
   assert.match(packageChecker, /local-npm-cache/)
   assert.match(packageChecker, /global-npm-cache/)
-  assert.match(packageChecker, /const npmExecRoot = mkdtempSync\(path\.join\(tmpdir\(\), 'physicalsystems-npm-exec-'\)\)/)
+  assert.match(packageChecker, /const npmExecRoot = mkdtempSync\(path\.join\(realpathSync\.native\(tmpdir\(\)\), 'physicalsystems-npm-exec-'\)\)/)
   assert.match(packageChecker, /npm exec verification must start without a local dependency tree/)
   assert.match(packageChecker, /cwd: npmExecRoot/)
   assert.match(packageChecker, /npm exec must materialize the packed artifact in its isolated cache/)
@@ -833,6 +941,88 @@ test('release verification uses real npm lifecycle and platform command shims', 
     /if \(result\.error\)[\s\S]{0,500}result\.error\.message[\s\S]{0,500}result\.stdout\?\.trim\(\)[\s\S]{0,500}result\.stderr\?\.trim\(\)/,
   )
   assert.match(packageChecker, /Completed \$\{phase\} in \$\{elapsedMs\} ms/)
+})
+
+test('Windows release verifier resolves substituted temporary drives for every install path and cleanup', { skip: process.platform !== 'win32' }, (t) => {
+  const base = realpathSync.native(tmpdir())
+  const fixture = mkdtempSync(path.join(base, 'ps-release-temp-'))
+  t.after(() => {
+    assert.equal(path.dirname(fixture), base)
+    assert.equal(realpathSync.native(fixture), fixture)
+    assert.ok(path.basename(fixture).startsWith('ps-release-temp-'))
+    rmSync(fixture, { recursive: true, force: true })
+  })
+  let drive
+  for (const letter of 'ZYXWVUTSR') {
+    try { lstatSync(`${letter}:\\`) }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      drive = `${letter}:`; break
+    }
+  }
+  assert.ok(drive, 'A free drive letter is required for the Windows path-alias regression')
+  // Exercise the real verifier expressions without invoking npm, a server, or
+  // the CLI's top-level packaging entrypoint. Keep the strict bundle checker real.
+  const allocations = [...packageChecker.matchAll(/const (extractionRoot|temporaryRoot|npmExecRoot|temporaryArtifacts) = (mkdtempSync\([^\r\n]+\))/g)]
+  assert.deepEqual(allocations.map((match) => match[1]), ['extractionRoot', 'temporaryRoot', 'npmExecRoot', 'temporaryArtifacts'])
+  const cleanupStart = packageChecker.indexOf('function removeTemporaryDirectory(directory) {')
+  assert.ok(cleanupStart >= 0)
+  const cleanup = packageChecker.slice(cleanupStart).match(/^function removeTemporaryDirectory\(directory\) \{[\s\S]*?\r?\n\}/)?.[0]
+  assert.ok(cleanup, 'The verifier cleanup function must be extractable with LF or CRLF source')
+  const bundleModule = pathToFileURL(path.join(root, 'packages/cli/src/physical/node-bundle.js')).href
+  const exercises = allocations.map(([declaration, name]) => `{
+    ${declaration};
+    const directory = ${name};
+    try {
+      for (const layout of ['node_modules/physicalsystems/node-bundle', 'global-prefix/node_modules/physicalsystems/node-bundle', 'npm-cache/_npx/fixture/node_modules/physicalsystems/node-bundle']) {
+        const bundle = path.join(directory, layout);
+        mkdirSync(bundle, { recursive: true });
+        await bundleDirectory(bundle);
+      }
+      assert.equal(path.dirname(directory), expectedBase);
+      assert.equal(realpathSync.native(directory), directory);
+    } finally {
+      const resolved = realpathSync.native(directory);
+      assert.equal(path.dirname(resolved), expectedBase);
+      assert.match(path.basename(resolved), /^(tinyedge|physicalsystems)-/);
+      removeTemporaryDirectory(directory);
+    }
+    assert.equal(existsSync(directory), false);
+  }`).join('\n')
+  const code = `
+    import assert from 'node:assert/strict';
+    import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
+    import { tmpdir } from 'node:os';
+    import path from 'node:path';
+    import { bundleDirectory } from ${JSON.stringify(bundleModule)};
+    const expectedBase = process.argv[1];
+    assert.notEqual(realpathSync(tmpdir()), realpathSync.native(tmpdir()));
+    ${cleanup}
+    ${exercises}
+    const keep = path.join(expectedBase, 'keep-unowned-directory');
+    mkdirSync(keep);
+    assert.throws(() => removeTemporaryDirectory(keep), /Unexpected release temporary directory/);
+    assert.equal(existsSync(keep), true);
+    const linked = path.join(expectedBase, 'tinyedge-release-verify-LINKED');
+    symlinkSync(keep, linked, 'junction');
+    try {
+      await assert.rejects(bundleDirectory(linked), /must not use links or junctions/);
+      assert.throws(() => removeTemporaryDirectory(linked), /Unexpected release temporary directory/);
+      assert.equal(existsSync(keep), true);
+    } finally {
+      assert.equal(path.dirname(linked), expectedBase);
+      assert.equal(lstatSync(linked).isSymbolicLink(), true);
+      unlinkSync(linked);
+    }
+  `
+  execFileSync('subst', [drive, fixture], { windowsHide: true })
+  try {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', code, fixture], {
+      env: { ...process.env, TMP: `${drive}\\`, TEMP: `${drive}\\` },
+      encoding: 'utf8', timeout: 30000, windowsHide: true,
+    })
+    assert.equal(result.status, 0, result.error?.message || result.stderr)
+  } finally { execFileSync('subst', [drive, '/D'], { windowsHide: true }) }
 })
 
 test('the published physicalsystems package carries the reviewed dependency closure', () => {
@@ -1001,15 +1191,15 @@ test('pull-request CI covers release-workflow changes and its regression test', 
   assert.match(cliWorkflow, /TINYEDGE_LINUX_SECRET_SERVICE_CANARY=1/)
   assert.match(cliWorkflow, /gnome-keyring-daemon --unlock --components=secrets/)
   assert.match(cliWorkflow, /libsecret-tools xdg-utils/)
-  assert.match(cliWorkflow, /Pack a review candidate for the Ubuntu laptop canary/)
+  assert.match(cliWorkflow, /Prepare the complete npm product once/)
   assert.match(cliWorkflow, /physicalsystems-0\.2\.1-ubuntu-canary-\$\{\{ github\.sha \}\}/)
   assert.deepEqual(cliPackage.os, ['win32', 'linux'])
   assert.match(cliWorkflow, /node --test test\/npm-release-workflow\.test\.mjs/)
   assert.match(cliWorkflow, /npm install --global "npm@11\.19\.0"/)
-  assert.match(cliWorkflow, /bootstrap:pi-runtime -- --cache \$cacheDirectory --install-cli/)
+  assert.match(cliWorkflow, /run release:prepare -- --output \$productDirectory/)
   assert.match(cliWorkflow, /Verify the packed Linux package and interactive Harness/)
   assert.match(cliWorkflow, /npm run check:legal/)
-  const bootstrapIndex = cliWorkflow.indexOf('bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli')
+  const bootstrapIndex = cliWorkflow.indexOf('run release:prepare -- --output $productDirectory')
   const legalIndex = cliWorkflow.indexOf('npm run check:legal')
   assert.notEqual(bootstrapIndex, -1)
   assert.notEqual(legalIndex, -1)

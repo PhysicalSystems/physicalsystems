@@ -1,10 +1,52 @@
 import assert from 'node:assert/strict'
+import * as fs from 'node:fs/promises'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 import { installSessionPromptGate } from '../src/harness/session-prompt-gate.js'
 
-const { AgentSession } = await import(new URL('./core/agent-session.js', import.meta.resolve('@tinyedge/pi-runtime')))
-const { Agent } = await import('@earendil-works/pi-agent-core')
+const runtimeEntry = import.meta.resolve('@tinyedge/pi-runtime')
+const { AgentSession } = await import(new URL('./core/agent-session.js', runtimeEntry))
+const { Agent } = await loadPinnedRuntimeAgent(runtimeEntry)
+
+async function loadPinnedRuntimeAgent(entry) {
+  // Agent is the runtime's dependency, not the CLI's. npm's packed closure can
+  // nest it beneath Pi instead of hoisting it into the CLI node_modules tree.
+  const metadataPath = createRequire(entry).resolve('@earendil-works/pi-agent-core/package.json')
+  const metadata = JSON.parse(await fs.readFile(metadataPath, 'utf8'))
+  assert.equal(metadata.name, '@earendil-works/pi-agent-core')
+  assert.equal(metadata.version, '0.84.2')
+  assert.equal(metadata.exports?.['.']?.import, './dist/index.js')
+  return import(new URL(metadata.exports['.'].import, pathToFileURL(metadataPath)))
+}
+
+test('Pi Agent fixture resolves the pinned ESM export without a hoisted transitive dependency', async (t) => {
+  const base = await fs.realpath(tmpdir())
+  const root = await fs.mkdtemp(path.join(base, 'ps-agent-layout-'))
+  t.after(async () => {
+    assert.equal(path.dirname(root), base)
+    assert.ok(path.basename(root).startsWith('ps-agent-layout-'))
+    assert.equal(await fs.realpath(root), root)
+    await fs.rm(root, { recursive: true, force: true })
+  })
+  const runtime = path.join(root, 'node_modules/@tinyedge/pi-runtime')
+  const nestedAgent = path.join(runtime, 'node_modules/@earendil-works/pi-agent-core')
+  await fs.mkdir(path.join(nestedAgent, 'dist'), { recursive: true })
+  const metadataPath = path.join(nestedAgent, 'package.json')
+  const metadata = { name: '@earendil-works/pi-agent-core', version: '0.84.2', type: 'module',
+    exports: { '.': { import: './dist/index.js' }, './package.json': './package.json' } }
+  await fs.writeFile(metadataPath, JSON.stringify(metadata))
+  await fs.writeFile(path.join(nestedAgent, 'dist/index.js'), 'export class Agent { static layout = "nested-only" }\n')
+  assert.throws(() => createRequire(path.join(root, 'cli-test.cjs')).resolve('@earendil-works/pi-agent-core/package.json'), { code: 'MODULE_NOT_FOUND' })
+  const entry = pathToFileURL(path.join(runtime, 'dist/index.js'))
+  assert.equal((await loadPinnedRuntimeAgent(entry)).Agent.layout, 'nested-only')
+  metadata.exports['.'].import = './unreviewed-entry.js'
+  await fs.writeFile(metadataPath, JSON.stringify(metadata))
+  await assert.rejects(loadPinnedRuntimeAgent(entry), { code: 'ERR_ASSERTION' })
+})
 
 function deferred() {
   let resolve

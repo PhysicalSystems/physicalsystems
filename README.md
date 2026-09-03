@@ -62,8 +62,14 @@ The one-shot preview command is:
 npx --yes physicalsystems@preview
 ```
 
-`physicalsystems@0.2.0` was the first application release. `0.2.1` adds a
-fail-fast prerequisite check for older Node.js versions. Its protected release
+`physicalsystems@0.2.0` was the first application release. The `0.2.1` candidate
+adds a fail-fast prerequisite check for older Node.js versions and includes the
+reviewed Python backend in the npm artifact. First launch asks for software
+setup consent and installs it in an isolated user environment, without a Git
+clone, manual pip command or second terminal. Supported system Python with
+`venv`/`ensurepip` is still required; arbitrary hardware drivers are not included.
+The existing managed 0.2.0 backend requires consent to update to 0.2.1.
+Its protected release
 publishes to `preview` and then independently verifies the public registry;
 require the `npm view` check above to succeed before launch. Do not use the old
 `tinyedge@preview` package as though it were the current Physical Systems product.
@@ -97,10 +103,11 @@ The source bootstrap installs the reviewed terminal compatibility runtime from
 this checkout. It does not publish packages, install Python, install device
 drivers, or install the local Physical Systems node.
 
-## Connect a local node
+## Connect a development or separately managed node
 
-Hardware discovery requires the separate Python node on the same Linux host as
-the equipment. In the current implementation its compatibility command is:
+The published product starts its included Node after first-run setup. Source
+developers and operators with a separately managed equipment host can instead
+run the Python Node themselves. Its compatibility command is:
 
 ```bash
 tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
