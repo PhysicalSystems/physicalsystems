@@ -8,6 +8,28 @@ import { checkBundledNodeReleaseIndex } from '../../../scripts/check-node-releas
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
+test('the product pins the published discovery fix for all six targets without changing Runtime', async (t) => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('metadata validation must not download'))
+  const directory = path.resolve(import.meta.dirname, '../src/physical')
+  assert.deepEqual(await checkBundledNodeReleaseIndex(directory, { expectedRelease: '0.2.1' }), {
+    entries: 6,
+    selectors: ['linux-x64:3.10', 'linux-x64:3.11', 'linux-x64:3.12',
+      'win32-x64:3.10', 'win32-x64:3.11', 'win32-x64:3.12'],
+  })
+  const index = JSON.parse(await fs.readFile(path.join(directory, 'node-releases.json'), 'utf8'))
+  for (const entry of index.releases) {
+    const manifest = JSON.parse(await fs.readFile(path.join(directory, 'node-releases', entry.manifest), 'utf8'))
+    assert.equal(manifest.runtimeVersion, '0.2.0')
+    const node = manifest.artifacts.find((artifact) => artifact.name === 'physicalsystems-node')
+    assert.equal(node.version, '0.2.1')
+    assert.equal(node.bytes, 201845)
+    assert.equal(node.sha256, '6d0d41e5bb371cf8d135edf3a85019653f2da58e173d637dedebe6a9171c8b5f')
+    const runtime = manifest.artifacts.find((artifact) => artifact.name === 'tinyedge-runtime')
+    assert.equal(runtime.version, '0.2.0')
+    assert.equal(runtime.sha256, '4d25fcfa055bf54faf69591e4a14bec89dc7f8d086b2bed6bf19912041403937')
+  }
+})
+
 async function fixture(t) {
   // Windows runners may expose TEMP through an 8.3 alias. Canonicalize only
   // the test base; keep the release gate's production no-link checks intact.

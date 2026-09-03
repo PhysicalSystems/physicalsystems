@@ -1,11 +1,11 @@
 {
   "contractVersion": "physicalsystems-node-index-v1",
   "releases": [
-    { "platform": "linux-x64", "python": "3.10", "manifest": "physicalsystems-node-020-linux-x64-py310.json", "sha256": "c3c25c8bb55971650bfff7a16a62dcdfa298d69ef1017c84bf97667d580d85d9" },
-    { "platform": "linux-x64", "python": "3.11", "manifest": "physicalsystems-node-020-linux-x64-py311.json", "sha256": "4478da95908188271a289bda5bba4b4b40b8715f214a797d04c2ae3dcd141760" },
-    { "platform": "linux-x64", "python": "3.12", "manifest": "physicalsystems-node-020-linux-x64-py312.json", "sha256": "02c8b94dd445a05e01296db5292f6d36a42899521c11d0e4cc8d6ed23803dedf" },
-    { "platform": "win32-x64", "python": "3.10", "manifest": "physicalsystems-node-020-win32-x64-py310.json", "sha256": "fc019bd7fa8efef7087e8874002b42f2169eae978e63b90cfab127d0789f63bb" },
-    { "platform": "win32-x64", "python": "3.11", "manifest": "physicalsystems-node-020-win32-x64-py311.json", "sha256": "4bec0161fec4d5c83651af6793e4de3b2263681d632466a026193aecfd425eac" },
-    { "platform": "win32-x64", "python": "3.12", "manifest": "physicalsystems-node-020-win32-x64-py312.json", "sha256": "25156484a2dfa87bd3628396d7ea68ec46dffc81ec4c1107a695a31779c4f97b" }
+    { "platform": "linux-x64", "python": "3.10", "manifest": "physicalsystems-node-021-linux-x64-py310.json", "sha256": "eae8653fddbd5254f46f2eda1223c14842d695752e073cb7c61036fe97baabab" },
+    { "platform": "linux-x64", "python": "3.11", "manifest": "physicalsystems-node-021-linux-x64-py311.json", "sha256": "6c594ca06b83d5f7882d166ae9f8c7365c4cfcffb4223c41bd40862d4fe560ae" },
+    { "platform": "linux-x64", "python": "3.12", "manifest": "physicalsystems-node-021-linux-x64-py312.json", "sha256": "a50ed9c7dc774702b0ebcc9a06c774f8ea23043b2140995b7c25dec5dddb9f70" },
+    { "platform": "win32-x64", "python": "3.10", "manifest": "physicalsystems-node-021-win32-x64-py310.json", "sha256": "cb4746bc13b3c691937b3ce4634b38c86d8c3b42513cc98a3f1a4c2bb1978503" },
+    { "platform": "win32-x64", "python": "3.11", "manifest": "physicalsystems-node-021-win32-x64-py311.json", "sha256": "ab9f66a68fc2ef89410583088905ead9e1f1712d5be619024639d27011aa2d40" },
+    { "platform": "win32-x64", "python": "3.12", "manifest": "physicalsystems-node-021-win32-x64-py312.json", "sha256": "84605f7c89c47efc52d6a18ec0b5a7980c6d87ea037429d076de061f5923ad0b" }
   ]
 }

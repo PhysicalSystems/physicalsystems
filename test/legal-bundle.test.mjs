@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import {
   buildSbomForTarget,
@@ -55,6 +56,29 @@ function mutatedText(shrinkwrap, mutate) {
 
 function componentFullName(component) {
   return component.group ? `${component.group}/${component.name}` : component.name
+}
+
+async function verifyInstalledIgnoreLicense(cliDirectory) {
+  const evidence = ARTIFACT_LICENSE_FILE_EVIDENCE[0]
+  const dependencyRoot = await realpath(path.join(cliDirectory, 'node_modules'))
+  const runtimePackage = path.join(dependencyRoot, '@tinyedge/pi-runtime/package.json')
+  const runtime = JSON.parse(await readFile(runtimePackage, 'utf8'))
+  assert.equal(runtime.name, '@tinyedge/pi-runtime')
+  assert.equal(runtime.dependencies.ignore, evidence.version)
+  // Resolve from the package which uses ignore: source installs may hoist it,
+  // while npm's packed dependency closure keeps it inside the Pi runtime.
+  // Resolving metadata does not import or execute third-party package code.
+  const packageFile = createRequire(pathToFileURL(runtimePackage)).resolve('ignore/package.json')
+  const relative = path.relative(dependencyRoot, packageFile)
+  assert.ok(!path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..', 'ignore must resolve inside this product dependency closure')
+  const metadata = JSON.parse(await readFile(packageFile, 'utf8'))
+  assert.equal(metadata.name, evidence.name)
+  assert.equal(metadata.version, evidence.version)
+  assert.equal(metadata.license, evidence.declaredLicense)
+  const licenseBytes = await readFile(path.join(path.dirname(packageFile), evidence.artifactLegalFile))
+  assert.equal(licenseBytes.length, evidence.artifactLegalFileSize)
+  assert.equal(sha256(licenseBytes), evidence.artifactLegalFileSha256)
+  return { packageFile, licenseBytes }
 }
 
 test('reviewed shrinkwrap graphs produce deterministic CycloneDX 1.6 output offline', async () => {
@@ -272,10 +296,54 @@ test('ignore retains exact artifact-contained LICENSE-MIT evidence and is not an
 })
 
 test('installed ignore artifact carries the reviewed LICENSE-MIT bytes', async () => {
-  const evidence = ARTIFACT_LICENSE_FILE_EVIDENCE[0]
-  const licenseBytes = await readFile(path.join(root, 'packages/cli/node_modules/ignore', evidence.artifactLegalFile))
-  assert.equal(licenseBytes.length, evidence.artifactLegalFileSize)
-  assert.equal(sha256(licenseBytes), evidence.artifactLegalFileSha256)
+  await verifyInstalledIgnoreLicense(path.join(root, 'packages/cli'))
+})
+
+test('installed license resolution accepts hoisted and nested layouts without hiding missing or altered evidence', async (t) => {
+  const { licenseBytes } = await verifyInstalledIgnoreLicense(path.join(root, 'packages/cli'))
+  for (const layout of ['hoisted', 'nested', 'nested-with-decoy', 'wrong-version', 'wrong-license', 'tampered', 'missing-file', 'outside-product']) {
+    await t.test(layout, async () => {
+      const temporaryBase = await realpath(tmpdir())
+      const temporaryRoot = await mkdtemp(path.join(temporaryBase, 'ps-license-layout-'))
+      try {
+        const cliDirectory = path.join(temporaryRoot, 'product')
+        const runtimeDirectory = path.join(cliDirectory, 'node_modules/@tinyedge/pi-runtime')
+        await mkdir(runtimeDirectory, { recursive: true })
+        await writeFile(path.join(runtimeDirectory, 'package.json'), JSON.stringify({
+          name: '@tinyedge/pi-runtime', dependencies: { ignore: '7.0.5' },
+        }))
+        const writeIgnore = async (directory, metadata = {}, bytes = licenseBytes) => {
+          await mkdir(directory, { recursive: true })
+          await writeFile(path.join(directory, 'package.json'), JSON.stringify({
+            name: 'ignore', version: '7.0.5', license: 'MIT', ...metadata,
+          }))
+          if (bytes) await writeFile(path.join(directory, 'LICENSE-MIT'), bytes)
+        }
+        const hoisted = path.join(cliDirectory, 'node_modules/ignore')
+        const nested = path.join(runtimeDirectory, 'node_modules/ignore')
+        const target = layout === 'hoisted' ? hoisted : layout === 'outside-product'
+          ? path.join(temporaryRoot, 'node_modules/ignore') : nested
+        const altered = Buffer.from(licenseBytes); altered[0] ^= 1
+        await writeIgnore(target, layout === 'wrong-version' ? { version: '7.0.4' }
+          : layout === 'wrong-license' ? { license: 'Unreviewed' } : {},
+        layout === 'missing-file' ? null : layout === 'tampered' ? altered : licenseBytes)
+        if (layout === 'nested-with-decoy') await writeIgnore(hoisted, {}, altered)
+        // An intact hoisted copy must not conceal a broken nearer dependency.
+        if (['wrong-version', 'wrong-license', 'tampered', 'missing-file'].includes(layout)) await writeIgnore(hoisted)
+        if (['hoisted', 'nested', 'nested-with-decoy'].includes(layout)) {
+          const verified = await verifyInstalledIgnoreLicense(cliDirectory)
+          assert.equal(verified.packageFile, path.join(target, 'package.json'))
+        } else {
+          await assert.rejects(verifyInstalledIgnoreLicense(cliDirectory))
+        }
+      } finally {
+        assert.equal(path.dirname(temporaryRoot), temporaryBase)
+        assert.equal(await realpath(temporaryRoot), temporaryRoot)
+        assert.ok(path.basename(temporaryRoot).startsWith('ps-license-layout-'))
+        await rm(temporaryRoot, { recursive: true, force: true })
+      }
+    })
+  }
 })
 
 test('every installed npm component has exact purl, version, license, integrity, and resolved metadata', async () => {
