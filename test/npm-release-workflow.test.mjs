@@ -610,6 +610,31 @@ test('direct preview publishing fails closed on environment, provenance, and lic
   assert.match(releaseGuide, /Local packing and tests[\s\S]{0,30}never publish/)
 })
 
+test('preview update preflight accepts the existing release and rejects unexpected tag changes', () => {
+  const guard = workflow.match(/const tags = JSON\.parse\(process\.env\.PHYSICALSYSTEMS_TAGS_JSON\)([\s\S]*?)const \[packed\]/)
+  assert.ok(guard, 'exercise the actual pre-publication tag assertion')
+  const check = (tags) => spawnSync(process.execPath, [
+    '--input-type=module', '-e',
+    `import assert from 'node:assert/strict'; const tags = JSON.parse(process.env.PHYSICALSYSTEMS_TAGS_JSON); ${guard[1]}`,
+  ], {
+    encoding: 'utf8',
+    env: { ...process.env, PHYSICALSYSTEMS_TAGS_JSON: JSON.stringify(tags) },
+  })
+  const prior = { bootstrap: '0.0.0', latest: '0.0.0', preview: '0.2.0' }
+  const accepted = check(prior)
+  assert.equal(accepted.status, 0, accepted.stderr)
+  for (const rejected of [
+    { bootstrap: '0.0.0', latest: '0.0.0' },
+    { ...prior, preview: '0.2.1' },
+    { ...prior, preview: '0.2.2' },
+    { ...prior, latest: '0.2.0' },
+    { ...prior, bootstrap: '0.2.0' },
+    { ...prior, unexpected: '0.2.0' },
+  ]) {
+    assert.notEqual(check(rejected).status, 0, JSON.stringify(rejected))
+  }
+})
+
 test('namespace bootstraps are inert, the runtime is reused, and only physicalsystems is published', () => {
   const bootstrapGuard = workflow.indexOf(
     'Require the published runtime and an unpublished Physical Systems candidate',

@@ -47,7 +47,9 @@ review-candidate packing remain available before those artifacts are published.
 5. Enters the protected environment only after all platform checks pass and
    requires `NPM_RELEASE_POLICY_VERSION=v3-physicalsystems-preview`.
 6. Verifies the inert namespace bootstrap, the already-published runtime, and
-   that `physicalsystems@0.2.1` is not already public.
+   that `physicalsystems@0.2.1` is not already public. This update requires the
+   exact existing tags `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.0`;
+   unexpected tag changes block publication rather than being overwritten.
 7. Publishes exactly one tarball:
 
    ```bash
