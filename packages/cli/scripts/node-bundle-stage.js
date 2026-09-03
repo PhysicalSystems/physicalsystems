@@ -10,9 +10,13 @@ import { NODE_BUNDLE_PATH, verifyNodeBundle } from '../src/physical/node-bundle.
 export async function stageNodeBundle(packageDirectory, bundle) {
   const verified = await verifyNodeBundle(bundle)
   const metadata = JSON.parse(readFileSync(path.join(packageDirectory, 'package.json'), 'utf8'))
-  const base = realpathSync(tmpdir()), directory = mkdtempSync(path.join(base, 'ps-bundle-'))
+  // Match fs.promises.realpath used by bundle validation. On Windows the
+  // legacy sync implementation preserves SUBST drive aliases, while native
+  // realpath resolves their backing path. Stage at that canonical path rather
+  // than relaxing the bundle's strict directory/link checks.
+  const base = realpathSync.native(tmpdir()), directory = mkdtempSync(path.join(base, 'ps-bundle-'))
   const dispose = () => {
-    if (path.dirname(directory) !== base || !path.basename(directory).startsWith('ps-bundle-') || realpathSync(directory) !== directory) throw new Error('Unexpected package staging directory')
+    if (path.dirname(directory) !== base || !path.basename(directory).startsWith('ps-bundle-') || realpathSync.native(directory) !== directory) throw new Error('Unexpected package staging directory')
     rmSync(directory, { recursive: true, force: true })
   }
   try {

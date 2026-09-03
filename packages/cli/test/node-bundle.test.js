@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { assembleNodeBundle } from '../../../scripts/assemble-node-bundle.mjs'
 import { bundledNodeRelease, installManagedNode } from '../src/physical/node-installation.js'
@@ -123,6 +125,7 @@ test('bundle directory junctions are rejected before wheel access', async (t) =>
   const linked = path.join(item.root, 'linked')
   await fs.symlink(item.output, linked, process.platform === 'win32' ? 'junction' : 'dir')
   await assert.rejects(readNodeBundle(linked), /links or junctions/)
+  await assert.rejects(stageNodeBundle(item.packageDirectory, linked), /links or junctions/)
 })
 
 test('first-run setup preserves the bundled wheelhouse and never downloads or enables hardware', async (t) => {
@@ -165,4 +168,48 @@ test('pack staging includes exact wheels, licensing and metadata without changin
     assert.equal(await fs.readFile(path.join(source, 'package.json'), 'utf8'), bytes)
     await assert.rejects(fs.stat(path.join(source, 'node-bundle')), { code: 'ENOENT' })
   } finally { stage.dispose() }
+})
+
+test('Windows staging resolves substituted temporary drives before strict bundle verification', { skip: process.platform !== 'win32' }, async (t) => {
+  const item = await fixture(t)
+  await assembleNodeBundle(item.options)
+  const source = path.join(item.root, 'source')
+  await fs.mkdir(path.join(source, 'node_modules'), { recursive: true })
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: 'physicalsystems', files: ['README.md'] }))
+  await fs.writeFile(path.join(source, 'README.md'), 'fixture')
+  let drive
+  for (const letter of 'ZYXWVUTSR') {
+    try { await fs.lstat(`${letter}:\\`) }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      drive = `${letter}:`; break
+    }
+  }
+  assert.ok(drive, 'A free drive letter is required for the Windows path-alias regression')
+  // SUBST changes only this temporary drive mapping, not any existing drive.
+  // Legacy realpathSync preserves that alias while the native/promises API
+  // resolves it. Run staging in a child so TMP/TEMP do not affect other tests.
+  execFileSync('subst', [drive, item.root])
+  try {
+    const stageModule = pathToFileURL(path.resolve(import.meta.dirname, '../scripts/node-bundle-stage.js')).href
+    const code = `
+      import assert from 'node:assert/strict';
+      import fs from 'node:fs';
+      import path from 'node:path';
+      import { tmpdir } from 'node:os';
+      import { stageNodeBundle } from ${JSON.stringify(stageModule)};
+      assert.notEqual(fs.realpathSync(tmpdir()), fs.realpathSync.native(tmpdir()));
+      const [source, bundle, expectedBase] = process.argv.slice(1);
+      const stage = await stageNodeBundle(source, bundle);
+      try {
+        assert.equal(path.dirname(stage.directory), expectedBase);
+        assert.equal(fs.realpathSync.native(stage.directory), stage.directory);
+      } finally { stage.dispose(); }
+      assert.equal(fs.existsSync(stage.directory), false);
+    `
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', code, source, item.output, item.root], {
+      env: { ...process.env, TMP: `${drive}\\`, TEMP: `${drive}\\` }, encoding: 'utf8', timeout: 30000, windowsHide: true,
+    })
+    assert.equal(result.status, 0, result.error?.message || result.stderr)
+  } finally { execFileSync('subst', [drive, '/D']) }
 })
