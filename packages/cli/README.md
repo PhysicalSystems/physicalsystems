@@ -304,10 +304,12 @@ lock is not stolen, and upgrading does not replace a running physical controller
 `PHYSICAL_NODE_EXECUTABLE` and an explicit external Node URL preserve the manual
 host paths. Physical commissioning and execution remain separate.
 
-**Current release gate:** `src/physical/node-releases.json` intentionally has no
-download entries until separately published Node/Runtime bytes and the exact
-platform wheel closure have passed release review. Do not describe this source
-candidate as a working public one-command installation yet.
+**Current release gate:** `src/physical/node-releases.json` pins the published
+Node 0.2.0 wheel and its complete dependency set for Windows/Linux x64 with
+CPython 3.10–3.12. The descriptors were generated after exact public PyPI
+readback. The npm candidate still requires its own packaged installation checks
+and protected publication; published Python dependencies alone do not prove
+that the npm release is available.
 
 Maintainers can verify a reviewed local artifact without publishing it:
 

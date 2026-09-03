@@ -421,6 +421,7 @@ jobs:
     environment: npm-release
     permissions:
       contents: read
+      actions: read # Read the protected environment and deployment-branch policies.
       id-token: write
     steps:
       - name: Require the reviewed public release context

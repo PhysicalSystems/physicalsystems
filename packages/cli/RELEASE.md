@@ -85,8 +85,9 @@ An empty-index source candidate still exercises the interactive Harness but is
 explicitly reported as **NO managed Node acceptance**; it cannot satisfy the
 protected publication gate. Synthetic regression fixtures test the acceptance
 logic without downloading wheels or opening hardware and are not release-byte
-evidence. The current empty index means fresh downloadable-Node acceptance has
-not yet been demonstrated by this source candidate.
+evidence. The bundled index now pins the actual published Node 0.2.0 files;
+fresh packaged managed-Node acceptance must pass with those descriptors before
+this npm release can be published.
 
 ## One-time namespace bootstrap
 

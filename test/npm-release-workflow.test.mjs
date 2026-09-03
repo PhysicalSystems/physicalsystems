@@ -456,6 +456,8 @@ test('direct preview publishing fails closed on environment, provenance, and lic
   assert.match(workflow, /\[\{ name: 'main', type: 'branch' \}\]/)
   const publishBeforeCheckout = workflow.slice(publishJob, sourceCheckout)
   assert.match(publishBeforeCheckout, /permissions:\s*\n\s+contents: read/)
+  assert.match(publishBeforeCheckout, /actions: read/)
+  assert.doesNotMatch(publishBeforeCheckout, /(?:contents|actions|deployments|administration): write/)
   assert.match(publishBeforeCheckout, /id-token: write/)
   const publishBeforeLicense = workflow.slice(sourceCheckout, licenseGuard)
   assert.match(
