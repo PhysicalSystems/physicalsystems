@@ -888,8 +888,8 @@ jobs:
           const tags = JSON.parse(process.env.PHYSICALSYSTEMS_TAGS_JSON)
           assert.deepEqual(
             tags,
-            { bootstrap: '0.0.0', latest: '0.0.0' },
-            'npm first-publish behavior must expose only the inert physicalsystems bootstrap bytes',
+            { bootstrap: '0.0.0', latest: '0.0.0', preview: '0.2.0' },
+            'preview update requires the existing 0.2.0 preview and unchanged inert bootstrap/latest tags',
           )
           const [packed] = JSON.parse(process.env.PHYSICALSYSTEMS_PACK_JSON)
           assert.equal(packed.name, 'physicalsystems')
