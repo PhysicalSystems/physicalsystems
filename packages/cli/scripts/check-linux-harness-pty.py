@@ -13,14 +13,14 @@ import sys
 import time
 
 
-STARTUP_TIMEOUT_SECONDS = 600  # Includes fresh wheel download + venv installation.
+STARTUP_TIMEOUT_SECONDS = 600  # Includes fresh private venv installation.
 EXIT_TIMEOUT_SECONDS = 30
 MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024
 EXPECTED_HEADER = b"PHYSICAL SYSTEMS"
 MARKER = b"PHYSICAL_SYSTEMS_ACCEPTANCE_"
 SOFTWARE_CONSENT = re.compile(
-    rb"Install Physical Systems Node 0\.2\.0 \([0-9]{1,4} MB\) in a private Python environment\? "
-    rb"This downloads software; it does not enable robot movement\. \[y/N\] "
+    rb"Install Physical Systems Node 0\.2\.1 \([0-9]{1,4} MB\) in a private Python environment\? "
+    rb"This sets up software; it does not enable robot movement\. \[y/N\] "
 )
 
 

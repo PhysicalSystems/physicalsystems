@@ -2,13 +2,14 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import unittest
 
 spec = importlib.util.spec_from_file_location("acceptance", Path(__file__).resolve().parents[1] / "scripts/check-linux-harness-pty.py")
 acceptance = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(acceptance)
 
-PROMPT = b"Install Physical Systems Node 0.2.0 (123 MB) in a private Python environment? This downloads software; it does not enable robot movement. [y/N] "
+PROMPT = b"Install Physical Systems Node 0.2.1 (123 MB) in a private Python environment? This sets up software; it does not enable robot movement. [y/N] "
 
 
 def marker(stage, kind="managed", digest="a" * 64):
@@ -19,6 +20,35 @@ def marker(stage, kind="managed", digest="a" * 64):
 
 
 class TranscriptTests(unittest.TestCase):
+    def test_current_installer_prompt_matches_the_scoped_consent_parser(self):
+        # Exercise the actual question with in-memory streams and answer NO.
+        # This does not invoke installation, a live terminal, or hardware.
+        cli = Path(__file__).resolve().parents[1]
+        index = json.loads((cli / "src/physical/node-releases.json").read_text())
+        versions = {json.loads((cli / "src/physical/node-releases" / entry["manifest"]).read_text())["release"]
+                    for entry in index["releases"]}
+        self.assertEqual(versions, {"0.2.1"}, "Update scoped acceptance when the reviewed backend changes")
+        script = r"""
+import assert from 'node:assert/strict';
+import { PassThrough } from 'node:stream';
+const { approveNodeSetup } = await import(process.argv[1]);
+const input = new PassThrough(), output = new PassThrough();
+input.isTTY = true; output.isTTY = true; output.columns = 100;
+let rendered = '';
+output.on('data', (chunk) => { rendered += chunk.toString(); });
+const answer = approveNodeSetup({ release: process.argv[2], bytes: 123 * 1024 * 1024 }, { input, output });
+const question = rendered;
+input.write('n\n');
+assert.equal(await answer, false);
+process.stdout.write(JSON.stringify(question));
+"""
+        result = subprocess.run(["node", "--input-type=module", "-e", script,
+                                 (cli / "src/commands/setup-node.js").as_uri(), next(iter(versions))],
+                                capture_output=True, text=True, timeout=10, check=True)
+        transcript = acceptance.AcceptanceTranscript()
+        transcript.feed(marker("EXPECTED"))
+        self.assertTrue(transcript.feed(json.loads(result.stdout).encode()))
+
     def test_fragmented_first_run_consent_ready_render_and_shutdown(self):
         transcript = acceptance.AcceptanceTranscript()
         writes = 0
@@ -57,7 +87,9 @@ class TranscriptTests(unittest.TestCase):
     def test_unknown_prompts_are_not_approved(self):
         transcript = acceptance.AcceptanceTranscript()
         transcript.feed(marker("EXPECTED"))
-        for prompt in (b"Move the robot? [y/N] ", b"Download arbitrary software? [y/N] "):
+        for prompt in (b"Move the robot? [y/N] ", b"Download arbitrary software? [y/N] ",
+                       PROMPT.replace(b"0.2.1", b"0.2.0"), PROMPT.replace(b"0.2.1", b"0.3.0"),
+                       PROMPT.replace(b"Install Physical", b"Update Physical")):
             self.assertFalse(transcript.feed(prompt))
         self.assertFalse(transcript.consent_sent)
 

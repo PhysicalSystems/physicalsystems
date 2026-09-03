@@ -282,6 +282,15 @@ function sha512Integrity(file) {
 }
 
 function removeTemporaryDirectory(directory) {
+  // Delete only expected native temp roots, never an alias, replaced junction,
+  // or a caller-selected parent directory. Match the promise-based bundle guard.
+  assert.ok(
+    path.dirname(directory) === realpathSync.native(tmpdir())
+      && /^(?:tinyedge-(?:pi-runtime-pack|release-verify|release-pack)|physicalsystems-npm-exec)-[A-Za-z0-9]{6}$/.test(path.basename(directory))
+      && lstatSync(directory).isDirectory() && !lstatSync(directory).isSymbolicLink()
+      && realpathSync.native(directory) === directory,
+    'Unexpected release temporary directory',
+  )
   rmSync(directory, {
     recursive: true,
     force: true,
@@ -727,7 +736,7 @@ function assertPackedPiRuntime(tarball, files) {
       `the packed runtime UPSTREAM.md must record ${exactProvenance}`,
     )
   }
-  const extractionRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-pi-runtime-pack-'))
+  const extractionRoot = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'tinyedge-pi-runtime-pack-'))
   try {
     run('tar', ['-xf', tarball, '-C', extractionRoot])
     runNpm(['test'], { cwd: path.join(extractionRoot, 'package') })
@@ -874,8 +883,10 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = 
     assert.equal(sha512Integrity(file), artifact.integrity, `integrity mismatch for ${artifact.filename}`)
     return { ...artifact, file }
   })
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-verify-'))
-  const npmExecRoot = mkdtempSync(path.join(tmpdir(), 'physicalsystems-npm-exec-'))
+  // Windows TEMP may be a SUBST drive. Allocate through its native backing path
+  // so local/global installs and npm-exec caches satisfy strict bundle checks.
+  const temporaryRoot = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'tinyedge-release-verify-'))
+  const npmExecRoot = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'physicalsystems-npm-exec-'))
   try {
     const physicalSystemsArtifact = candidateArtifacts.find(({ key }) => key === 'physicalsystems')
     const runtimeArtifact = candidateArtifacts.find(({ key }) => key === 'pi-runtime')
@@ -1189,7 +1200,7 @@ if (mode === 'verify') {
 }
 
 if (mode === 'check') {
-  const temporaryArtifacts = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-pack-'))
+  const temporaryArtifacts = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'tinyedge-release-pack-'))
   try {
     packRelease(temporaryArtifacts)
     await verifyRelease(temporaryArtifacts)

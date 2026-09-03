@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -14,7 +16,7 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const workflow = readFileSync(path.join(root, '.github/workflows/npm-release.yml'), 'utf8')
@@ -886,7 +888,7 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.match(packageChecker, /'--offline'/)
   assert.match(packageChecker, /local-npm-cache/)
   assert.match(packageChecker, /global-npm-cache/)
-  assert.match(packageChecker, /const npmExecRoot = mkdtempSync\(path\.join\(tmpdir\(\), 'physicalsystems-npm-exec-'\)\)/)
+  assert.match(packageChecker, /const npmExecRoot = mkdtempSync\(path\.join\(realpathSync\.native\(tmpdir\(\)\), 'physicalsystems-npm-exec-'\)\)/)
   assert.match(packageChecker, /npm exec verification must start without a local dependency tree/)
   assert.match(packageChecker, /cwd: npmExecRoot/)
   assert.match(packageChecker, /npm exec must materialize the packed artifact in its isolated cache/)
@@ -939,6 +941,88 @@ test('release verification uses real npm lifecycle and platform command shims', 
     /if \(result\.error\)[\s\S]{0,500}result\.error\.message[\s\S]{0,500}result\.stdout\?\.trim\(\)[\s\S]{0,500}result\.stderr\?\.trim\(\)/,
   )
   assert.match(packageChecker, /Completed \$\{phase\} in \$\{elapsedMs\} ms/)
+})
+
+test('Windows release verifier resolves substituted temporary drives for every install path and cleanup', { skip: process.platform !== 'win32' }, (t) => {
+  const base = realpathSync.native(tmpdir())
+  const fixture = mkdtempSync(path.join(base, 'ps-release-temp-'))
+  t.after(() => {
+    assert.equal(path.dirname(fixture), base)
+    assert.equal(realpathSync.native(fixture), fixture)
+    assert.ok(path.basename(fixture).startsWith('ps-release-temp-'))
+    rmSync(fixture, { recursive: true, force: true })
+  })
+  let drive
+  for (const letter of 'ZYXWVUTSR') {
+    try { lstatSync(`${letter}:\\`) }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      drive = `${letter}:`; break
+    }
+  }
+  assert.ok(drive, 'A free drive letter is required for the Windows path-alias regression')
+  // Exercise the real verifier expressions without invoking npm, a server, or
+  // the CLI's top-level packaging entrypoint. Keep the strict bundle checker real.
+  const allocations = [...packageChecker.matchAll(/const (extractionRoot|temporaryRoot|npmExecRoot|temporaryArtifacts) = (mkdtempSync\([^\r\n]+\))/g)]
+  assert.deepEqual(allocations.map((match) => match[1]), ['extractionRoot', 'temporaryRoot', 'npmExecRoot', 'temporaryArtifacts'])
+  const cleanupStart = packageChecker.indexOf('function removeTemporaryDirectory(directory) {')
+  assert.ok(cleanupStart >= 0)
+  const cleanup = packageChecker.slice(cleanupStart).match(/^function removeTemporaryDirectory\(directory\) \{[\s\S]*?\r?\n\}/)?.[0]
+  assert.ok(cleanup, 'The verifier cleanup function must be extractable with LF or CRLF source')
+  const bundleModule = pathToFileURL(path.join(root, 'packages/cli/src/physical/node-bundle.js')).href
+  const exercises = allocations.map(([declaration, name]) => `{
+    ${declaration};
+    const directory = ${name};
+    try {
+      for (const layout of ['node_modules/physicalsystems/node-bundle', 'global-prefix/node_modules/physicalsystems/node-bundle', 'npm-cache/_npx/fixture/node_modules/physicalsystems/node-bundle']) {
+        const bundle = path.join(directory, layout);
+        mkdirSync(bundle, { recursive: true });
+        await bundleDirectory(bundle);
+      }
+      assert.equal(path.dirname(directory), expectedBase);
+      assert.equal(realpathSync.native(directory), directory);
+    } finally {
+      const resolved = realpathSync.native(directory);
+      assert.equal(path.dirname(resolved), expectedBase);
+      assert.match(path.basename(resolved), /^(tinyedge|physicalsystems)-/);
+      removeTemporaryDirectory(directory);
+    }
+    assert.equal(existsSync(directory), false);
+  }`).join('\n')
+  const code = `
+    import assert from 'node:assert/strict';
+    import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
+    import { tmpdir } from 'node:os';
+    import path from 'node:path';
+    import { bundleDirectory } from ${JSON.stringify(bundleModule)};
+    const expectedBase = process.argv[1];
+    assert.notEqual(realpathSync(tmpdir()), realpathSync.native(tmpdir()));
+    ${cleanup}
+    ${exercises}
+    const keep = path.join(expectedBase, 'keep-unowned-directory');
+    mkdirSync(keep);
+    assert.throws(() => removeTemporaryDirectory(keep), /Unexpected release temporary directory/);
+    assert.equal(existsSync(keep), true);
+    const linked = path.join(expectedBase, 'tinyedge-release-verify-LINKED');
+    symlinkSync(keep, linked, 'junction');
+    try {
+      await assert.rejects(bundleDirectory(linked), /must not use links or junctions/);
+      assert.throws(() => removeTemporaryDirectory(linked), /Unexpected release temporary directory/);
+      assert.equal(existsSync(keep), true);
+    } finally {
+      assert.equal(path.dirname(linked), expectedBase);
+      assert.equal(lstatSync(linked).isSymbolicLink(), true);
+      unlinkSync(linked);
+    }
+  `
+  execFileSync('subst', [drive, fixture], { windowsHide: true })
+  try {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', code, fixture], {
+      env: { ...process.env, TMP: `${drive}\\`, TEMP: `${drive}\\` },
+      encoding: 'utf8', timeout: 30000, windowsHide: true,
+    })
+    assert.equal(result.status, 0, result.error?.message || result.stderr)
+  } finally { execFileSync('subst', [drive, '/D'], { windowsHide: true }) }
 })
 
 test('the published physicalsystems package carries the reviewed dependency closure', () => {

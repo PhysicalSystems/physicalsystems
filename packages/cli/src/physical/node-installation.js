@@ -287,7 +287,11 @@ export async function selectedNodeRelease(configDir) {
   return readNodeInstallManifest(path.join(root, receipt.directory, 'manifest.json'), selected.manifestDigest)
 }
 
-export async function bundledNodeRelease({ python, env, run, packageDirectory = fileURLToPath(new URL('../../', import.meta.url)) } = {}) {
+export async function bundledNodeRelease({ python, env, run, packageDirectory } = {}) {
+  // Windows ESM can retain a SUBST drive in import.meta.url. Canonicalize only
+  // our trusted module-derived root, not caller-supplied paths or bundle data:
+  // bundle/manifests/wheels links must still fail their strict checks below.
+  if (packageDirectory === undefined) packageDirectory = await fs.realpath(fileURLToPath(new URL('../../', import.meta.url)))
   const metadata = JSON.parse((await regularFile(path.join(packageDirectory, 'package.json'), MAX_MANIFEST)).toString('utf8'))
   if (Object.hasOwn(metadata, 'physicalsystemsNodeBundle')) {
     const { NODE_BUNDLE_PATH, readNodeBundle } = await import('./node-bundle.js')
