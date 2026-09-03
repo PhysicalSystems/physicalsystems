@@ -21,14 +21,38 @@ const workflow = readFileSync(path.join(root, '.github/workflows/npm-release.yml
 const cliWorkflow = readFileSync(path.join(root, '.github/workflows/cli.yml'), 'utf8')
 
 test('PR checks build once and verify the same candidate on every platform without changing publish authority', () => {
-  assert.equal((cliWorkflow.match(/run release:pack --/g) || []).length, 1)
-  assert.equal((cliWorkflow.match(/bootstrap:pi-runtime --/g) || []).length, 1)
+  assert.equal((cliWorkflow.match(/run release:prepare --/g) || []).length, 1)
+  assert.doesNotMatch(cliWorkflow, /run release:pack --|bootstrap:pi-runtime --/)
   assert.doesNotMatch(cliWorkflow, /run check:release-packages|npm publish|id-token: write|environment: npm-release/)
   assert.match(cliWorkflow, /needs: candidate/)
   assert.match(cliWorkflow, /hydrate-review-dependencies\.mjs candidate-artifacts \$\{\{ github.sha \}\}/)
   assert.match(cliWorkflow, /actions\/download-artifact@[a-f0-9]{40}/)
   assert.equal((cliWorkflow.match(/run release:verify --/g) || []).length, 2)
   assert.match(cliWorkflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
+})
+
+test('both candidate routes require included backend bytes and native offline installation evidence', () => {
+  const prepare = readFileSync(path.join(root, 'scripts/prepare-product-candidate.mjs'), 'utf8')
+  const canary = readFileSync(path.join(root, 'scripts/check-bundled-node.mjs'), 'utf8')
+  const checker = readFileSync(path.join(root, 'packages/cli/scripts/check-release-packages.js'), 'utf8')
+  assert.match(prepare, /assembleNodeBundle/)
+  assert.match(prepare, /'--node-bundle', bundle\.output/)
+  for (const candidateWorkflow of [cliWorkflow, workflow]) {
+    assert.equal((candidateWorkflow.match(/run release:prepare --/g) || []).length, 1)
+    const verifiers = candidateWorkflow.match(/npm --prefix packages\/cli run release:verify --[^\n]+/g) || []
+    assert.equal(verifiers.length, 2)
+    for (const verifier of verifiers) assert.match(verifier, /--require-node-bundle/)
+    assert.match(candidateWorkflow, /actions\/setup-python@[a-f0-9]{40}/)
+    assert.match(candidateWorkflow, /if: matrix\.architecture == 'x64'/)
+  }
+  assert.match(checker, /if \(requireNodeBundle\)[\s\S]{0,150}installed\.physicalsystemsNodeBundle, 'node-bundle'/)
+  assert.match(checker, /if \(process\.arch === 'x64'\)[\s\S]{0,450}scripts\/check-bundled-node\.mjs/)
+  assert.match(canary, /import\(pathToFileURL\(path\.join\(packageDirectory, 'src\/physical\/node-installation\.js'\)\)\)/)
+  assert.match(canary, /fetchImpl\(\) \{ assert\.fail\('Bundled Node installation attempted a network download'\)/)
+  assert.match(canary, /assert\.equal\(reused\.reused, true\)/)
+  assert.match(canary, /hardwareAccess: false/)
+  const releaseIndex = readFileSync(path.join(root, 'scripts/check-node-release-index.mjs'), 'utf8')
+  assert.match(releaseIndex, /checkBundledNodeReleaseIndex\(sourceDirectory, \{ expectedRelease: '0\.2\.1' \}\)/)
 })
 
 test('CI dependency hydration checks source SHA and artifact hash before extraction and refuses overwrite', () => {
@@ -56,6 +80,44 @@ test('CI dependency hydration checks source SHA and artifact hash before extract
     assert.equal(success.status, 0, success.stderr)
     assert.equal(readFileSync(path.join(fixture, 'packages/cli/node_modules/demo/index.js'), 'utf8'), 'export default 42\n')
     assert.notEqual(hydrate().status, 0)
+  } finally {
+    assert.equal(path.dirname(path.resolve(fixture)), path.resolve(tmpdir()))
+    assert.ok(path.basename(fixture).startsWith('ps-hydrate-'))
+    rmSync(fixture, { recursive: true, force: true })
+  }
+})
+
+test('CI dependency hydration refuses traversal and links before extracting any dependencies', () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'ps-hydrate-'))
+  const tarEntry = (name, type = '0', link = '') => {
+    const header = Buffer.alloc(512)
+    const field = (offset, length, value) => header.write(value, offset, length, 'ascii')
+    field(0, 100, name); field(100, 8, '0000644\0'); field(108, 8, '0000000\0')
+    field(116, 8, '0000000\0'); field(124, 12, '00000000000\0'); field(136, 12, '00000000000\0')
+    header.fill(32, 148, 156); field(156, 1, type); field(157, 100, link)
+    field(257, 6, 'ustar\0'); field(263, 2, '00')
+    const checksum = header.reduce((sum, byte) => sum + byte, 0)
+    field(148, 8, checksum.toString(8).padStart(6, '0') + '\0 ')
+    return header
+  }
+  try {
+    writeFixtureFile(fixture, 'scripts/hydrate-review-dependencies.mjs', readFileSync(path.join(root, 'scripts/hydrate-review-dependencies.mjs')))
+    mkdirSync(path.join(fixture, 'candidate'))
+    mkdirSync(path.join(fixture, 'packages/cli'), { recursive: true })
+    const filename = 'physicalsystems-0.2.1.tgz', commit = 'a'.repeat(40)
+    for (const unsafe of [tarEntry('package/node_modules/../../escape.txt'),
+      tarEntry('package/node_modules/demo/link', '2', '../../../../escape.txt')]) {
+      // tar recognizes this deliberately tiny uncompressed ustar fixture by
+      // its bytes; the product filename remains subject to the normal checks.
+      const archive = Buffer.concat([tarEntry('package/node_modules/demo/index.js'), unsafe, Buffer.alloc(1024)])
+      writeFileSync(path.join(fixture, 'candidate', filename), archive)
+      writeFixtureFile(fixture, 'candidate/release-manifest.json', JSON.stringify({ commit,
+        artifacts: [{ key: 'physicalsystems', filename, sha256: createHash('sha256').update(archive).digest('hex') }] }))
+      const result = spawnSync(process.execPath, [path.join(fixture, 'scripts/hydrate-review-dependencies.mjs'), path.join(fixture, 'candidate'), commit], { encoding: 'utf8' })
+      assert.notEqual(result.status, 0)
+      assert.equal(existsSync(path.join(fixture, 'packages/cli/node_modules')), false)
+      assert.equal(existsSync(path.join(fixture, 'escape.txt')), false)
+    }
   } finally {
     assert.equal(path.dirname(path.resolve(fixture)), path.resolve(tmpdir()))
     assert.ok(path.basename(fixture).startsWith('ps-hydrate-'))
@@ -696,7 +758,7 @@ test('the physicalsystems namespace bootstrap is inert and reproducible from sou
 })
 
 test('one candidate is reused for Windows, Ubuntu, npm 11/12, and direct preview publishing', () => {
-  assert.match(workflow, /run release:pack --/)
+  assert.match(workflow, /run release:prepare --/)
   assert.match(workflow, /run release:verify --/)
   assert.match(workflow, /runner: windows-latest/)
   assert.match(workflow, /runner: windows-11-arm/)
@@ -810,10 +872,11 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.equal(cliPackage.bundleDependencies, true)
   assert.doesNotMatch(packageChecker, /'install',\s*'--ignore-scripts'/)
   assert.doesNotMatch(workflow, /npm ci --prefix packages\/cli/)
-  assert.match(workflow, /Bootstrap the reviewed dependency tree from the locally packed runtime/)
+  const prepare = readFileSync(path.join(root, 'scripts/prepare-product-candidate.mjs'), 'utf8')
+  assert.match(workflow, /Prepare one complete product with exact backend wheels/)
   assert.ok(
-    workflow.indexOf('run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli')
-      < workflow.indexOf('run release:pack -- $artifactDirectory'),
+    prepare.indexOf("runNpm(['run', 'bootstrap:pi-runtime'")
+      < prepare.indexOf("runNpm(['run', 'release:pack'"),
     'the reviewed dependency tree must be installed before npm pack bundles it',
   )
   assert.match(packageChecker, /function npmFileSpec\(file\)/)
@@ -1044,15 +1107,15 @@ test('pull-request CI covers release-workflow changes and its regression test', 
   assert.match(cliWorkflow, /TINYEDGE_LINUX_SECRET_SERVICE_CANARY=1/)
   assert.match(cliWorkflow, /gnome-keyring-daemon --unlock --components=secrets/)
   assert.match(cliWorkflow, /libsecret-tools xdg-utils/)
-  assert.match(cliWorkflow, /Pack a review candidate for the Ubuntu laptop canary/)
+  assert.match(cliWorkflow, /Prepare the complete npm product once/)
   assert.match(cliWorkflow, /physicalsystems-0\.2\.1-ubuntu-canary-\$\{\{ github\.sha \}\}/)
   assert.deepEqual(cliPackage.os, ['win32', 'linux'])
   assert.match(cliWorkflow, /node --test test\/npm-release-workflow\.test\.mjs/)
   assert.match(cliWorkflow, /npm install --global "npm@11\.19\.0"/)
-  assert.match(cliWorkflow, /bootstrap:pi-runtime -- --cache \$cacheDirectory --install-cli/)
+  assert.match(cliWorkflow, /run release:prepare -- --output \$productDirectory/)
   assert.match(cliWorkflow, /Verify the packed Linux package and interactive Harness/)
   assert.match(cliWorkflow, /npm run check:legal/)
-  const bootstrapIndex = cliWorkflow.indexOf('bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli')
+  const bootstrapIndex = cliWorkflow.indexOf('run release:prepare -- --output $productDirectory')
   const legalIndex = cliWorkflow.indexOf('npm run check:legal')
   assert.notEqual(bootstrapIndex, -1)
   assert.notEqual(legalIndex, -1)

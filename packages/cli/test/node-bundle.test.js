@@ -13,7 +13,7 @@ import { setupNodeCommand } from '../src/commands/setup-node.js'
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const noNetwork = () => assert.fail('Bundled backend must not use the network')
 
-async function fixture(t) {
+async function fixture(t, release = '0.2.0') {
   const base = await fs.realpath(tmpdir()), root = await fs.mkdtemp(path.join(base, 'ps-nb-'))
   t.after(async () => {
     assert.equal(path.dirname(root), base)
@@ -25,14 +25,15 @@ async function fixture(t) {
   await fs.mkdir(path.join(metadata, 'node-releases'), { recursive: true })
   await fs.mkdir(wheelhouse)
   const artifacts = ['physicalsystems-node', 'tinyedge-runtime'].map((name) => {
-    const filename = `${name.replaceAll('-', '_')}-0.2.0-py3-none-any.whl`
-    return { name, version: '0.2.0', filename, bytes: name.length, sha256: sha(name), url: `https://files.pythonhosted.org/reviewed/${filename}` }
+    const version = name === 'physicalsystems-node' ? release : '0.2.0'
+    const filename = `${name.replaceAll('-', '_')}-${version}-py3-none-any.whl`
+    return { name, version, filename, bytes: name.length, sha256: sha(name), url: `https://files.pythonhosted.org/reviewed/${filename}` }
   })
   for (const item of artifacts) await fs.writeFile(path.join(wheelhouse, item.filename), item.name)
   const selectors = new Set(['linux-x64:3.10', 'linux-x64:3.12', `${process.platform}-${process.arch}:3.12`]), releases = []
   for (const selector of selectors) {
     const [platform, python] = selector.split(':')
-    const manifest = { contractVersion: 'physicalsystems-node-install-v1', release: '0.2.0', distribution: 'physicalsystems-node', runtimeVersion: '0.2.0', platform, python, artifacts }
+    const manifest = { contractVersion: 'physicalsystems-node-install-v1', release, distribution: 'physicalsystems-node', runtimeVersion: '0.2.0', platform, python, artifacts }
     const bytes = JSON.stringify(manifest, null, 2) + '\n'
     const filename = `${platform}-${python.replace('.', '')}.json`
     await fs.writeFile(path.join(metadata, 'node-releases', filename), bytes)
@@ -69,6 +70,17 @@ test('missing declared bundles fail closed; unsupported platforms cannot select 
   await assembleNodeBundle(item.options)
   await assert.rejects(bundledNodeRelease({ packageDirectory: item.packageDirectory,
     run: async () => JSON.stringify({ version: '3.13', implementation: 'CPython', executable: path.join(item.root, 'python') }) }), /No bundled Node release/)
+})
+
+test('bundled corrected Node 0.2.1 keeps the exact Runtime 0.2.0 closure', async (t) => {
+  const item = await fixture(t, '0.2.1')
+  await assembleNodeBundle(item.options)
+  const release = await bundledNodeRelease({ packageDirectory: item.packageDirectory, run: item.run })
+  assert.equal(release.manifest.release, '0.2.1')
+  assert.equal(release.manifest.runtimeVersion, '0.2.0')
+  assert.equal(release.manifest.artifacts.find((artifact) => artifact.name === 'physicalsystems-node').version, '0.2.1')
+  assert.equal(release.manifest.artifacts.find((artifact) => artifact.name === 'tinyedge-runtime').version, '0.2.0')
+  assert.equal((await verifyNodeBundle(item.output)).wheels, 2)
 })
 
 test('bundle descriptors reject traversal, duplicate selectors, hash mismatch and selector mismatch', async (t) => {

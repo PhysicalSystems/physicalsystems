@@ -27,15 +27,18 @@ The workflow:
 Before building, checks the bundled managed-Node release index and raw manifest
 hashes. An empty index, placeholder artifact URLs, or missing Ubuntu x64 Python
 3.10/3.12 manifests blocks publication. This metadata gate does not replace
-clean installation tests of the actual downloadable bytes. Source tests and
+clean installation tests of the actual included bytes. Source tests and
 review-candidate packing remain available before those artifacts are published.
 
-1. Builds `physicalsystems@0.2.1` once on Windows x64 and records exact
-   tarball checksums.
+1. Uses `npm run release:prepare` to build `physicalsystems@0.2.1` once on
+   Windows x64 with the approved backend wheel closure, separate backend notice
+   and SBOM, and exact tarball checksums. No wheel binaries enter source control.
 2. Verifies those same bytes on Windows x64, native Windows ARM64, Ubuntu
    22.04, and Ubuntu 24.04 with the pinned npm 11 release client and npm 12
    consumer behavior.
-3. Exercises normal local, global, and isolated npm-exec installation,
+3. Requires the Python bundle (a plain source package cannot pass), tests native
+   x64 backend installation with network downloads prohibited and verified reuse,
+   and exercises normal local, global, and isolated npm-exec installation,
    command shims, the bare Harness, the embedded client and Pi extension, and
    Ubuntu Secret Service integration.
 4. Runs the exact tarball with Node.js 12.22.9 and npm 8.5.1, requires one
@@ -88,8 +91,8 @@ An empty-index source candidate still exercises the interactive Harness but is
 explicitly reported as **NO managed Node acceptance**; it cannot satisfy the
 protected publication gate. Synthetic regression fixtures test the acceptance
 logic without downloading wheels or opening hardware and are not release-byte
-evidence. The bundled index now pins the actual published Node 0.2.0 files;
-fresh packaged managed-Node acceptance must pass with those descriptors before
+evidence. The consolidated release requires the corrected Node 0.2.1 descriptor
+set with Runtime 0.2.0; fresh packaged managed-Node acceptance must pass before
 this npm release can be published.
 
 ## One-time namespace bootstrap

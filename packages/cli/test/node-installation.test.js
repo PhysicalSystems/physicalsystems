@@ -8,13 +8,13 @@ import { installManagedNode, installationEnvironment, readNodeInstallManifest, s
 import { approveNodeSetup, managedNodeEnvironment, parseSetupNodeArgs } from '../src/commands/setup-node.js'
 
 const sha = (value) => createHash('sha256').update(value).digest('hex')
-function fixture() {
+function fixture(release = '0.2.0') {
   const artifacts = ['physicalsystems-node', 'tinyedge-runtime', 'numpy', 'opencv-python-headless'].map((name) => {
-    const version = name === 'opencv-python-headless' ? '4.13.0.92' : name === 'numpy' ? '2.2.6' : '0.2.0'
+    const version = name === 'opencv-python-headless' ? '4.13.0.92' : name === 'numpy' ? '2.2.6' : name === 'physicalsystems-node' ? release : '0.2.0'
     const filename = `${name.replaceAll('-', '_')}-${version}-py3-none-any.whl`
     return { name, version, filename, sha256: sha(name), bytes: Buffer.byteLength(name), url: `https://files.example.test/${filename}` }
   })
-  const manifest = { contractVersion: 'physicalsystems-node-install-v1', release: '0.2.0', distribution: 'physicalsystems-node', runtimeVersion: '0.2.0', platform: `${process.platform}-${process.arch}`, python: '3.12', artifacts }
+  const manifest = { contractVersion: 'physicalsystems-node-install-v1', release, distribution: 'physicalsystems-node', runtimeVersion: '0.2.0', platform: `${process.platform}-${process.arch}`, python: '3.12', artifacts }
   return { manifest, digest: sha(JSON.stringify(manifest)) }
 }
 async function temporary(t) {
@@ -30,8 +30,8 @@ async function temporary(t) {
   })
   return root
 }
-async function fakeInstaller(t, { missingLauncher = false, wrongProbe = false, failInstall = false, failNative = false } = {}) {
-  const root = await temporary(t), releases = fixture(), commands = []
+async function fakeInstaller(t, { missingLauncher = false, wrongProbe = false, failInstall = false, failNative = false, release = '0.2.0' } = {}) {
+  const root = await temporary(t), releases = fixture(release), commands = []
   const wheelhouse = path.join(root, 'wheelhouse')
   await fs.mkdir(wheelhouse)
   for (const item of releases.manifest.artifacts) await fs.writeFile(path.join(wheelhouse, item.filename), item.name)
@@ -50,7 +50,10 @@ async function fakeInstaller(t, { missingLauncher = false, wrongProbe = false, f
       return ''
     }
     if (args.includes('install') && failInstall) throw new Error('synthetic install failure')
-    if (args.includes('--installation-info')) return JSON.stringify({ contractVersion: 'physicalsystems-node-installation-v1', distribution: 'physicalsystems-node', version: wrongProbe ? '0.1.0' : '0.2.0', runtimeVersion: '0.2.0', protocols: ['physicalsystems-node-ready-v1'] })
+    if (args.includes('--installation-info')) {
+      const installed = JSON.parse(await fs.readFile(path.resolve(path.dirname(command), '../../manifest.json'), 'utf8'))
+      return JSON.stringify({ contractVersion: 'physicalsystems-node-installation-v1', distribution: 'physicalsystems-node', version: wrongProbe ? '0.1.0' : installed.release, runtimeVersion: '0.2.0', protocols: ['physicalsystems-node-ready-v1'] })
+    }
     return ''
   }
   return { root, commands, options: { ...releases, configDir: path.join(root, 'config'), wheelhouse, run, authorize: async () => true, fetchImpl() { assert.fail('offline wheelhouse must not use network') } } }
@@ -65,6 +68,13 @@ test('manifest requires an exact bounded wheel closure and accepts real four-par
     const broken = structuredClone(manifest); change(broken)
     assert.throws(() => validateNodeInstallManifest(broken))
   }
+})
+
+test('only reviewed Node 0.2.0 and 0.2.1 paired with Runtime 0.2.0 are accepted', () => {
+  for (const release of ['0.2.0', '0.2.1']) assert.equal(validateNodeInstallManifest(fixture(release).manifest).release, release)
+  for (const release of ['0.1.0', '0.2.2', '0.3.0', 'latest']) assert.throws(() => validateNodeInstallManifest(fixture(release).manifest), /Invalid Node installation/)
+  for (const runtimeVersion of ['0.2.1', 'latest']) assert.throws(() => validateNodeInstallManifest({ ...fixture('0.2.1').manifest, runtimeVersion }), /Invalid Node installation/)
+  assert.throws(() => validateNodeInstallManifest({ ...fixture().manifest, release: '0.2.1' }), /exact Node or Runtime wheel/)
 })
 
 test('raw local manifest hash is verified before interpreting or downloading anything', async (t) => {
@@ -152,6 +162,7 @@ test('managed startup cannot shadow the verified package through ambient Python 
   await selectManagedNode(item.options.configDir, result.digest)
   const env = { PATH: 'operator-path', PYTHONPATH: 'shadow-source', PythonHome: 'other-python', PYTHONUSERBASE: 'other-packages', VIRTUAL_ENV: 'other-env', OPENAI_API_KEY: 'provider-for-harness' }
   const managed = await managedNodeEnvironment({ config: { configDir: item.options.configDir }, env,
+    loadBundled: async () => item.options,
     install: (options) => installManagedNode({ ...options, run: item.options.run }) })
   assert.equal(managed.PHYSICAL_NODE_EXECUTABLE, result.executable)
   assert.equal(managed.PHYSICAL_NODE_EXECUTION_MODE, 'discovery')
@@ -174,4 +185,111 @@ test('explicit external node/executable bypasses setup and an unpublished index 
   }
   const env = {}
   assert.equal(await managedNodeEnvironment({ config: {}, env, loadSelected: async () => null, loadBundled: async () => null, install() { assert.fail('no released bytes') } }), env)
+})
+
+async function upgradeFixture(t, options = {}) {
+  const old = await fakeInstaller(t), candidate = await fakeInstaller(t, { release: '0.2.1', ...options })
+  const original = await installManagedNode(old.options)
+  await selectManagedNode(old.options.configDir, original.digest)
+  const selection = path.join(old.options.configDir, 'node-installations/selected.json')
+  const before = await fs.readFile(selection)
+  const invoke = (overrides = {}) => managedNodeEnvironment({ config: { configDir: old.options.configDir }, env: {}, io: { log() {} },
+    loadBundled: async ({ python }) => {
+      assert.equal(python, path.join(path.dirname(original.executable), process.platform === 'win32' ? 'python.exe' : 'python'))
+      return candidate.options
+    },
+    install: (settings) => installManagedNode({ ...settings, run: candidate.options.run, fetchImpl: candidate.options.fetchImpl }),
+    ...overrides })
+  const assertOriginal = async () => {
+    assert.deepEqual(await fs.readFile(selection), before)
+    assert.equal((await selectedNodeRelease(old.options.configDir)).digest, original.digest)
+    assert.equal(await fs.readFile(original.executable, 'utf8'), 'fake console launcher')
+  }
+  return { old, candidate, original, invoke, assertOriginal }
+}
+
+test('managed product updates 0.2.0 to 0.2.1 only after consent and preserves old installed bytes', async (t) => {
+  const item = await upgradeFixture(t), approvals = []
+  const env = await item.invoke({ authorize: async (details) => { approvals.push(details); return true } })
+  assert.equal(approvals.length, 1)
+  assert.equal(approvals[0].previousRelease, '0.2.0')
+  assert.equal(approvals[0].release, '0.2.1')
+  assert.equal((await selectedNodeRelease(item.old.options.configDir)).digest, item.candidate.options.digest)
+  assert.notEqual(env.PHYSICAL_NODE_EXECUTABLE, item.original.executable)
+  assert.equal(env.PHYSICAL_NODE_EXECUTION_MODE, 'discovery')
+  assert.equal(await fs.readFile(item.original.executable, 'utf8'), 'fake console launcher')
+  const install = item.candidate.commands.find(({ args }) => args.includes('install'))
+  assert.ok(install.args.includes('--no-index'))
+  assert.equal(item.candidate.commands.some(({ args }) => args.includes('serve-physical-node')), false)
+})
+
+test('declined or failed managed updates do not start the old Node or replace its selection', async (t) => {
+  for (const failure of ['decline', 'failInstall']) {
+    const item = await upgradeFixture(t, { failInstall: failure === 'failInstall' })
+    await assert.rejects(item.invoke({ authorize: async () => failure !== 'decline' }), failure === 'decline' ? /update was not approved/ : /synthetic install failure/)
+    await item.assertOriginal()
+    if (failure === 'decline') assert.equal(item.candidate.commands.some(({ args }) => args.includes('venv')), false)
+  }
+})
+
+test('switching to an already-installed newer backend still requires update consent', async (t) => {
+  const item = await upgradeFixture(t)
+  await installManagedNode({ ...item.candidate.options, configDir: item.old.options.configDir })
+  let approvals = 0
+  await assert.rejects(item.invoke({ authorize: async () => { approvals++; return false } }), /update was not approved/)
+  assert.equal(approvals, 1)
+  await item.assertOriginal()
+  const installs = item.candidate.commands.filter(({ args }) => args.includes('venv')).length
+  await item.invoke({ authorize: async () => { approvals++; return true } })
+  assert.equal(approvals, 2)
+  assert.equal(item.candidate.commands.filter(({ args }) => args.includes('venv')).length, installs)
+})
+
+test('invalid bundled metadata blocks startup without falling back to the old selection', async (t) => {
+  const item = await upgradeFixture(t)
+  await assert.rejects(item.invoke({ loadBundled() { throw new Error('synthetic corrupted product bundle') },
+    authorize() { assert.fail('Invalid bundle must not ask for consent') } }), /corrupted product bundle/)
+  await item.assertOriginal()
+  assert.equal(item.candidate.commands.some(({ args }) => args.includes('venv')), false)
+})
+
+test('verified same-digest, same-version custom and newer selections are not changed or downgraded', async (t) => {
+  for (const choice of ['same-digest', 'custom-digest', 'older-bundle']) {
+    const release = choice === 'older-bundle' ? '0.2.1' : '0.2.0'
+    const selected = await fakeInstaller(t, { release }), installed = await installManagedNode(selected.options)
+    await selectManagedNode(selected.options.configDir, installed.digest)
+    const selection = path.join(selected.options.configDir, 'node-installations/selected.json'), before = await fs.readFile(selection)
+    const bundle = fixture(choice === 'older-bundle' ? '0.2.0' : release)
+    if (choice === 'custom-digest') {
+      bundle.manifest.artifacts[0].url = bundle.manifest.artifacts[0].url.replace('files.example.test', 'other.example.test')
+      bundle.digest = sha(JSON.stringify(bundle.manifest))
+      assert.notEqual(bundle.digest, installed.digest)
+    }
+    const env = await managedNodeEnvironment({ config: { configDir: selected.options.configDir }, env: {}, io: { log() {} },
+      loadBundled: async () => bundle, authorize() { assert.fail('Retaining a verified selection needs no consent') },
+      install: (settings) => installManagedNode({ ...settings, run: selected.options.run }) })
+    assert.equal(env.PHYSICAL_NODE_EXECUTABLE, installed.executable)
+    assert.deepEqual(await fs.readFile(selection), before)
+    assert.equal(selected.commands.filter(({ args }) => args.includes('venv')).length, 1)
+  }
+})
+
+test('damaged selected state blocks update before bundle selection or consent', async (t) => {
+  for (const damage of ['manifest', 'launcher']) {
+    const item = await upgradeFixture(t)
+    if (damage === 'manifest') {
+      const root = path.resolve(path.dirname(item.original.executable), '../..')
+      await fs.writeFile(path.join(root, 'manifest.json'), '{}')
+    } else await fs.unlink(item.original.executable)
+    await assert.rejects(item.invoke({ loadBundled() { assert.fail('Damaged selection must not load a replacement') },
+      authorize() { assert.fail('Damaged selection must not ask for repair consent') } }))
+    assert.equal(item.candidate.commands.some(({ args }) => args.includes('venv')), false)
+  }
+})
+
+test('configured execution never enters managed update selection', async () => {
+  for (const name of ['PHYSICAL_NODE_EXECUTION_CONFIG', 'PHYSICAL_NODE_REGISTRY', 'PHYSICAL_NODE_EXECUTION_MODE']) {
+    await assert.rejects(managedNodeEnvironment({ config: {}, env: { [name]: 'configured' },
+      loadSelected() { assert.fail('Configured execution must not inspect managed selections') } }), /explicit PHYSICAL_NODE_EXECUTABLE/)
+  }
 })

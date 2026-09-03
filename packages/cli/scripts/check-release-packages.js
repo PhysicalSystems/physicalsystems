@@ -850,7 +850,7 @@ function packRelease(outputDirectory, bundledPackageDirectory) {
   console.log(`Packed Physical Systems ${version} release artifacts in ${outputDirectory}`)
 }
 
-async function verifyRelease(artifactDirectory) {
+async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = {}) {
   assert.match(process.platform, /^(?:win32|linux)$/, 'release packages must be verified on Windows or Linux')
   if (process.platform === 'linux') {
     assert.equal(process.arch, 'x64', 'the qualified Linux package route is Ubuntu desktop x64')
@@ -906,10 +906,25 @@ async function verifyRelease(artifactDirectory) {
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
     const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')
+    if (requireNodeBundle) {
+      assert.equal(installed.physicalsystemsNodeBundle, 'node-bundle', 'Product verification requires the included Python backend')
+    }
     if (installed.physicalsystemsNodeBundle) {
       assert.equal(installed.physicalsystemsNodeBundle, 'node-bundle')
       await verifyNodeBundle(path.join(installedPhysicalSystemsDirectory, 'node-bundle'))
       assert.ok(existsSync(path.join(installedPhysicalSystemsDirectory, 'BACKEND-NOTICE.txt')))
+      if (process.arch === 'x64') {
+        const pythonArguments = process.env.pythonLocation
+          ? [path.join(process.env.pythonLocation, process.platform === 'win32' ? 'python.exe' : 'bin/python')]
+          : []
+        const evidence = run(process.execPath, [path.join(REPOSITORY_ROOT, 'scripts/check-bundled-node.mjs'), installedPhysicalSystemsDirectory, ...pythonArguments], {
+          phase: 'offline bundled backend installation and verified reuse',
+          timeout: 10 * 60_000,
+        })
+        console.log(evidence)
+      } else {
+        console.log('Backend installation not qualified on this architecture; Harness and exact bundle bytes are still verified')
+      }
     }
     const installedRuntimeDirectory = path.join(
       installedPhysicalSystemsDirectory,
@@ -1152,12 +1167,13 @@ async function verifyRelease(artifactDirectory) {
 }
 
 function usage() {
-  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory] [--node-bundle ABSOLUTE_DIRECTORY]')
+  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory] [--node-bundle ABSOLUTE_DIRECTORY | --require-node-bundle]')
 }
 
 const [mode, directoryArgument, bundleFlag, bundleArgument, ...extra] = process.argv.slice(2)
 if (!['pack', 'verify', 'check'].includes(mode)) usage()
-if (extra.length || (bundleFlag && (mode !== 'pack' || bundleFlag !== '--node-bundle' || !bundleArgument || !path.isAbsolute(bundleArgument))) || (!bundleFlag && bundleArgument)) usage()
+const requireNodeBundle = mode === 'verify' && bundleFlag === '--require-node-bundle' && !bundleArgument
+if (extra.length || (bundleFlag && !requireNodeBundle && (mode !== 'pack' || bundleFlag !== '--node-bundle' || !bundleArgument || !path.isAbsolute(bundleArgument))) || (!bundleFlag && bundleArgument)) usage()
 const npmVersion = runNpm(['--version'])
 if (mode === 'verify') {
   assert.ok(
@@ -1186,5 +1202,5 @@ if (mode === 'check') {
   if (mode === 'pack') {
     const stage = bundleArgument ? await stageNodeBundle(path.join(REPOSITORY_ROOT, 'packages/cli'), bundleArgument) : null
     try { packRelease(artifactDirectory, stage?.directory) } finally { stage?.dispose() }
-  } else await verifyRelease(artifactDirectory)
+  } else await verifyRelease(artifactDirectory, { requireNodeBundle })
 }

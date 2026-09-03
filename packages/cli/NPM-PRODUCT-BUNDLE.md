@@ -1,7 +1,8 @@
 # One npm product, modular internals (TIN-407)
 
-This is a review-candidate implementation, not a statement that the bundled
-product has been published. The active 0.2.0 publishing workflow is unchanged.
+This is the 0.2.1 review candidate, not a statement that the bundled product has
+been published. Both PR verification and the protected publishing workflow now
+prepare one complete product. Existing published 0.2.0 bytes remain unchanged.
 
 ## User experience
 
@@ -29,7 +30,8 @@ npm run release:prepare -- --output ABSOLUTE_NEW_ARTIFACT_DIRECTORY
 with respect to Python packages, too. `--metadata ABSOLUTE_DIRECTORY` accepts
 a reviewed `node-releases.json` and its `node-releases/` manifests. This means
 a future reviewed Node/Runtime wheel need not first be published on PyPI to
-be included in the product. The current manifests still pin component 0.2.0.
+be included in a local candidate. Production uses the exact reviewed descriptor
+set in source; the consolidated release requires Node 0.2.1 and Runtime 0.2.0.
 Preparing new backend source, qualification and license/export review are not
 performed or bypassed by this command.
 
@@ -45,7 +47,7 @@ For an already assembled bundle, the lower-level equivalent is:
 
 ```text
 npm --prefix packages/cli run release:pack -- ABSOLUTE_CANDIDATE_DIRECTORY --node-bundle ABSOLUTE_BUNDLE_DIRECTORY
-npm --prefix packages/cli run release:verify -- ABSOLUTE_CANDIDATE_DIRECTORY
+npm --prefix packages/cli run release:verify -- ABSOLUTE_CANDIDATE_DIRECTORY --require-node-bundle
 ```
 
 ## What got leaner
@@ -54,7 +56,10 @@ PR CI previously bootstrapped four dependency trees and packed five candidate
 sets (one per platform check, then an extra upload). It now bootstraps and
 packs once. Every platform downloads the same candidate, verifies its source
 commit and checksum, reuses its bundled JS dependencies for source tests, and
-runs the existing local/global/npm-exec install checks. The four required
+runs the existing local/global/npm-exec install checks. Native x64 jobs also
+install the backend from the installed npm package with a throwing network
+fetch hook and verify environment reuse. Linux additionally exercises the real
+first-run interactive Harness and managed Node lifecycle. The four established
 platform contexts and platform-specific unit/credential checks remain.
 Superseded PR runs cancel; publication runs never cancel this way.
 
@@ -71,14 +76,15 @@ contract, not merely accepting any successful PR artifact.
   of the product. No claim of a faster consumer download is made.
 - npm source licensing remains separate from Node's proprietary preview
   license. Publishing the bundle requires approval of that distribution mix.
-- Default/source packaging remains unchanged so this work cannot silently
-  change the concurrent 0.2.0 candidate. Switch the protected build to
-  `release:prepare` only with a new product version and exact-platform evidence.
+- Default/source `release:pack` remains available for non-product development
+  checks. PR and protected-release workflows use `release:prepare` and require
+  the included backend during verification; a plain package cannot satisfy them.
 - Bundled mode fails closed if declared files are missing, linked, changed,
   or incompatible. It does not silently fetch a replacement or use latest.
-- Existing selected environments retain their explicit selection; damaged
-  installations are not repaired automatically. `setup-node` selects the
-  product's bundled release with consent. Automatic upgrade/migration policy
-  and interpreter bundling are not implemented here.
+- Managed 0.2.0 environments are verified before a consented 0.2.1 update.
+  Failed or declined updates do not start the old backend or change its selection.
+  Same-version custom selections and explicit external executors remain intact;
+  damaged environments are not repaired automatically. There is no general
+  migration engine, automatic downgrade, or bundled interpreter.
 - Robot execution, camera access and physical qualification are not implied
   by an installation test.

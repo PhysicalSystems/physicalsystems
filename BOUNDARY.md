@@ -39,7 +39,7 @@ wheel closure into an npm candidate outside this source tree. It may copy only
 the exact manifest-identified distribution files, including their licenses;
 it must not copy private source directories or relabel Node as Apache-2.0.
 The product candidate carries a backend notice and a hash-addressed backend
-SBOM. This does not authorize publication, change the active 0.2.0 workflow,
+SBOM. This does not by itself authorize publication or change the protected workflow,
 or remove the private-source export review for new backend distributions.
 
 Publishing source does not publish an npm package and does not relicense

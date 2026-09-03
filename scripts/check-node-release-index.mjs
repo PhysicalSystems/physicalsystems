@@ -43,7 +43,7 @@ function rejectPlaceholderHost(url) {
   }
 }
 
-export async function checkBundledNodeReleaseIndex(directory = sourceDirectory) {
+export async function checkBundledNodeReleaseIndex(directory = sourceDirectory, { expectedRelease } = {}) {
   directory = path.resolve(directory)
   if (normalized(await fs.realpath(directory)) !== normalized(directory)) throw new Error('Bundled Node metadata directory must not use links')
   const index = await boundedIndex(path.join(directory, 'node-releases.json'))
@@ -76,6 +76,9 @@ export async function checkBundledNodeReleaseIndex(directory = sourceDirectory) 
     if (manifest.platform !== entry.platform || manifest.python !== entry.python) {
       throw new Error('Bundled Node index selector does not match its hashed manifest')
     }
+    if (expectedRelease && manifest.release !== expectedRelease) {
+      throw new Error(`npm publication requires Node ${expectedRelease} for every bundled selector`)
+    }
     for (const artifact of manifest.artifacts) rejectPlaceholderHost(artifact.url)
   }
   return { entries: index.releases.length, selectors: [...selectors].sort() }
@@ -84,7 +87,7 @@ export async function checkBundledNodeReleaseIndex(directory = sourceDirectory) 
 if (process.argv[1] && normalized(process.argv[1]) === normalized(fileURLToPath(import.meta.url))) {
   try {
     if (process.argv.length !== 2) throw new Error('The publication gate accepts no index override')
-    const result = await checkBundledNodeReleaseIndex()
+    const result = await checkBundledNodeReleaseIndex(sourceDirectory, { expectedRelease: '0.2.1' })
     console.log(`Bundled Node release metadata verified: ${result.entries} entries; no artifacts downloaded`)
   } catch (error) {
     console.error(`Node publication gate failed: ${error.message}`)

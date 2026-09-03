@@ -16,9 +16,11 @@ const exact = (value, keys) => value && typeof value === 'object' && !Array.isAr
   && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort())
 
 export function validateNodeInstallManifest(value) {
+  // Keep the previous reviewed release readable for receipt verification and
+  // consented migration. This is not a semver range or permission to use latest.
   if (!exact(value, ['contractVersion', 'release', 'distribution', 'runtimeVersion', 'platform', 'python', 'artifacts'])
     || value.contractVersion !== VERSION || value.distribution !== 'physicalsystems-node'
-    || value.release !== '0.2.0' || value.runtimeVersion !== '0.2.0'
+    || !['0.2.0', '0.2.1'].includes(value.release) || value.runtimeVersion !== '0.2.0'
     || !['linux-x64', 'win32-x64', 'win32-arm64'].includes(value.platform)
     || !/^3\.(10|11|12|13)$/.test(value.python) || !Array.isArray(value.artifacts)
     || value.artifacts.length < 2 || value.artifacts.length > 32) throw new Error('Invalid Node installation manifest')

@@ -57,6 +57,21 @@ test('publication gate accepts both required hashed metadata entries without dow
   })
 })
 
+test('the consolidated publication gate rejects historical backend bytes for any selector', async (t) => {
+  const item = await fixture(t)
+  await assert.rejects(checkBundledNodeReleaseIndex(item.directory, { expectedRelease: '0.2.1' }), /requires Node 0\.2\.1/)
+  for (const manifest of item.manifests.values()) {
+    manifest.release = '0.2.1'
+    const node = manifest.artifacts.find((artifact) => artifact.name === 'physicalsystems-node')
+    node.version = '0.2.1'
+    node.filename = node.filename.replace('0.2.0', '0.2.1')
+    node.url = node.url.replace('0.2.0', '0.2.1')
+  }
+  await item.write()
+  assert.equal((await checkBundledNodeReleaseIndex(item.directory, { expectedRelease: '0.2.1' })).entries, 2)
+  assert.equal([...item.manifests.values()].every((manifest) => manifest.runtimeVersion === '0.2.0'), true)
+})
+
 test('empty source-candidate index is intentionally not publishable', async (t) => {
   const item = await fixture(t)
   item.index.releases = []
