@@ -40,6 +40,16 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Select the unsupported Node regression runtime
+        if: matrix.check_name == 'linux x64'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 12.22.9
+          architecture: x64
+          package-manager-cache: false
+      - name: Require one actionable failure before modern application code loads
+        if: matrix.check_name == 'linux x64'
+        run: node packages/cli/scripts/check-unsupported-node.cjs
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22.19.0
@@ -104,7 +114,7 @@ jobs:
         if: matrix.platform == 'windows' && matrix.architecture == 'x64'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: physicalsystems-0.2.0-ubuntu-canary-${{ github.sha }}
+          name: physicalsystems-0.2.1-ubuntu-canary-${{ github.sha }}
           path: candidate-artifacts
           if-no-files-found: error
           compression-level: 0

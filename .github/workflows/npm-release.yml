@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_VERSION: 0.2.0
+  RELEASE_VERSION: 0.2.1
   PI_RUNTIME_VERSION: 0.84.2-tinyedge.1
   NODE_VERSION: 22.19.0
   # Keep the exact packaging/publishing CLI fixed. Consumer verification also
@@ -21,7 +21,7 @@ env:
   NPM_REGISTRY: https://registry.npmjs.org/
   NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
   RELEASE_ARTIFACT_DIRECTORY: release-artifacts
-  RELEASE_ARTIFACT_NAME: physicalsystems-npm-0.2.0-${{ github.sha }}-${{ github.run_attempt }}
+  RELEASE_ARTIFACT_NAME: physicalsystems-npm-0.2.1-${{ github.sha }}-${{ github.run_attempt }}
 
 jobs:
   require-main:
@@ -99,7 +99,7 @@ jobs:
           const root = process.env.GITHUB_WORKSPACE
           const expectedVersion = process.env.RELEASE_VERSION
           const expectedRuntimeVersion = process.env.PI_RUNTIME_VERSION
-          assert.equal(expectedVersion, '0.2.0')
+          assert.equal(expectedVersion, '0.2.1')
           assert.equal(expectedRuntimeVersion, '0.84.2-tinyedge.1')
 
           const readPackage = (directory) => JSON.parse(
@@ -410,12 +410,99 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  verify-unsupported-node:
+    name: Verify the exact candidate fails clearly on Node 12
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out the exact prerequisite assertion
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 12.22.9
+          architecture: x64
+          package-manager-cache: false
+      - name: Install the npm version from the reported Ubuntu failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global 'npm@8.5.1' --registry="$NPM_REGISTRY"
+          test "$(node --version)" = 'v12.22.9'
+          test "$(npm --version)" = '8.5.1'
+      - name: Download the build job's exact tarballs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: ${{ env.RELEASE_ARTIFACT_DIRECTORY }}
+      - name: Reproduce the old-npm launch without parsing modern application code
+        shell: bash
+        env:
+          EXPECTED_MANIFEST_SHA256: ${{ needs.build.outputs.manifest-sha256 }}
+          NPM_CONFIG_AUDIT: 'false'
+          NPM_CONFIG_FUND: 'false'
+          NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+        run: |
+          set -euo pipefail
+          artifact_directory="$GITHUB_WORKSPACE/$RELEASE_ARTIFACT_DIRECTORY"
+          manifest_path="$artifact_directory/release-manifest.json"
+          artifact_path="$artifact_directory/physicalsystems-$RELEASE_VERSION.tgz"
+          actual_manifest_sha256="$(sha256sum "$manifest_path" | cut -d' ' -f1)"
+          test "$actual_manifest_sha256" = "$EXPECTED_MANIFEST_SHA256"
+          test -f "$artifact_path"
+          MANIFEST_PATH="$manifest_path" ARTIFACT_PATH="$artifact_path" node <<'NODE'
+          const assert = require('assert').strict
+          const { createHash } = require('crypto')
+          const { readFileSync } = require('fs')
+          const path = require('path')
+
+          const manifest = JSON.parse(readFileSync(process.env.MANIFEST_PATH, 'utf8'))
+          assert.equal(manifest.schemaVersion, 1)
+          assert.equal(manifest.version, process.env.RELEASE_VERSION)
+          assert.equal(manifest.commit, process.env.GITHUB_SHA)
+          const artifact = manifest.artifacts.find(function (entry) {
+            return entry.key === 'physicalsystems'
+          })
+          assert.ok(artifact, 'release manifest is missing physicalsystems')
+          assert.equal(artifact.name, 'physicalsystems')
+          assert.equal(artifact.version, process.env.RELEASE_VERSION)
+          assert.equal(artifact.filename, `physicalsystems-${process.env.RELEASE_VERSION}.tgz`)
+          assert.equal(path.basename(process.env.ARTIFACT_PATH), artifact.filename)
+          assert.equal(
+            createHash('sha256').update(readFileSync(process.env.ARTIFACT_PATH)).digest('hex'),
+            artifact.sha256,
+          )
+          NODE
+
+          unpacked="$RUNNER_TEMP/physicalsystems-node12-candidate"
+          mkdir -p "$unpacked"
+          tar -xzf "$artifact_path" -C "$unpacked"
+          node packages/cli/scripts/check-unsupported-node.cjs "$unpacked/package/bin/physicalsystems.js"
+
+          stdout="$RUNNER_TEMP/physicalsystems-node12.stdout"
+          stderr="$RUNNER_TEMP/physicalsystems-node12.stderr"
+          set +e
+          npm exec --yes --package="$artifact_path" -- physicalsystems >"$stdout" 2>"$stderr"
+          status=$?
+          set -e
+          test "$status" -eq 1
+          test ! -s "$stdout"
+          grep -F "Physical Systems requires Node.js 22.19.0 or newer (detected 12.22.9). Upgrade Node.js and run the command again." "$stderr"
+          if grep -E 'SyntaxError|src[/\\]auth[/\\]redact\.js' "$stderr"; then
+            echo 'The unsupported runtime reached modern application code' >&2
+            exit 1
+          fi
+
   publish:
-    name: Publish physicalsystems 0.2.0 to preview with npm OIDC
+    name: Publish physicalsystems 0.2.1 to preview with npm OIDC
     needs:
       - build
       - verify
       - verify-linux
+      - verify-unsupported-node
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: npm-release
@@ -549,10 +636,10 @@ jobs:
           const manifest = JSON.parse(manifestBytes.toString('utf8'))
           const expected = [
             ['pi-runtime', '@tinyedge/pi-runtime', process.env.PI_RUNTIME_VERSION, 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz'],
-            ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, 'physicalsystems-0.2.0.tgz'],
+            ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, 'physicalsystems-0.2.1.tgz'],
           ]
 
-          assert.equal(process.env.RELEASE_VERSION, '0.2.0')
+          assert.equal(process.env.RELEASE_VERSION, '0.2.1')
           assert.equal(process.env.PI_RUNTIME_VERSION, '0.84.2-tinyedge.1')
           assert.equal(manifest.schemaVersion, 1)
           assert.equal(manifest.version, process.env.RELEASE_VERSION)
@@ -596,7 +683,7 @@ jobs:
               legalFiles: ['LICENSE', 'NOTICE', 'SBOM.cdx.json', 'UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM_README.md'],
             },
             ...[
-              ['physicalsystems', 'physicalsystems-0.2.0.tgz', 'packages/cli'],
+              ['physicalsystems', 'physicalsystems-0.2.1.tgz', 'packages/cli'],
             ].map(([name, filename, sourceDirectory]) => ({
               name,
               version: process.env.RELEASE_VERSION,
@@ -722,7 +809,7 @@ jobs:
           const manifest = JSON.parse(
             execFileSync(
               'tar',
-              ['-xOf', path.join(directory, 'physicalsystems-0.2.0.tgz'), 'package/npm-shrinkwrap.json'],
+              ['-xOf', path.join(directory, 'physicalsystems-0.2.1.tgz'), 'package/npm-shrinkwrap.json'],
               { encoding: 'utf8' },
             ),
           )
@@ -953,11 +1040,11 @@ jobs:
             'packed runtime tarball must match the already-published registry artifact',
           )
           NODE
-      - name: Publish physicalsystems@0.2.0 directly to preview
+      - name: Publish physicalsystems@0.2.1 directly to preview
         shell: bash
         run: |
           set -euo pipefail
-          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.0.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.1.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
             | tee publish-evidence/physicalsystems-publish.log
       - name: Verify preview isolation, registry bytes, and provenance signature
         shell: bash
@@ -987,9 +1074,10 @@ jobs:
             createHash('sha1').update(tarball).digest('hex'),
             'registry shasum must match the approved tarball',
           )
-          assert.match(
-            published.dist?.attestations?.url || '',
-            /\/npm\/v1\/attestations\/physicalsystems@0\.2\.0$/,
+          assert.ok(
+            (published.dist?.attestations?.url || '').endsWith(
+              `/npm/v1/attestations/physicalsystems@${process.env.RELEASE_VERSION}`,
+            ),
             'the registry must expose the npm provenance attestation',
           )
           assert.equal(
@@ -999,7 +1087,7 @@ jobs:
           )
           assert.equal(tags.latest, '0.0.0', 'publishing preview must not move the inert initial latest tag')
           assert.equal(tags.bootstrap, '0.0.0', 'the inert namespace bootstrap must remain isolated')
-          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.2.0')
+          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.2.1')
           NODE
           mkdir -p publish-evidence/signature-audit
           (
@@ -1062,7 +1150,7 @@ jobs:
             echo "- Registry integrity, dist-tags, SLSA provenance metadata, and npm's cryptographic signature audit were rechecked after publication."
             echo "- @tinyedge/pi-runtime@$PI_RUNTIME_VERSION is already published; this workflow packs it for verification, matches the packed tarball to the live registry artifact, and never republishes it."
             echo "- @tinyedge/cli@0.1.3 and @tinyedge/pi@0.1.3 remain immutable compatibility releases and are not part of this candidate."
-            echo "- Automatic provenance applies to physicalsystems@0.2.0 from this public repository, not to either earlier inert namespace bootstrap publication."
+            echo "- Automatic provenance applies to physicalsystems@0.2.1 from this public repository, not to either earlier inert namespace bootstrap publication."
             echo "- Promotion from preview to latest remains a separate manual maintainer action with npm 2FA."
           } | tee publish-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload registry preflight and publication logs

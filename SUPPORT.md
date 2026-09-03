@@ -7,7 +7,7 @@ before opening a new issue. Include the Physical Systems command and version, No
 version, operating-system version, CPU architecture, expected behavior, actual behavior,
 and a minimal reproduction.
 
-The public source and `physicalsystems@0.2.0` release target support Windows x64, Windows ARM64,
+The public source and `physicalsystems@0.2.1` release target support Windows x64, Windows ARM64,
 and qualified Ubuntu 22.04/24.04 desktop x64 with Node.js 22.19.0 or newer.
 Historical `tinyedge` releases remain immutable. Use `npm view physicalsystems dist-tags
 --json` and report the exact resolved version with a new release problem. To work from source, see

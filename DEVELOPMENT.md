@@ -1,8 +1,8 @@
 # Run Physical Systems from source
 
-Use this workflow while the functional `physicalsystems@0.2.0` package is not
-yet available from npm. It runs the reviewed application directly from the
-public source and does not publish or change npm dist-tags.
+Use this workflow to test the source on `main` or a release candidate before
+its protected npm publication. It runs the reviewed application directly and
+does not publish or change npm dist-tags.
 
 ## Requirements
 
@@ -11,6 +11,30 @@ public source and does not publish or change npm dist-tags.
 - Git.
 - On Ubuntu: `secret-tool`, D-Bus, an unlocked Secret Service keyring and
   `xdg-open` when model-provider onboarding is used.
+
+### Persistent Node.js on Ubuntu
+
+Ubuntu may still provide Node.js 12 as `/usr/bin/node`. A temporary `PATH`
+change affects only one terminal. Install the required Node version per user
+and make it the default for new Bash terminals:
+
+```bash
+git clone https://github.com/nvm-sh/nvm.git "$HOME/.nvm" && \
+git -C "$HOME/.nvm" checkout --detach b6cf55f6adf3b953d0e5e00a4049444e300e3af8 && \
+test "$(git -C "$HOME/.nvm" rev-parse HEAD)" = \
+  b6cf55f6adf3b953d0e5e00a4049444e300e3af8 && \
+printf '\nexport NVM_DIR="$HOME/.nvm"\n[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"\n' \
+  >> "$HOME/.bashrc" && \
+export NVM_DIR="$HOME/.nvm" && \
+. "$NVM_DIR/nvm.sh" && \
+nvm install 22.19.0 && \
+nvm alias default 22.19.0 && \
+node --version
+```
+
+Open a new terminal and require `node --version` to report `v22.19.0` or newer
+before launching Physical Systems. This user-scoped setup leaves
+`/usr/bin/node` unchanged.
 
 ## Clone and launch
 

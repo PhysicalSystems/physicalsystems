@@ -1,6 +1,6 @@
 {
   "name": "physicalsystems",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local Physical Systems Harness for real-world hardware",
   "type": "module",
   "bin": {
@@ -30,7 +30,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/cli.js && node --check src/auth/oauth.js && node --check src/auth/open-browser.js && node --check src/auth/secret-store.js && node --check src/mcp/client.js && node --check src/chat/pi-session.js && node --check src/pi-extension.js && node --check src/version.js && node --check src/harness/ask-choice.js && node --check src/harness/header.js && node --check src/harness/interactive-mode.js && node --check src/physical/exploration.js && node --check src/physical/node-client.js && node --check src/physical/workflow.js && node --check src/commands/harness.js && node --check src/commands/provider.js",
+    "check": "node --check bin/physicalsystems.js && node --check scripts/check-unsupported-node.cjs && node --check src/cli.js && node --check src/auth/oauth.js && node --check src/auth/open-browser.js && node --check src/auth/secret-store.js && node --check src/mcp/client.js && node --check src/chat/pi-session.js && node --check src/pi-extension.js && node --check src/version.js && node --check src/harness/ask-choice.js && node --check src/harness/header.js && node --check src/harness/interactive-mode.js && node --check src/physical/exploration.js && node --check src/physical/node-client.js && node --check src/physical/workflow.js && node --check src/commands/harness.js && node --check src/commands/provider.js",
     "check:pi-sdk": "node scripts/check-pi-sdk.js",
     "bootstrap:pi-runtime": "node scripts/bootstrap-pi-runtime.js",
     "check:release-packages": "node scripts/check-release-packages.js check",
