@@ -1,24 +1,37 @@
+import { READ_AGENT_SKILL_TOOL } from '../harness/agent-skills.js'
+import { PHYSICAL_ROUTE_REQUEST_VERSION, normalizePhysicalRouteRequest, physicalRouteReceiptPath } from './route-contracts.js'
+
 export const PHYSICAL_DISCOVERY_TOOL = 'inspect_physical_system'
 export const PHYSICAL_INTENT_TOOL = 'plan_physical_workflow'
+export const PHYSICAL_CAPABILITIES_TOOL = 'inspect_physical_capabilities'
+export const PHYSICAL_ROUTE_TOOL = 'preview_physical_capability'
 export const PHYSICAL_TOOL_ALLOWLIST = Object.freeze([
   PHYSICAL_DISCOVERY_TOOL,
   PHYSICAL_INTENT_TOOL,
+  PHYSICAL_CAPABILITIES_TOOL,
+  PHYSICAL_ROUTE_TOOL,
+  READ_AGENT_SKILL_TOOL,
 ])
 
 const STEPS = Object.freeze(['Discover', 'Intent', 'Plan', 'Commission', 'Run', 'Verify'])
 
 function cleanMessage(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 300)
+  return String(value ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
 }
 
 export function createPhysicalWorkflowState(nodeOrigin) {
   return Object.freeze({
     nodeOrigin,
+    generation: 0,
     status: 'unchecked',
     snapshot: null,
     response: null,
     requestedIntent: null,
     exploration: null,
+    agentSkillId: null,
+    capabilityCatalog: null,
+    routeReceipt: null,
+    routeError: null,
     error: null,
   })
 }
@@ -26,9 +39,25 @@ export function createPhysicalWorkflowState(nodeOrigin) {
 export function updatePhysicalWorkflow(state, event) {
   if (!state || typeof state !== 'object') throw new TypeError('Physical workflow state is required')
   if (!event || typeof event !== 'object') throw new TypeError('Physical workflow event is required')
-  if (event.type === 'checking') {
-    return Object.freeze({ ...state, status: 'checking', error: null })
+  if (event.generation !== undefined && event.generation !== state.generation) return state
+  if (['checking', 'catalog-checking', 'route-checking', 'snapshot', 'intent', 'error', 'plan-error', 'reset-intent'].includes(event.type)) {
+    state = { ...state, generation: state.generation + 1 }
   }
+  if (event.type === 'checking') {
+    return Object.freeze({ ...state, status: 'checking', error: null, routeReceipt: null, routeError: null, capabilityCatalog: null })
+  }
+  if (event.type === 'agent-skill') return Object.freeze({ ...state, agentSkillId: cleanMessage(event.skillId) })
+  if (event.type === 'catalog-checking') return Object.freeze({ ...state, capabilityCatalog: null, routeReceipt: null, routeError: null })
+  if (event.type === 'route-checking') return Object.freeze({ ...state, routeReceipt: null, routeError: null })
+  if (event.type === 'capability-catalog') {
+    if (event.catalog?.physicalExecutionAuthorized !== false) throw new TypeError('Physical capability catalog cannot authorize execution')
+    return Object.freeze({ ...state, capabilityCatalog: event.catalog, routeReceipt: null, routeError: null })
+  }
+  if (event.type === 'route') {
+    if (event.receipt?.physicalExecutionAuthorized !== false || event.receipt?.decision?.physical_execution_authorized !== false) throw new TypeError('Physical route preview cannot authorize execution')
+    return Object.freeze({ ...state, routeReceipt: event.receipt, routeError: null })
+  }
+  if (event.type === 'route-error') return Object.freeze({ ...state, capabilityCatalog: null, routeReceipt: null, routeError: cleanMessage(event.error?.message || event.error) })
   if (event.type === 'snapshot') {
     return Object.freeze({
       ...state,
@@ -37,6 +66,9 @@ export function updatePhysicalWorkflow(state, event) {
       response: null,
       requestedIntent: null,
       exploration: null,
+      capabilityCatalog: null,
+      routeReceipt: null,
+      routeError: null,
       error: null,
     })
   }
@@ -47,6 +79,8 @@ export function updatePhysicalWorkflow(state, event) {
       response: event.response,
       requestedIntent: cleanMessage(event.requestedIntent),
       exploration: null,
+      routeReceipt: null,
+      routeError: null,
       error: null,
     })
   }
@@ -85,6 +119,9 @@ export function updatePhysicalWorkflow(state, event) {
       snapshot: null,
       response: null,
       exploration: null,
+      capabilityCatalog: null,
+      routeReceipt: null,
+      routeError: null,
       error: cleanMessage(event.error?.message || event.error || 'Physical node unavailable'),
     })
   }
@@ -95,11 +132,13 @@ export function updatePhysicalWorkflow(state, event) {
       response: null,
       requestedIntent: cleanMessage(event.requestedIntent),
       exploration: null,
+      routeReceipt: null,
+      routeError: null,
       error: cleanMessage(event.error?.message || event.error || 'Physical plan rejected'),
     })
   }
   if (event.type === 'reset-intent') {
-    return Object.freeze({ ...state, response: null, requestedIntent: null, exploration: null, error: null })
+    return Object.freeze({ ...state, response: null, requestedIntent: null, exploration: null, capabilityCatalog: null, routeReceipt: null, routeError: null, error: null })
   }
   throw new TypeError(`Unknown physical workflow event: ${event.type}`)
 }
@@ -107,9 +146,9 @@ export function updatePhysicalWorkflow(state, event) {
 function stepStates(state) {
   const discovered = Boolean(state.snapshot)
   const interpretation = state.response?.interpretation
-  const intentSubmitted = Boolean(state.requestedIntent)
-  const planReady = hasGroundedPlan(interpretation)
-  const planNeedsWork = (intentSubmitted && !planReady) || Boolean(state.snapshot && state.error)
+  const intentSubmitted = Boolean(state.requestedIntent || state.routeReceipt)
+  const planReady = state.routeReceipt ? state.routeReceipt.decision.decision_status === 'selected' : hasGroundedPlan(interpretation)
+  const planNeedsWork = (intentSubmitted && !planReady) || Boolean(state.snapshot && state.error) || Boolean(state.routeError)
   const commissioningDraft = state.exploration?.status === 'draft'
   return [
     state.status === 'checking' ? 'working' : discovered ? 'done' : state.error ? 'blocked' : 'waiting',
@@ -207,6 +246,10 @@ function hasGroundedPlan(interpretation) {
 
 function nextLine(state) {
   if (state.status === 'checking') return 'Checking the local Physical Systems node without opening hardware…'
+  if (state.routeError) return `Capability preview blocked · ${state.routeError}`
+  if (state.routeReceipt) return state.routeReceipt.decision.decision_status === 'selected'
+    ? 'Implementation proposed · preview only · Run and Verify remain locked.'
+    : 'No eligible capability implementation · resolve the reported gaps before requesting another preview.'
   if (state.status === 'unavailable') return `Physical Systems node unavailable · ${state.error} · run /physical to retry`
   if (!state.snapshot) return 'Run /physical, or describe a physical outcome in the editor.'
   if (!observedPhysicalDevices(state.snapshot).length) {
@@ -257,6 +300,8 @@ export function renderPhysicalWorkflow(state, width = 100) {
     lines.push(fit(`Physical Systems node · ${state.nodeOrigin}`, safeWidth))
   }
   const observation = evidenceLine(state.response)
+  if (state.agentSkillId) lines.push(fit(`Agent Skill · ${state.agentSkillId} · instructions only`, safeWidth))
+  if (state.capabilityCatalog) lines.push(fit(`Physical capabilities · ${state.capabilityCatalog.capabilities.length} registered · ${state.capabilityCatalog.capabilities.filter((item) => item.availableForRouting).length} typed for routing`, safeWidth))
   if (state.requestedIntent) lines.push(fit(`Intent · ${state.requestedIntent}`, safeWidth))
   const plan = planLine(state.response)
   const grounding = groundingLine(state.response)
@@ -264,7 +309,57 @@ export function renderPhysicalWorkflow(state, width = 100) {
   if (grounding) lines.push(fit(grounding, safeWidth))
   if (observation) lines.push(fit(observation, safeWidth))
   for (const line of explorationLines(state.exploration)) lines.push(fit(line, safeWidth))
+  for (const line of physicalRouteLines(state.routeReceipt)) lines.push(fit(line, safeWidth))
   lines.push(fit(nextLine(state), safeWidth))
+  return lines
+}
+
+const ROUTE_REASON_LABELS = Object.freeze({
+  precondition_unknown: 'Required physical state is unknown',
+  precondition_missing: 'Required observation is missing',
+  precondition_violated: 'A required physical condition is not met',
+  precondition_stale: 'Required observation is stale',
+  precondition_from_future: 'Observation timing is invalid',
+  precondition_invocation_mismatch: 'Observation belongs to a different invocation',
+  precondition_state_mismatch: 'Observation belongs to a different physical state',
+  precondition_requirement_mismatch: 'Observation does not establish the required condition',
+  qualification_status_not_allowed: 'Qualification does not meet local policy',
+  qualification_missing: 'Qualification evidence is missing',
+  qualification_mismatch: 'Qualification evidence no longer matches',
+  calibration_missing: 'Required calibration is missing',
+  calibration_mismatch: 'Calibration has changed',
+  artifact_missing: 'Implementation artifact is unavailable',
+  artifact_mismatch: 'Implementation artifact has changed',
+  dependency_missing: 'A required dependency is missing',
+  dependency_mismatch: 'A required dependency has changed',
+  implementation_blocked: 'Capability implementation is blocked by local qualification or policy',
+  execution_target_unavailable: 'Execution target is unavailable',
+  execution_target_mismatch: 'Execution target does not match',
+  operator_approval_required: 'Separate operator approval is required',
+})
+
+export function physicalRouteReason(code) {
+  return ROUTE_REASON_LABELS[code] || `Host rejection: ${cleanMessage(code)}`
+}
+
+export function physicalRouteLines(receipt) {
+  if (!receipt) return []
+  const decision = receipt.decision
+  const lines = [
+    `Physical capability · ${cleanMessage(receipt.capabilityId)} · workcell ${cleanMessage(receipt.workcellId)}`,
+    `Invocation · ${receipt.request.arguments.map((argument) => `${argument.name}=${cleanMessage(argument.value)}`).join(' · ')}`,
+    `Route preview · ${decision.decision_status === 'selected' ? 'implementation selected' : 'no eligible implementation'}`,
+  ]
+  for (const candidate of decision.candidates) {
+    const qualification = receipt.implementations.find((entry) => entry.implementationId === candidate.implementation_id)?.qualificationStatus
+    lines.push(`Capability implementation · ${cleanMessage(candidate.implementation_id)} · ${cleanMessage(candidate.status)}`)
+    lines.push(`  Method · ${cleanMessage(candidate.mechanism)} · provider ${cleanMessage(candidate.provider)} · qualification ${cleanMessage(qualification)}`)
+    if (candidate.status === 'selected') lines.push('  Eligible under the evaluated local policy; not approved for execution')
+    for (const code of candidate.rejection_codes) lines.push(`  ! ${physicalRouteReason(code)}`)
+  }
+  for (const code of decision.request_rejection_codes) lines.push(`! ${physicalRouteReason(code)}`)
+  lines.push(`Evidence evaluated · ${receipt.evaluatedAt} · policy ${cleanMessage(receipt.policyVersion.policyId)}`)
+  lines.push(`Route receipt · ${receipt.receiptDigest}`)
   return lines
 }
 
@@ -335,12 +430,17 @@ export function createPhysicalPiTools({
   onIntent,
   onError,
   onPlanError,
+  onCatalog,
+  onRoute,
+  onRouteError,
+  onRouteChecking,
 }) {
   const result = (value, summary) => ({
     content: [{ type: 'text', text: JSON.stringify(value) }],
     details: { displaySummary: summary },
   })
   const inspect = async () => {
+    onRouteChecking?.('checking')
     try {
       const snapshot = await client.inspect()
       onSnapshot?.(snapshot)
@@ -359,6 +459,62 @@ export function createPhysicalPiTools({
       async execute() {
         const snapshot = await inspect()
         return result(compactPhysicalSnapshotForModel(snapshot), 'Inspected local physical system')
+      },
+    }),
+    defineTool({
+      name: PHYSICAL_CAPABILITIES_TOOL,
+      label: 'Inspect physical capabilities',
+      description: 'Read the node\'s registered physical capabilities, typed input contracts and workcell bindings. This is not device execution, qualification or an Agent Skill catalog. Use exact returned identifiers and digests for route previews; do not invent missing capabilities.',
+      parameters: { type: 'object', additionalProperties: false },
+      async execute(_toolCallId, params = {}) {
+        const generation = onRouteChecking?.('catalog-checking')
+        try {
+          if (!params || typeof params !== 'object' || Array.isArray(params) || Object.keys(params).length) throw new TypeError('Physical capability inspection accepts no inputs')
+          const catalog = await client.capabilities()
+          if (onCatalog?.(catalog, generation) === false) throw new Error('Capability catalog superseded by a newer workflow request')
+          return result(catalog, 'Inspected registered physical capabilities')
+        } catch (error) {
+          onRouteError?.(error, generation)
+          throw error
+        }
+      },
+    }),
+    defineTool({
+      name: PHYSICAL_ROUTE_TOOL,
+      label: 'Preview physical capability',
+      description: 'Request the local node\'s deterministic capability implementation selection for one typed invocation. Copy context digests from inspect_physical_capabilities. The node supplies live evidence and policy; callers cannot provide readiness, qualification or approval. This only produces a route receipt and never moves hardware.',
+      parameters: {
+        type: 'object', additionalProperties: false,
+        required: ['capabilityId', 'workcellId', 'arguments', 'expectedRegistryDigest', 'expectedCandidateBindingDigest', 'expectedCatalogDigest', 'expectedWorkcellDigest'],
+        properties: {
+          capabilityId: { type: 'string', minLength: 1, maxLength: 128 },
+          workcellId: { type: 'string', minLength: 1, maxLength: 128 },
+          arguments: {
+            type: 'array', maxItems: 128, description: 'Typed arguments sorted by their exact field name, with no duplicates.',
+            items: {
+              type: 'object', additionalProperties: false, required: ['name', 'value_type', 'value'],
+              properties: {
+                name: { type: 'string', minLength: 1, maxLength: 128 },
+                value_type: { type: 'string', enum: ['boolean', 'integer', 'number', 'string', 'identifier', 'digest'] },
+                value: { anyOf: [{ type: 'boolean' }, { type: 'number' }, { type: 'string', maxLength: 512 }] },
+              },
+            },
+          },
+          ...Object.fromEntries(['expectedRegistryDigest', 'expectedCandidateBindingDigest', 'expectedCatalogDigest', 'expectedWorkcellDigest'].map((name) => [name, { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' }])),
+        },
+      },
+      async execute(_toolCallId, params) {
+        const generation = onRouteChecking?.('route-checking')
+        try {
+          if (!params || typeof params !== 'object' || Array.isArray(params) || Object.hasOwn(params, 'contractVersion')) throw new TypeError('Use only the declared capability preview tool inputs')
+          const request = normalizePhysicalRouteRequest({ ...params, contractVersion: PHYSICAL_ROUTE_REQUEST_VERSION })
+          const receipt = await client.previewCapability(request)
+          if (onRoute?.(receipt, generation) === false) throw new Error('Capability preview superseded by a newer workflow request')
+          return result({ ...receipt, receiptUrl: `${client.origin}${physicalRouteReceiptPath(receipt.receiptDigest)}` }, 'Previewed capability implementation selection; no movement')
+        } catch (error) {
+          onRouteError?.(error, generation)
+          throw error
+        }
       },
     }),
     defineTool({

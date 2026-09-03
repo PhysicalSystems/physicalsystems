@@ -19,6 +19,16 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const workflow = readFileSync(path.join(root, '.github/workflows/npm-release.yml'), 'utf8')
 const cliWorkflow = readFileSync(path.join(root, '.github/workflows/cli.yml'), 'utf8')
+
+test('protected npm publication requires bundled Node manifests before build, not source candidates', () => {
+  const requireMain = workflow.slice(workflow.indexOf('  require-main:'), workflow.indexOf('\n  build:'))
+  assert.match(requireMain, /run: node scripts\/check-node-release-index\.mjs/)
+  assert.match(workflow, /\n  build:[\s\S]{0,120}needs: require-main/)
+  assert.doesNotMatch(requireMain, /continue-on-error: true/)
+  assert.doesNotMatch(cliWorkflow, /check-node-release-index/)
+  const packer = readFileSync(path.join(root, 'packages/cli/scripts/check-release-packages.js'), 'utf8')
+  assert.doesNotMatch(packer, /check-node-release-index/)
+})
 const boundaryCheck = readFileSync(path.join(root, 'scripts/check-export-boundary.mjs'), 'utf8')
 const rootReadme = readFileSync(path.join(root, 'README.md'), 'utf8')
 const dependencyGuide = readFileSync(path.join(root, 'DEPENDENCIES.md'), 'utf8')

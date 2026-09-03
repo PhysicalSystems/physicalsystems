@@ -13,6 +13,12 @@ import { loginCommand } from './commands/login.js'
 import { logoutCommand } from './commands/logout.js'
 import { ASK_CHOICE_TOOL, createAskChoiceTool } from './harness/ask-choice.js'
 import { createHarnessHeader } from './harness/header.js'
+import { READ_AGENT_SKILL_TOOL, createReadAgentSkillTool } from './harness/agent-skills.js'
+import { createWorkcellController } from './harness/workcell-controller.js'
+import { createWorkcellServer } from './harness/workcell-server.js'
+import { createCameraPreviewClient } from './physical/camera-preview-client.js'
+import { createExecutionClient } from './physical/execution-client.js'
+import { openBrowser } from './auth/open-browser.js'
 import {
   promptPhysicalCommissioningDraft,
   recommendPhysicalCommissioningDraft,
@@ -110,6 +116,13 @@ export function createTinyEdgePiExtension({
   autoLogin = false,
   cloudEnabled = !standalone,
   showHeader = false,
+  agentSkillRegistry = null,
+  submitWorkcellIntent = null,
+  canSubmitWorkcellIntent = null,
+  createWorkcellServerImpl = createWorkcellServer,
+  createCameraPreviewClientImpl = createCameraPreviewClient,
+  createExecutionClientImpl = createExecutionClient,
+  openWorkcellBrowser = openBrowser,
 } = {}) {
   return function tinyEdgeExtension(pi) {
     const config = cloudEnabled ? createConfigImpl(env, platform) : null
@@ -119,9 +132,31 @@ export function createTinyEdgePiExtension({
     const tokenStore = cloudEnabled
       ? createTokenStoreImpl({ configDir: config.configDir, secretStore })
       : null
+    let workcell = null
+    let workcellServer = null
+    let workcellOpening = null
+    let latestContext = null
+    let workcellClosing = false
     const askChoiceTool = createAskChoiceTool(defineToolImpl)
-    pi.registerTool(askChoiceTool)
+    pi.registerTool({
+      ...askChoiceTool,
+      async execute(callId, params, signal, onUpdate, ctx) {
+        if (!workcell?.shouldAskInView()) return askChoiceTool.execute(callId, params, signal, onUpdate, ctx)
+        const choiceOwner = workcell
+        return askChoiceTool.execute(callId, params, signal, onUpdate, {
+          ...ctx,
+          ui: {
+            ...ctx?.ui,
+            select: (question, options) => choiceOwner.ask({ kind: 'select', question, options, signal }),
+            input: (question) => choiceOwner.ask({ kind: 'input', question, signal }),
+          },
+        })
+      },
+    })
     const physicalEnabled = standalone
+    const physicalActiveTools = physicalEnabled
+      ? PHYSICAL_TOOL_ALLOWLIST.filter((name) => name !== READ_AGENT_SKILL_TOOL || agentSkillRegistry !== null)
+      : []
     const physicalClient = physicalEnabled
       ? createPhysicalNodeClientImpl({
         ...(physicalNodeUrl ? { baseUrl: physicalNodeUrl } : {}),
@@ -152,13 +187,17 @@ export function createTinyEdgePiExtension({
     }
 
     function transitionPhysical(event, ctx = physicalContext) {
-      if (!physicalEnabled) return
-      physicalState = updatePhysicalWorkflow(physicalState, event)
+      if (!physicalEnabled) return false
+      const nextState = updatePhysicalWorkflow(physicalState, event)
+      if (nextState === physicalState) return false
+      physicalState = nextState
+      workcell?.setWorkflow(physicalState)
       updateHeader({
         nodeStatus: physicalState.status,
         candidateCount: observedPhysicalDevices(physicalState.snapshot).length,
       }, ctx)
       renderPhysicalWorkflowWidget(ctx)
+      return true
     }
 
     async function refreshPhysicalSystem(ctx = physicalContext) {
@@ -174,6 +213,17 @@ export function createTinyEdgePiExtension({
     }
 
     if (physicalEnabled) {
+      if (agentSkillRegistry) {
+        const reader = createReadAgentSkillTool({ registry: agentSkillRegistry, defineTool: defineToolImpl })
+        pi.registerTool({
+          ...reader,
+          async execute(...args) {
+            const result = await reader.execute(...args)
+            transitionPhysical({ type: 'agent-skill', skillId: args[1]?.skillId })
+            return result
+          },
+        })
+      }
       const physicalTools = createPhysicalPiTools({
         defineTool: defineToolImpl,
         client: physicalClient,
@@ -188,6 +238,13 @@ export function createTinyEdgePiExtension({
         },
         onPlanError(error, requestedIntent) {
           transitionPhysical({ type: 'plan-error', error, requestedIntent })
+        },
+        onCatalog(catalog, generation) { return transitionPhysical({ type: 'capability-catalog', catalog, generation }) },
+        onRoute(receipt, generation) { return transitionPhysical({ type: 'route', receipt, generation }) },
+        onRouteError(error, generation) { return transitionPhysical({ type: 'route-error', error, generation }) },
+        onRouteChecking(type) {
+          transitionPhysical({ type })
+          return physicalState.generation
         },
       })
       for (const tool of physicalTools) pi.registerTool(tool)
@@ -275,7 +332,7 @@ export function createTinyEdgePiExtension({
       description: 'Show TinyEdge tools enabled for this Pi session',
       handler: async (_args, ctx) => {
         const tools = [
-          ...(physicalEnabled ? PHYSICAL_TOOL_ALLOWLIST : []),
+          ...physicalActiveTools,
           ...registeredTools,
         ]
         ctx.ui.notify(tools.length ? tools.join('\n') : 'No TinyEdge tools loaded', 'info')
@@ -289,10 +346,10 @@ export function createTinyEdgePiExtension({
         const previous = new Set(registeredTools)
         pi.setActiveTools([
           ASK_CHOICE_TOOL,
-          ...(physicalEnabled ? PHYSICAL_TOOL_ALLOWLIST : []),
+          ...physicalActiveTools,
           ...pi.getActiveTools().filter((name) => (
             name === ASK_CHOICE_TOOL
-            || PHYSICAL_TOOL_ALLOWLIST.includes(name)
+            || physicalActiveTools.includes(name)
             || !previous.has(name)
           )),
         ].filter((name, index, names) => names.indexOf(name) === index))
@@ -302,6 +359,49 @@ export function createTinyEdgePiExtension({
     })
 
     if (physicalEnabled) {
+      pi.registerCommand('workcell', {
+        description: 'Open the camera and workflow view for this same Harness session',
+        handler: async (args, ctx) => {
+          if (String(args || '').trim()) { ctx.ui.notify('Usage: /workcell', 'warning'); return }
+          if (workcellClosing) return
+          latestContext = ctx
+          if (workcellOpening) return workcellOpening
+          workcellOpening = (async () => {
+            try {
+              if (!workcellServer) {
+                workcell = createWorkcellController({
+                  workflow: physicalState,
+                  refreshWorkflow: async () => {
+                    await refreshPhysicalSystem(latestContext)
+                    transitionPhysical({ type: 'catalog-checking' })
+                    const generation = physicalState.generation
+                    try { transitionPhysical({ type: 'capability-catalog', catalog: await physicalClient.capabilities(), generation }) }
+                    catch (error) { transitionPhysical({ type: 'route-error', error, generation }) }
+                  },
+                  invalidateWorkflow: () => transitionPhysical({ type: 'reset-intent' }),
+                  sendIntent: (text) => {
+                    if (typeof submitWorkcellIntent !== 'function') throw new Error('This host cannot submit to the shared Harness session')
+                    return submitWorkcellIntent(text)
+                  },
+                  canPrompt: () => Boolean(latestContext?.model && latestContext?.isIdle?.()
+                    && !latestContext?.hasPendingMessages?.() && typeof submitWorkcellIntent === 'function'
+                    && typeof canSubmitWorkcellIntent === 'function' && canSubmitWorkcellIntent() === true),
+                  modelLabel: () => latestContext?.model ? `${latestContext.model.provider}/${latestContext.model.id}` : null,
+                  cameraClient: createCameraPreviewClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_CAMERA_TOKEN, fetchImpl: physicalFetchImpl }),
+                  executionClient: createExecutionClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_EXECUTION_TOKEN, fetchImpl: physicalFetchImpl }),
+                })
+                workcellServer = await createWorkcellServerImpl({ host: workcell })
+              }
+              if (workcellClosing) return
+              await openWorkcellBrowser(workcellServer.openUrl)
+              ctx.ui.notify('Workcell view opened for this Harness session. Camera capture and any available run approval require separate explicit operator actions.', 'info')
+            } catch (error) {
+              ctx.ui.notify(error?.message || 'Could not open the workcell view', 'warning')
+            }
+          })().finally(() => { workcellOpening = null })
+          return workcellOpening
+        },
+      })
       pi.registerCommand('physical', {
         description: 'Discover the local workcell and describe a physical outcome',
         handler: async (args, ctx) => {
@@ -374,7 +474,10 @@ export function createTinyEdgePiExtension({
       })
     }
 
-    pi.on('before_agent_start', (event) => {
+    pi.on('before_agent_start', (event, ctx) => {
+      latestContext = ctx || latestContext
+      if (physicalEnabled) transitionPhysical({ type: 'reset-intent' })
+      workcell?.agentStart(event.prompt)
       freshBenchmarkTurn = cloudEnabled && isFreshBenchmarkRequest(event.prompt)
       freshDeviceCheckStarted = false
     })
@@ -386,9 +489,29 @@ export function createTinyEdgePiExtension({
     // A low-level agent run can end before Pi retries, compacts, or drains a
     // queued follow-up. Keep the intake boundary until the full request settles.
     pi.on('agent_settled', () => {
+      workcell?.agentSettled()
       freshBenchmarkTurn = false
       freshDeviceCheckStarted = false
     })
+
+    if (physicalEnabled) {
+      pi.on('message_update', (event) => { workcell?.agentMessage(event.message) })
+      pi.on('message_end', (event) => { workcell?.agentMessage(event.message) })
+      pi.on('tool_execution_start', (event) => { workcell?.agentTool(event.toolName) })
+      pi.on('tool_execution_end', () => { workcell?.agentTool(null) })
+      pi.on('model_select', (_event, ctx) => { latestContext = ctx; workcell?.modelChanged() })
+      pi.on('session_shutdown', async () => {
+        workcellClosing = true
+        await workcellOpening
+        const closingServer = workcellServer
+        const closingController = workcell
+        workcellServer = null
+        workcell = null
+        latestContext = null
+        try { await closingServer?.close() }
+        finally { await closingController?.dispose() }
+      })
+    }
 
     if (standalone) {
       pi.on('user_bash', () => ({
@@ -417,14 +540,16 @@ export function createTinyEdgePiExtension({
         return { block: true, reason: NEW_INTAKE_TOOL_BLOCK }
       }
       if (!standalone || registeredTools.includes(event.toolName)
-        || PHYSICAL_TOOL_ALLOWLIST.includes(event.toolName)) return undefined
+        || physicalActiveTools.includes(event.toolName)) return undefined
       return { block: true, reason: 'Only reviewed Physical Systems tools are available in this Harness.' }
     })
 
     pi.on('session_start', async (_event, ctx) => {
+      workcellClosing = false
+      latestContext = ctx
       pi.setActiveTools([...new Set([
         ASK_CHOICE_TOOL,
-        ...(physicalEnabled ? PHYSICAL_TOOL_ALLOWLIST : []),
+        ...physicalActiveTools,
         ...pi.getActiveTools(),
       ])])
       renderHeader(ctx)

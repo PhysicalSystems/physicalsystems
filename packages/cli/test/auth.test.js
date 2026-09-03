@@ -32,6 +32,7 @@ test('Linux browser handoff invokes xdg-open directly with the validated URL', (
   let unrefCalled = false
   openBrowser('https://tinyedge.ai/oauth/authorize?scope=tinyedge%3Aread', {
     platform: 'linux',
+    env: { DISPLAY: ':0', PATH: '/usr/bin' },
     spawnImpl(command, args, options) {
       calls.push({ command, args, options })
       return { unref() { unrefCalled = true } }
@@ -46,9 +47,51 @@ test('Linux browser handoff invokes xdg-open directly with the validated URL', (
       shell: false,
       stdio: 'ignore',
       windowsHide: true,
+      env: { DISPLAY: ':0', PATH: '/usr/bin' },
     },
   }])
   assert.equal(unrefCalled, true)
+})
+
+test('browser openers exclude camera and execution tokens case-insensitively without altering the parent desktop environment', () => {
+  const desktop = {
+    PATH: '/usr/bin', DISPLAY: ':0', WAYLAND_DISPLAY: 'wayland-0',
+    DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus', XDG_RUNTIME_DIR: '/run/user/1000',
+  }
+  const credentialKeys = ['PHYSICAL_NODE_CAMERA_TOKEN', 'physical_node_camera_token', 'Physical_Node_Camera_Token', 'PHYSICAL_NODE_EXECUTION_TOKEN', 'physical_node_execution_token', 'Physical_Node_Execution_Token',
+    'PHYSICAL_NODE_EXECUTABLE', 'physical_node_execution_config', 'Physical_Node_Execution_Data', 'PHYSICAL_NODE_REGISTRY', 'PHYSICAL_NODE_EXECUTION_MODE']
+  const hardwareKey = (name) => credentialKeys.some((key) => name.toUpperCase() === key.toUpperCase())
+  const parent = Object.freeze({ ...desktop, ...Object.fromEntries(credentialKeys.map((name) => [name, 'synthetic-test-value'])) })
+  const processKeysBefore = Object.keys(process.env).filter(hardwareKey)
+  const processValuesBefore = processKeysBefore.map((name) => process.env[name])
+  for (const platform of ['linux', 'win32']) {
+    let childEnv
+    openBrowser('http://127.0.0.1:19876/#token=operator-session', {
+      platform, env: parent,
+      spawnImpl(_command, _args, options) { childEnv = options.env; return {} },
+    })
+    assert.notEqual(childEnv, parent)
+    assert.deepEqual(Object.keys(childEnv).filter(hardwareKey), [])
+    assert.deepEqual(childEnv, desktop)
+    assert.equal(credentialKeys.every((name) => Object.hasOwn(parent, name)), true)
+    assert.equal(credentialKeys.every((name) => parent[name] === 'synthetic-test-value'), true)
+  }
+  assert.equal(JSON.stringify(Object.keys(process.env).filter(hardwareKey)) === JSON.stringify(processKeysBefore), true)
+  assert.equal(processKeysBefore.every((name, index) => process.env[name] === processValuesBefore[index]), true)
+})
+
+test('default browser environment is an independent filtered copy of process.env', () => {
+  let childEnv
+  openBrowser('https://example.com/authorize', {
+    spawnImpl(_command, _args, options) { childEnv = options.env; return {} },
+  })
+  assert.notEqual(childEnv, process.env)
+  const hardwareKey = (name) => ['PHYSICAL_NODE_CAMERA_TOKEN', 'PHYSICAL_NODE_EXECUTION_TOKEN', 'PHYSICAL_NODE_EXECUTABLE',
+    'PHYSICAL_NODE_EXECUTION_CONFIG', 'PHYSICAL_NODE_EXECUTION_DATA', 'PHYSICAL_NODE_REGISTRY', 'PHYSICAL_NODE_EXECUTION_MODE'].includes(name.toUpperCase())
+  assert.equal(Object.keys(childEnv).some(hardwareKey), false)
+  // Compare as booleans so a regression cannot dump environment values in a
+  // test assertion; desktop/session variables are not otherwise rewritten.
+  assert.equal(Object.entries(process.env).every(([name, value]) => hardwareKey(name) || childEnv[name] === value), true)
 })
 
 test('browser handoff rejects insecure non-loopback URLs before spawning', () => {

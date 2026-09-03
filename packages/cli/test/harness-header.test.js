@@ -21,7 +21,7 @@ test('Harness header is local-first and reports only observed candidate count', 
   assert.match(rendered, /PHYSICAL SYSTEMS/)
   assert.match(rendered, new RegExp(`Harness v${VERSION.replaceAll('.', '\\.')}`))
   assert.match(rendered, /Physical Systems node · connected · 3 devices observed/)
-  assert.match(rendered, /Model provider · ready/)
+  assert.match(rendered, /Model · selected · credentials checked when sending/)
   assert.doesNotMatch(rendered, /TinyEdge account|paired|device family|NVIDIA Jetson|Raspberry Pi/i)
 })
 
@@ -42,6 +42,20 @@ test('Harness header renders honest local-node and provider setup states', () =>
   })(null, theme).render(90).join('\n')
   assert.match(connected, /1 device observed/)
   assert.doesNotMatch(connected, /1 devices observed/)
+})
+
+test('a selected catalog model without credential proof is never labelled ready or authenticated', () => {
+  // This is the actual extension boundary: Boolean(ctx.model) proves only that
+  // a model was selected. No credential-store result is supplied to the header.
+  const selectedModel = { provider: 'test-provider', id: 'catalog-model' }
+  const component = createHarnessHeader({
+    getState: () => ({ nodeStatus: 'connected', candidateCount: 0, modelConfigured: Boolean(selectedModel) }),
+  })(null, theme)
+  const rendered = component.render(90).join('\n')
+  assert.match(rendered, /Model · selected/)
+  assert.match(rendered, /credentials checked when sending/)
+  assert.doesNotMatch(rendered, /provider · ready|authenticated|credentials verified|signed in/i)
+  assert.match(component.render(52).join('\n'), /credentials checked when sending/)
 })
 
 test('Harness header never renders wider than a narrow terminal', () => {

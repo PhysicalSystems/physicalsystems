@@ -24,6 +24,12 @@ OIDC, and is protected by the `npm-release` environment.
 
 The workflow:
 
+Before building, checks the bundled managed-Node release index and raw manifest
+hashes. An empty index, placeholder artifact URLs, or missing Ubuntu x64 Python
+3.10/3.12 manifests blocks publication. This metadata gate does not replace
+clean installation tests of the actual downloadable bytes. Source tests and
+review-candidate packing remain available before those artifacts are published.
+
 1. Builds `physicalsystems@0.2.0` once on Windows x64 and records exact
    tarball checksums.
 2. Verifies those same bytes on Windows x64, native Windows ARM64, Ubuntu

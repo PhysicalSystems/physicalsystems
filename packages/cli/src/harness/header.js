@@ -36,8 +36,10 @@ export function createHarnessHeader({ getState, version = VERSION } = {}) {
       const availableWidth = Math.max(0, width)
       const wide = availableWidth >= 52
       const logo = wide ? LOGO : [label]
+      // The extension supplies model selection, not proof of usable credentials.
+      // Rendering must not authenticate, refresh tokens, or claim provider readiness.
       const provider = state.modelConfigured
-        ? 'Model provider · ready'
+        ? 'Model · selected · credentials checked when sending'
         : 'Model provider · choose one with /login'
       return [
         ...logo.map((line) => theme.fg('accent', fit(line, availableWidth))),

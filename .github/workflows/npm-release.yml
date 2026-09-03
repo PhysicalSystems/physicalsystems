@@ -61,6 +61,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Verify the public/private source boundary
         run: node scripts/check-export-boundary.mjs
+      - name: Require reviewed bundled Node manifests before npm release packaging
+        run: node scripts/check-node-release-index.mjs
 
   build:
     name: Pack the Windows x64 candidate once
