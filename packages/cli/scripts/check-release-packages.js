@@ -18,6 +18,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { stageNodeBundle } from './node-bundle-stage.js'
+import { verifyNodeBundle } from '../src/physical/node-bundle.js'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
@@ -742,8 +744,13 @@ function ensureOutputDirectory(directory) {
   }
 }
 
-function packRelease(outputDirectory) {
+function packRelease(outputDirectory, bundledPackageDirectory) {
   const packages = PACKAGES.map(packageMetadata)
+  if (bundledPackageDirectory) {
+    const item = packages.find(({ key }) => key === 'physicalsystems')
+    item.directory = bundledPackageDirectory
+    item.metadata = readJson(path.join(bundledPackageDirectory, 'package.json'))
+  }
   const version = validatePackageContracts(packages)
   validateReleaseReadmes(packages)
   ensureOutputDirectory(outputDirectory)
@@ -899,6 +906,11 @@ async function verifyRelease(artifactDirectory) {
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
     const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')
+    if (installed.physicalsystemsNodeBundle) {
+      assert.equal(installed.physicalsystemsNodeBundle, 'node-bundle')
+      await verifyNodeBundle(path.join(installedPhysicalSystemsDirectory, 'node-bundle'))
+      assert.ok(existsSync(path.join(installedPhysicalSystemsDirectory, 'BACKEND-NOTICE.txt')))
+    }
     const installedRuntimeDirectory = path.join(
       installedPhysicalSystemsDirectory,
       'node_modules/@tinyedge/pi-runtime',
@@ -1140,11 +1152,12 @@ async function verifyRelease(artifactDirectory) {
 }
 
 function usage() {
-  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory]')
+  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory] [--node-bundle ABSOLUTE_DIRECTORY]')
 }
 
-const [mode, directoryArgument] = process.argv.slice(2)
+const [mode, directoryArgument, bundleFlag, bundleArgument, ...extra] = process.argv.slice(2)
 if (!['pack', 'verify', 'check'].includes(mode)) usage()
+if (extra.length || (bundleFlag && (mode !== 'pack' || bundleFlag !== '--node-bundle' || !bundleArgument || !path.isAbsolute(bundleArgument))) || (!bundleFlag && bundleArgument)) usage()
 const npmVersion = runNpm(['--version'])
 if (mode === 'verify') {
   assert.ok(
@@ -1170,6 +1183,8 @@ if (mode === 'check') {
 } else {
   if (!directoryArgument) usage()
   const artifactDirectory = path.resolve(process.cwd(), directoryArgument)
-  if (mode === 'pack') packRelease(artifactDirectory)
-  else await verifyRelease(artifactDirectory)
+  if (mode === 'pack') {
+    const stage = bundleArgument ? await stageNodeBundle(path.join(REPOSITORY_ROOT, 'packages/cli'), bundleArgument) : null
+    try { packRelease(artifactDirectory, stage?.directory) } finally { stage?.dispose() }
+  } else await verifyRelease(artifactDirectory)
 }

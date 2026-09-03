@@ -21,7 +21,7 @@ export async function approveNodeSetup({ release, bytes }, { yes = false, input 
   if (!input.isTTY || !output.isTTY) throw new Error('Node setup requires operator consent. Run physicalsystems setup-node --yes to explicitly approve a non-interactive software installation.')
   const prompt = createInterface({ input, output })
   try {
-    const answer = await prompt.question(`Install Physical Systems Node ${release} (${Math.ceil(bytes / 1024 / 1024)} MB) in a private Python environment? This downloads software; it does not enable robot movement. [y/N] `)
+    const answer = await prompt.question(`Install Physical Systems Node ${release} (${Math.ceil(bytes / 1024 / 1024)} MB) in a private Python environment? This sets up software; it does not enable robot movement. [y/N] `)
     return /^y(?:es)?$/i.test(answer.trim())
   } finally { prompt.close() }
 }
@@ -30,7 +30,7 @@ export async function setupNodeCommand({ config, io = console, env = process.env
   manifestPath, sha256, wheelhouse, python, install = installManagedNode, loadBundled = bundledNodeRelease, authorize } = {}) {
   const release = manifestPath ? await readNodeInstallManifest(manifestPath, sha256) : await loadBundled({ python, env })
   if (!release) throw new Error('This candidate has no approved downloadable Node release yet. Use an explicit reviewed manifest and checksum for local verification; nothing was installed.')
-  const result = await install({ ...release, configDir: config.configDir, env, python, wheelhouse,
+  const result = await install({ ...release, configDir: config.configDir, env, python, ...(wheelhouse ? { wheelhouse } : {}),
     authorize: authorize || ((details) => approveNodeSetup(details, { yes, input, output })), onProgress: (message) => io.log(message) })
   await selectManagedNode(config.configDir, result.digest)
   io.log(`Physical Systems Node ${result.release} ${result.reused ? 'verified' : 'installed'}. Start physicalsystems to discover connected hardware; execution still requires commissioning.`)

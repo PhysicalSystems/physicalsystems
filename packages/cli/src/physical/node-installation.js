@@ -68,6 +68,8 @@ async function regularFile(filename, maximum) {
   } finally { await handle.close() }
 }
 
+export { regularFile as readInstallationFile }
+
 export async function readNodeInstallManifest(filename, expectedHash) {
   localPath(filename, 'Manifest')
   if (!HEX.test(expectedHash)) throw new Error('An exact manifest SHA-256 is required')
@@ -128,8 +130,10 @@ async function privateDirectory(directory) {
   if (process.platform !== 'win32' && (stat.uid !== process.getuid() || (stat.mode & 0o077) !== 0)) throw new Error('Node installation directory must be private to the current user (mode 0700)')
 }
 
-async function downloadWheel(artifact, destination, { wheelhouse, fetchImpl }) {
+export async function downloadWheel(artifact, destination, { wheelhouse, fetchImpl = fetch }) {
   if (wheelhouse) {
+    const { bundleDirectory } = await import('./node-bundle.js')
+    await bundleDirectory(wheelhouse)
     const bytes = await regularFile(path.join(wheelhouse, artifact.filename), artifact.bytes)
     if (bytes.length !== artifact.bytes || hash(bytes) !== artifact.sha256) throw new Error('Node wheel checksum mismatch')
     await fs.writeFile(destination, bytes, { flag: 'wx', mode: 0o600 })
@@ -230,7 +234,7 @@ export async function installManagedNode({ manifest, digest, manifestBytes, conf
     await privateDirectory(directory)
     const wheels = path.join(directory, 'wheels'), environmentDir = path.join(directory, 'environment')
     await privateDirectory(wheels)
-    onProgress('Downloading and verifying the approved Node packages…')
+    onProgress(wheelhouse ? 'Verifying the Node packages included in this product…' : 'Downloading and verifying the approved Node packages…')
     for (const artifact of manifest.artifacts) await downloadWheel(artifact, path.join(wheels, artifact.filename), { wheelhouse, fetchImpl })
     const requirements = manifest.artifacts.map((item) => `${item.name} @ ${pathToFileURL(path.join(wheels, item.filename)).href} --hash=sha256:${item.sha256}`).join('\n') + '\n'
     const requirementsFile = path.join(directory, 'requirements.txt')
@@ -281,7 +285,18 @@ export async function selectedNodeRelease(configDir) {
   return readNodeInstallManifest(path.join(root, receipt.directory, 'manifest.json'), selected.manifestDigest)
 }
 
-export async function bundledNodeRelease({ python, env, run } = {}) {
+export async function bundledNodeRelease({ python, env, run, packageDirectory = fileURLToPath(new URL('../../', import.meta.url)) } = {}) {
+  const metadata = JSON.parse((await regularFile(path.join(packageDirectory, 'package.json'), MAX_MANIFEST)).toString('utf8'))
+  if (Object.hasOwn(metadata, 'physicalsystemsNodeBundle')) {
+    const { NODE_BUNDLE_PATH, readNodeBundle } = await import('./node-bundle.js')
+    if (metadata.physicalsystemsNodeBundle !== NODE_BUNDLE_PATH) throw new Error('Invalid packaged backend location')
+    // A declared bundle that is absent/corrupt must never fall back to a download.
+    const bundle = await readNodeBundle(path.join(packageDirectory, NODE_BUNDLE_PATH))
+    const interpreter = await inspectInstallationPython({ executable: python, env, run })
+    const matches = bundle.releases.filter(({ manifest }) => manifest.platform === `${process.platform}-${process.arch}` && manifest.python === interpreter.version)
+    if (matches.length !== 1) throw new Error('No bundled Node release is qualified for this Python/platform combination')
+    return matches[0]
+  }
   const indexFile = fileURLToPath(new URL('./node-releases.json', import.meta.url))
   const index = JSON.parse((await regularFile(indexFile, MAX_MANIFEST)).toString('utf8'))
   if (!exact(index, ['contractVersion', 'releases']) || index.contractVersion !== 'physicalsystems-node-index-v1' || !Array.isArray(index.releases)) throw new Error('Invalid bundled Node release index')

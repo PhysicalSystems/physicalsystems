@@ -34,6 +34,14 @@ reproduce private orchestration or optimization implementation. Public
 extension points may host separately licensed providers without moving their
 implementation across this boundary.
 
+The TIN-407 review path may assemble the previously reviewed Node/Runtime
+wheel closure into an npm candidate outside this source tree. It may copy only
+the exact manifest-identified distribution files, including their licenses;
+it must not copy private source directories or relabel Node as Apache-2.0.
+The product candidate carries a backend notice and a hash-addressed backend
+SBOM. This does not authorize publication, change the active 0.2.0 workflow,
+or remove the private-source export review for new backend distributions.
+
 Publishing source does not publish an npm package and does not relicense
 third-party code. Project-authored client code uses Apache-2.0. The frozen Pi
 compatibility runtime remains MIT, and every dependency retains its own

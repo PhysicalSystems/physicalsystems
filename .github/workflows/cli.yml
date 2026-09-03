@@ -9,7 +9,47 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: physicalsystems-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  candidate:
+    name: Build one review candidate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22.19.0
+          package-manager-cache: false
+      - run: node scripts/check-export-boundary.mjs
+      - name: Pin the reviewed npm release runtime
+        shell: pwsh
+        run: |
+          npm install --global "npm@11.19.0"
+          if ((npm --version) -ne '11.19.0') { throw 'Expected npm 11.19.0' }
+      - name: Bootstrap the local Pi runtime and install the CLI offline
+        shell: pwsh
+        run: |
+          $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
+          npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: npm run check:legal
+      - name: Pack a review candidate for the Ubuntu laptop canary
+        shell: pwsh
+        run: |
+          $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE 'candidate-artifacts'
+          npm --prefix packages/cli run release:pack -- $artifactDirectory
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: physicalsystems-0.2.1-ubuntu-canary-${{ github.sha }}
+          path: candidate-artifacts
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
   test:
     # Every supported desktop route exercises a packed npm artifact.
     # Linux additionally proves fail-closed Secret Service storage and a real
@@ -17,6 +57,7 @@ jobs:
     # Keep the three established required-check contexts stable. Ubuntu 22.04
     # is additive; the established Linux context remains the Ubuntu 24.04 job.
     name: test (${{ matrix.check_name }})
+    needs: candidate
     strategy:
       fail-fast: false
       matrix:
@@ -66,11 +107,12 @@ jobs:
         run: |
           npm install --global "npm@11.19.0"
           if ((npm --version) -ne '11.19.0') { throw 'Expected npm 11.19.0' }
-      - name: Bootstrap the local Pi runtime and install the CLI offline
-        shell: pwsh
-        run: |
-          $cacheDirectory = Join-Path $env:RUNNER_TEMP 'tinyedge-pi-runtime-cache'
-          npm --prefix packages/cli run bootstrap:pi-runtime -- --cache $cacheDirectory --install-cli
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: physicalsystems-0.2.1-ubuntu-canary-${{ github.sha }}
+          path: candidate-artifacts
+      - name: Reuse the candidate dependency closure for platform source tests
+        run: node scripts/hydrate-review-dependencies.mjs candidate-artifacts ${{ github.sha }}
       - name: Exercise Linux Secret Service adapter
         if: matrix.platform == 'linux'
         shell: bash
@@ -91,7 +133,7 @@ jobs:
       - run: npm --prefix packages/cli run check
       - run: npm --prefix packages/cli test
       - run: node --test test/npm-release-workflow.test.mjs
-      - run: npm --prefix packages/cli run check:release-packages
+      - run: npm --prefix packages/cli run release:verify -- ${{ github.workspace }}/candidate-artifacts
         if: matrix.platform == 'windows'
       - name: Verify the packed Linux package and interactive Harness
         if: matrix.platform == 'linux'
@@ -102,20 +144,5 @@ jobs:
           trap 'rm -rf "$runtime_directory"' EXIT
           dbus-run-session -- bash -euo pipefail -c '
             eval "$(printf "%s" "tinyedge-ephemeral-keyring" | gnome-keyring-daemon --unlock --components=secrets)"
-            npm --prefix packages/cli run check:release-packages
+            npm --prefix packages/cli run release:verify -- "$GITHUB_WORKSPACE/candidate-artifacts"
           '
-      - name: Pack a review candidate for the Ubuntu laptop canary
-        if: matrix.platform == 'windows' && matrix.architecture == 'x64'
-        shell: pwsh
-        run: |
-          $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE 'candidate-artifacts'
-          npm --prefix packages/cli run release:pack -- $artifactDirectory
-      - name: Upload the review candidate for the Ubuntu laptop canary
-        if: matrix.platform == 'windows' && matrix.architecture == 'x64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: physicalsystems-0.2.1-ubuntu-canary-${{ github.sha }}
-          path: candidate-artifacts
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7

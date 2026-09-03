@@ -20,6 +20,49 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const workflow = readFileSync(path.join(root, '.github/workflows/npm-release.yml'), 'utf8')
 const cliWorkflow = readFileSync(path.join(root, '.github/workflows/cli.yml'), 'utf8')
 
+test('PR checks build once and verify the same candidate on every platform without changing publish authority', () => {
+  assert.equal((cliWorkflow.match(/run release:pack --/g) || []).length, 1)
+  assert.equal((cliWorkflow.match(/bootstrap:pi-runtime --/g) || []).length, 1)
+  assert.doesNotMatch(cliWorkflow, /run check:release-packages|npm publish|id-token: write|environment: npm-release/)
+  assert.match(cliWorkflow, /needs: candidate/)
+  assert.match(cliWorkflow, /hydrate-review-dependencies\.mjs candidate-artifacts \$\{\{ github.sha \}\}/)
+  assert.match(cliWorkflow, /actions\/download-artifact@[a-f0-9]{40}/)
+  assert.equal((cliWorkflow.match(/run release:verify --/g) || []).length, 2)
+  assert.match(cliWorkflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
+})
+
+test('CI dependency hydration checks source SHA and artifact hash before extraction and refuses overwrite', () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'ps-hydrate-'))
+  try {
+    writeFixtureFile(fixture, 'scripts/hydrate-review-dependencies.mjs', readFileSync(path.join(root, 'scripts/hydrate-review-dependencies.mjs')))
+    writeFixtureFile(fixture, 'payload/package/node_modules/demo/index.js', 'export default 42\n')
+    mkdirSync(path.join(fixture, 'candidate'))
+    mkdirSync(path.join(fixture, 'packages/cli'), { recursive: true })
+    const archive = path.join(fixture, 'candidate/physicalsystems-0.2.0.tgz')
+    const packed = spawnSync('tar', ['-czf', archive, '-C', path.join(fixture, 'payload'), 'package'], { encoding: 'utf8' })
+    assert.equal(packed.status, 0, packed.stderr)
+    const commit = 'a'.repeat(40), sha256 = createHash('sha256').update(readFileSync(archive)).digest('hex')
+    const manifest = { commit, artifacts: [{ key: 'physicalsystems', filename: path.basename(archive), sha256 }] }
+    const writeManifest = () => writeFixtureFile(fixture, 'candidate/release-manifest.json', JSON.stringify(manifest))
+    writeManifest()
+    const hydrate = (sha = commit) => spawnSync(process.execPath, [path.join(fixture, 'scripts/hydrate-review-dependencies.mjs'), path.join(fixture, 'candidate'), sha], { encoding: 'utf8' })
+    assert.notEqual(hydrate('b'.repeat(40)).status, 0)
+    assert.equal(existsSync(path.join(fixture, 'packages/cli/node_modules')), false)
+    manifest.artifacts[0].sha256 = '0'.repeat(64); writeManifest()
+    assert.notEqual(hydrate().status, 0)
+    assert.equal(existsSync(path.join(fixture, 'packages/cli/node_modules')), false)
+    manifest.artifacts[0].sha256 = sha256; writeManifest()
+    const success = hydrate()
+    assert.equal(success.status, 0, success.stderr)
+    assert.equal(readFileSync(path.join(fixture, 'packages/cli/node_modules/demo/index.js'), 'utf8'), 'export default 42\n')
+    assert.notEqual(hydrate().status, 0)
+  } finally {
+    assert.equal(path.dirname(path.resolve(fixture)), path.resolve(tmpdir()))
+    assert.ok(path.basename(fixture).startsWith('ps-hydrate-'))
+    rmSync(fixture, { recursive: true, force: true })
+  }
+})
+
 test('protected npm publication requires bundled Node manifests before build, not source candidates', () => {
   const requireMain = workflow.slice(workflow.indexOf('  require-main:'), workflow.indexOf('\n  build:'))
   assert.match(requireMain, /run: node scripts\/check-node-release-index\.mjs/)
