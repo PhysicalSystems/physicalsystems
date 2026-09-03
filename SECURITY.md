@@ -2,14 +2,15 @@
 
 ## Supported versions
 
-Security fixes currently target the source on `main` and, once published, the
-`physicalsystems@0.2.0` preview. The older TinyEdge npm packages are historical
+Security fixes currently target the source on `main` and the current
+`physicalsystems` preview. The older TinyEdge npm packages are historical
 clients and are not the current package identity described by this repository.
 
 | Version | Security support |
 | --- | --- |
 | `main` | Yes |
-| `physicalsystems@0.2.0` | Yes when published to `preview`; until then use `main` |
+| `physicalsystems@0.2.1` | Yes after the protected `preview` publication |
+| `physicalsystems@0.2.0` | Superseded after `preview` moves to `0.2.1` |
 | `tinyedge@0.1.5` | Historical preview during the package transition |
 | `tinyedge@0.1.4` | Historical Windows preview |
 | `tinyedge@0.1.3` | Historical latest |

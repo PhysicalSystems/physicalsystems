@@ -1,12 +1,12 @@
 {
   "name": "physicalsystems",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "physicalsystems",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "bundleDependencies": [
         "@earendil-works/pi-tui",
         "@tinyedge/pi-runtime",

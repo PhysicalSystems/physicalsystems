@@ -49,23 +49,24 @@ execution are the next contract boundary, not hidden demo behavior.
 ## Installation status
 
 The npm name [`physicalsystems`](https://www.npmjs.com/package/physicalsystems)
-currently contains only the reviewed inert `0.0.0` namespace bootstrap. The
-functional `0.2.0` package is prepared in this repository but is not public
-until this command returns `"0.2.0"`:
+publishes reviewed application builds on the `preview` tag. Resolve the tag
+before launch rather than assuming which immutable version it currently names:
 
 ```bash
-npm view physicalsystems@0.2.0 version --json
+npm view physicalsystems@preview version --json
 ```
 
-After the separately approved preview release, the one-shot command will be:
+The one-shot preview command is:
 
 ```bash
 npx --yes physicalsystems@preview
 ```
 
-Until then, run the application from source. Do not use the old
-`tinyedge@preview` package as though it were the current Physical Systems
-product.
+`physicalsystems@0.2.0` was the first application release. `0.2.1` adds a
+fail-fast prerequisite check for older Node.js versions. Its protected release
+publishes to `preview` and then independently verifies the public registry;
+require the `npm view` check above to succeed before launch. Do not use the old
+`tinyedge@preview` package as though it were the current Physical Systems product.
 
 ## Run from source
 
@@ -75,6 +76,11 @@ Requirements:
 - Windows x64/ARM64, or Ubuntu 22.04/24.04 desktop x64;
 - on Ubuntu, `secret-tool`, D-Bus, an unlocked Secret Service keyring and
   `xdg-open` for model-provider credentials and browser onboarding.
+
+On Ubuntu, check `node --version` in the same terminal before using `npx`.
+Older npm versions may only warn about an unsupported engine; the Physical
+Systems launcher exits before loading the application and points to the
+persistent Node setup in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ```bash
 git clone https://github.com/PhysicalSystems/physicalsystems.git

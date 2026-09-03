@@ -30,7 +30,7 @@ hashes. An empty index, placeholder artifact URLs, or missing Ubuntu x64 Python
 clean installation tests of the actual downloadable bytes. Source tests and
 review-candidate packing remain available before those artifacts are published.
 
-1. Builds `physicalsystems@0.2.0` once on Windows x64 and records exact
+1. Builds `physicalsystems@0.2.1` once on Windows x64 and records exact
    tarball checksums.
 2. Verifies those same bytes on Windows x64, native Windows ARM64, Ubuntu
    22.04, and Ubuntu 24.04 with the pinned npm 11 release client and npm 12
@@ -38,19 +38,22 @@ review-candidate packing remain available before those artifacts are published.
 3. Exercises normal local, global, and isolated npm-exec installation,
    command shims, the bare Harness, the embedded client and Pi extension, and
    Ubuntu Secret Service integration.
-4. Enters the protected environment only after all platform checks pass and
+4. Runs the exact tarball with Node.js 12.22.9 and npm 8.5.1, requires one
+   actionable prerequisite failure, and proves that modern application modules
+   were not parsed.
+5. Enters the protected environment only after all platform checks pass and
    requires `NPM_RELEASE_POLICY_VERSION=v3-physicalsystems-preview`.
-5. Verifies the inert namespace bootstrap, the already-published runtime, and
-   that `physicalsystems@0.2.0` is not already public.
-6. Publishes exactly one tarball:
+6. Verifies the inert namespace bootstrap, the already-published runtime, and
+   that `physicalsystems@0.2.1` is not already public.
+7. Publishes exactly one tarball:
 
    ```bash
-   npm publish "./release-artifacts/physicalsystems-0.2.0.tgz" \
+   npm publish "./release-artifacts/physicalsystems-0.2.1.tgz" \
      --registry="https://registry.npmjs.org/" \
      --provenance --tag preview --access public
    ```
 
-7. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.0`; compares
+8. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.1`; compares
    registry integrity and shasum with the approved tarball; requires SLSA v1
    provenance; and runs `npm audit signatures`.
 
@@ -109,7 +112,7 @@ before the first OIDC release:
 
    npm creates an initial `latest=0.0.0` mapping for a brand-new package even
    when this command uses `--tag bootstrap`. This is expected and remains inert
-   until the separately reviewed `0.2.0` release is manually promoted.
+   until a separately reviewed application release is manually promoted.
 
 4. Record its registry SHA-512 integrity and SHA-1 shasum as the protected
    environment values `PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY` and
@@ -141,22 +144,22 @@ After publishing to `preview`, verify from clean Windows and Ubuntu desktop
 environments:
 
 ```bash
-npm view physicalsystems@0.2.0 version dist.integrity dist.shasum dist.attestations --json
+npm view physicalsystems@0.2.1 version dist.integrity dist.shasum dist.attestations --json
 npm view physicalsystems dist-tags --json
-npx --yes physicalsystems@0.2.0 --version
-npm install --global physicalsystems@0.2.0
+npx --yes physicalsystems@0.2.1 --version
+npm install --global physicalsystems@0.2.1
 physicalsystems
 ```
 
 Also create an empty audit directory, install with
-`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.0`, and
+`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.1`, and
 run `npm audit signatures`. Use a disposable account for optional cloud OAuth
 or MCP canaries; package checks are not production-service evidence.
 
 Only after the canary is accepted may a maintainer promote the exact bytes:
 
 ```bash
-npm dist-tag add physicalsystems@0.2.0 latest
+npm dist-tag add physicalsystems@0.2.1 latest
 ```
 
 Promotion requires maintainer presence and npm 2FA. If the preview fails, do
