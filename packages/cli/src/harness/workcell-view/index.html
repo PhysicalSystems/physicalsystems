@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Workcell · Physical Systems</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand" aria-label="Physical Systems workcell"><span class="brand-mark" aria-hidden="true">PS</span>PHYSICAL SYSTEMS<span class="brand-divider">/</span><span class="brand-context">Workcell</span></div>
+    <div class="connection"><span class="dot" id="connection-dot"></span><span id="connection-state">Connecting to Harness</span></div>
+  </header>
+  <main>
+    <div class="heading"><div><p class="eyebrow">LOCAL HARNESS · OPERATOR VIEW</p><h1>Your physical workspace.</h1><p class="subheading">Observe the setup. Describe the outcome. Review what is still needed.</p></div><button id="refresh" class="secondary">Refresh discovery</button></div>
+    <div class="boundary"><span class="boundary-label">OPERATOR CONTROL</span><span>Agent proposals do not authorize movement. Camera capture and any available physical run require separate, explicit operator actions.</span></div>
+    <p id="notice" role="status" class="notice" hidden></p>
+    <div class="workspace">
+      <section class="panel camera-panel" aria-labelledby="camera-title">
+        <div class="panel-heading"><div><p class="eyebrow">01 / OBSERVE</p><h2 id="camera-title">Camera view</h2></div><span class="badge" id="camera-state">NOT STARTED</span></div>
+        <div class="camera-controls"><label for="camera-select" class="sr-only">Observed camera</label><select id="camera-select"><option value="">Choose an observed camera</option></select><button id="camera-start" disabled>Start preview</button><button id="camera-stop" class="secondary" disabled>Stop preview</button></div>
+        <div class="viewport"><img id="preview" alt="Exact selected-camera preview frame" hidden><div class="camera-empty" id="camera-empty"><span class="viewfinder" aria-hidden="true">⌗</span><h3>No camera capture started</h3><p>Choose a camera observed by the local node, then start preview. Opening this view does not open a camera.</p></div><span id="frame-kind" class="frame-kind" hidden></span></div>
+        <div class="camera-evidence"><div><span class="label">FRAME</span><p id="frame-details">No frame received</p></div><div><span class="label">PHYSICAL STATE</span><p id="observation">Unknown · preview is not a detector</p></div></div>
+        <p id="camera-detail" class="panel-note">Camera identity and freshness come from the local node.</p>
+      </section>
+      <section class="panel intent-panel" aria-labelledby="intent-title">
+        <div class="panel-heading"><div><p class="eyebrow">02 / DESCRIBE</p><h2 id="intent-title">What should happen?</h2></div><span class="badge" id="agent-state">IDLE</span></div>
+        <p class="panel-note">The same assistant and conversation as your terminal. Device discovery informs the plan; assistant messages and questions never grant movement permission.</p>
+        <form id="intent-form"><label for="intent-input">Desired physical outcome</label><input id="intent-input" maxlength="500" autocomplete="off" placeholder="Describe your task in your own words…" required><button id="intent-submit" type="submit" disabled>Ask the Harness <span aria-hidden="true">↗</span></button></form>
+        <p class="model-line" id="model-line">Select a model in the Harness terminal to continue.</p>
+        <div id="conversation" class="conversation" aria-live="polite"><p class="quiet">Your request, the assistant’s questions, and its response will appear here.</p></div>
+        <div id="choice" class="choice" hidden></div>
+      </section>
+      <section class="panel devices-panel" aria-labelledby="devices-title">
+        <div class="panel-heading"><div><p class="eyebrow">CONNECTED SETUP</p><h2 id="devices-title">Observed devices</h2></div><span class="count" id="device-count">—</span></div>
+        <div id="devices" class="devices"><p class="quiet">Waiting for discovery.</p></div><p id="discovery-note" class="panel-note">Only devices reported as detected are listed.</p>
+      </section>
+      <section class="panel proposal-panel" aria-labelledby="proposal-title">
+        <div class="panel-heading"><div><p class="eyebrow">03 / REVIEW</p><h2 id="proposal-title">Capability proposal</h2></div><span class="badge" id="proposal-state">WAITING</span></div>
+        <div id="proposal"><p class="quiet">A proposal appears after the assistant checks a physical capability against the node’s registered implementations.</p></div>
+        <div class="execution-lock"><span aria-hidden="true">⊘</span><div><strong>Selection is not authorization</strong><p>Prepare an exact available configuration below. A separate, unexpired operator approval is required for each invocation.</p></div></div>
+      </section>
+      <section class="panel execution-panel" aria-labelledby="execution-title">
+        <div class="panel-heading"><div><p class="eyebrow">04 / OPERATOR EXECUTION</p><h2 id="execution-title">Physical run</h2></div><span class="badge" id="execution-state">UNAVAILABLE</span></div>
+        <p id="execution-detail" class="panel-note">Checking the local execution service. No execution is assumed available.</p>
+        <div class="execution-controls"><label for="configuration-select">Available local configuration</label><select id="configuration-select"><option value="">No configuration available</option></select><div class="button-row"><button id="run-prepare" disabled>Prepare invocation</button><button id="execution-refresh" class="secondary">Refresh runs</button></div></div>
+        <p id="configuration-detail" class="panel-note">An installed configuration is not proof of current readiness.</p>
+        <div class="run-history"><label for="run-select">Persistent run history</label><select id="run-select"><option value="">Select a run</option></select></div>
+        <div id="run-details" class="run-details"><p class="quiet">A run is one capability invocation, not the controller process. The controller can serve many separate runs.</p></div>
+        <div id="run-confirmation" class="run-confirmation" hidden><p id="run-confirmation-text"></p><label><input type="checkbox" id="run-confirm"> I approve only this exact invocation and its displayed configuration.</label><button id="run-approve" disabled>Approve this invocation</button></div>
+        <div class="run-actions"><button id="run-stop" class="danger" disabled>Request stop</button><button id="run-reconcile" class="secondary" disabled>Check uncertain outcome</button><button id="run-receipt" class="secondary" disabled>Verify receipt</button></div>
+        <p class="panel-note">Stop is independent of other pending requests. If it cannot be confirmed, use the physical stop procedure. Checking an uncertain outcome never retries the motion. Closing this view does not stop a Node-owned run.</p>
+      </section>
+    </div>
+    <footer><span id="node-detail">Local workcell · no cloud account required</span><span>Agent Skill → Physical capability → Capability implementation</span></footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,96 @@
+{
+  "fixtureKind": "synthetic-no-hardware",
+  "statusResponse": {
+    "contractVersion": "experimental-camera-preview-status-v1",
+    "state": "streaming",
+    "captureSessionId": "camera-synthetic",
+    "selectedCandidateId": "candidate-64841dd321730fa3dfc8",
+    "latestFrameId": "camera-synthetic-0",
+    "frameFresh": true,
+    "frameAgeMs": 100,
+    "staleAfterMs": 2000,
+    "errorCode": null,
+    "observationStatus": "not-configured",
+    "physicalState": "unknown",
+    "physicalExecutionAuthorized": false,
+    "rawFramePersisted": false,
+    "availableCameras": [
+      {
+        "candidateId": "candidate-64841dd321730fa3dfc8",
+        "displayName": "Synthetic test camera",
+        "observedIdentity": "/dev/v4l/by-id/test-camera",
+        "identityStability": "stable",
+        "adapter": {
+          "status": "available",
+          "adapterId": "tinyedge-v4l2-camera",
+          "detail": null
+        },
+        "candidateDigest": "sha256:237d38b011988e8072ae2fa67f1cf0935237aeefcf28bb8372e0e9a29fac3bda"
+      }
+    ]
+  },
+  "startRequest": {
+    "contractVersion": "experimental-camera-preview-start-v1",
+    "candidateId": "candidate-64841dd321730fa3dfc8",
+    "expectedCandidateDigest": "sha256:237d38b011988e8072ae2fa67f1cf0935237aeefcf28bb8372e0e9a29fac3bda"
+  },
+  "frameResponse": {
+    "contractVersion": "experimental-camera-preview-frame-v1",
+    "status": {
+      "contractVersion": "experimental-camera-preview-status-v1",
+      "state": "streaming",
+      "captureSessionId": "camera-synthetic",
+      "selectedCandidateId": "candidate-64841dd321730fa3dfc8",
+      "latestFrameId": "camera-synthetic-0",
+      "frameFresh": true,
+      "frameAgeMs": 100,
+      "staleAfterMs": 2000,
+      "errorCode": null,
+      "observationStatus": "not-configured",
+      "physicalState": "unknown",
+      "physicalExecutionAuthorized": false,
+      "rawFramePersisted": false
+    },
+    "frame": {
+      "contractVersion": "experimental-camera-preview-packet-v1",
+      "frameId": "camera-synthetic-0",
+      "candidateId": "candidate-64841dd321730fa3dfc8",
+      "candidateDigest": "sha256:237d38b011988e8072ae2fa67f1cf0935237aeefcf28bb8372e0e9a29fac3bda",
+      "captureSessionId": "camera-synthetic",
+      "sequence": 0,
+      "source": {
+        "kind": "synthetic",
+        "hardwareIdentity": "/dev/v4l/by-id/test-camera",
+        "identityStability": "stable",
+        "pixelFormat": "bgr8",
+        "digest": "sha256:ae4b3280e56e2faf83f414a6e3dabe9d5fbe18976544c05fed121accb85b53fc",
+        "width": 1,
+        "height": 1
+      },
+      "capture": {
+        "capturedAtMonotonicNs": "1000000000",
+        "clockDomain": "host-monotonic",
+        "clockSessionId": "clock-synthetic",
+        "timestampBasis": "host-read-window-start",
+        "sensorExposureAgeBounded": false
+      },
+      "preview": {
+        "contentType": "image/jpeg",
+        "encoding": "base64",
+        "data": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD5WooopDP/2Q==",
+        "digest": "sha256:eb5a8dc2b55305ad9b8d14cbbbd8dc0d7be0a233fa76d37d20a37720c789301f",
+        "derivedFromSourceDigest": "sha256:ae4b3280e56e2faf83f414a6e3dabe9d5fbe18976544c05fed121accb85b53fc",
+        "width": 1,
+        "height": 1,
+        "rotationDegrees": 0
+      },
+      "analysis": null,
+      "observation": null,
+      "physicalExecutionAuthorized": false
+    }
+  },
+  "stopRequest": {
+    "contractVersion": "experimental-camera-preview-stop-v1",
+    "expectedCaptureSessionId": "camera-synthetic"
+  }
+}

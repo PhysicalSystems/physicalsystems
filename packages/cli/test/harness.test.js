@@ -1,14 +1,32 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import path from 'node:path'
+import { tmpdir } from 'node:os'
 
 import { PHYSICAL_HARNESS_TOOL_ALLOWLIST } from '../src/chat/pi-session.js'
 import { harnessCommand } from '../src/commands/harness.js'
 import { createTinyEdgeInteractiveMode } from '../src/harness/interactive-mode.js'
 
-function fakeSdk({ extensionErrors = [], disposeError, onModelRuntimeCreate } = {}) {
+const { loadSkillsFromDir } = await import(new URL('./core/skills.js', import.meta.resolve('@tinyedge/pi-runtime')))
+const testConfigDir = path.join(tmpdir(), 'physicalsystems-harness-unit-config')
+
+// These orchestration tests already use a fake Pi SDK/mode. Keep installation
+// and supervision fake too, independent of the bundled index, caller Python,
+// network, or hardware. Real managed first-run acceptance is tested separately.
+function runFakeHarness(options) {
+  return harnessCommand({
+    env: {},
+    managedNodeEnvironmentImpl: async ({ env }) => env,
+    startNodeSupervisorImpl: async () => undefined,
+    ...options,
+  })
+}
+
+function fakeSdk({ extensionErrors = [], disposeError, onModelRuntimeCreate, promptImpl } = {}) {
   const calls = {}
   class InteractiveMode {}
   const sdk = {
+    loadSkillsFromDir,
     ModelRuntime: {
       async create(options) {
         onModelRuntimeCreate?.()
@@ -31,7 +49,14 @@ function fakeSdk({ extensionErrors = [], disposeError, onModelRuntimeCreate } = 
     },
     async createAgentSessionFromServices(options) {
       calls.session = options
-      return { session: { kind: 'session' } }
+      const session = { kind: 'session', async prompt(...args) {
+        calls.prompts ||= []
+        calls.prompts.push({ session: this, args })
+        return promptImpl?.(...args)
+      } }
+      calls.sessions ||= []
+      calls.sessions.push(session)
+      return { session }
     },
     async createAgentSessionRuntime(factory, options) {
       calls.runtimeOptions = options
@@ -42,6 +67,14 @@ function fakeSdk({ extensionErrors = [], disposeError, onModelRuntimeCreate } = 
       })
       return {
         ...created,
+        async replaceSession() {
+          const next = await factory({
+            cwd: options.cwd, agentDir: options.agentDir, sessionManager: options.sessionManager,
+            sessionStartEvent: { type: 'session_start', reason: 'new' },
+          })
+          this.session = next.session
+          return next.session
+        },
         async dispose() {
           calls.disposed = true
           if (disposeError) throw disposeError
@@ -63,12 +96,60 @@ function restoreEnvironmentAfterTest(t, names) {
   })
 }
 
+test('production Harness delegates managed setup before supervision and Pi startup', async () => {
+  const order = []
+  const config = { configDir: testConfigDir }
+  const env = { CALLER_SETTING: 'synthetic-test-value' }
+  const managedEnvironment = { ...env, TINYEDGE_PHYSICAL_NODE_URL: 'http://127.0.0.1:39127' }
+  const { sdk, calls } = fakeSdk({ onModelRuntimeCreate: () => order.push('pi') })
+  let extensionEnvironment
+
+  await harnessCommand({
+    config, env, sdk,
+    async managedNodeEnvironmentImpl(options) {
+      order.push('setup')
+      assert.equal(options.config, config)
+      assert.equal(options.env, env)
+      return managedEnvironment
+    },
+    async startNodeSupervisorImpl(options) {
+      order.push('supervisor')
+      assert.equal(options.env, managedEnvironment)
+      return undefined
+    },
+    createExtension(options) { extensionEnvironment = options.env; return () => {} },
+    createMode: () => ({ async run() { order.push('run') } }),
+  })
+
+  assert.deepEqual(order, ['setup', 'supervisor', 'pi', 'run'])
+  assert.equal(extensionEnvironment, managedEnvironment)
+  assert.equal(env.TINYEDGE_PHYSICAL_NODE_URL, undefined)
+  assert.equal(calls.disposed, true)
+})
+
+test('production Harness propagates managed setup failure without starting Node or Pi', async () => {
+  const setupError = new Error('Synthetic managed setup refusal')
+  const { sdk, calls } = fakeSdk({ onModelRuntimeCreate() { assert.fail('Pi must not start after setup fails') } })
+  let setupCalls = 0
+
+  await assert.rejects(harnessCommand({
+    config: { configDir: testConfigDir }, env: {}, sdk,
+    async managedNodeEnvironmentImpl() { setupCalls += 1; throw setupError },
+    async startNodeSupervisorImpl() { assert.fail('Node must not start after setup fails') },
+    createMode() { assert.fail('The Harness must not run after setup fails') },
+  }), (error) => error === setupError)
+
+  assert.equal(setupCalls, 1)
+  assert.equal(calls.modelRuntime, undefined)
+  assert.equal(calls.session, undefined)
+})
+
 test('native Harness uses Pi runtime with only reviewed TinyEdge resources and tools', async () => {
   const { sdk, calls } = fakeSdk()
   let extensionOptions
   let ran = false
-  await harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { throw new Error('standalone Harness must not read cloud auth') } },
     secretStore: { read: async () => null, write: async () => {}, delete: async () => {} },
     sdk,
@@ -102,6 +183,83 @@ test('native Harness uses Pi runtime with only reviewed TinyEdge resources and t
   assert.equal(extensionOptions.cloudEnabled, false)
   assert.equal(extensionOptions.autoLogin, undefined)
   assert.equal(extensionOptions.showHeader, true)
+  assert.deepEqual(extensionOptions.agentSkillRegistry.summaries.map(({ skillId }) => skillId), [
+    'inspect-workcell', 'transfer-container',
+  ])
+  assert.match(calls.services.resourceLoaderOptions.systemPrompt, /read_agent_skill/)
+  assert.match(calls.services.resourceLoaderOptions.systemPrompt, /instruction packages, not hardware capabilities/)
+  assert.doesNotMatch(calls.services.resourceLoaderOptions.systemPrompt, /<location>/)
+})
+
+test('workcell callbacks use the current gated Harness session rather than creating a second agent', async () => {
+  let releaseTerminal
+  const terminalPreflight = new Promise((resolve) => { releaseTerminal = resolve })
+  const { sdk, calls } = fakeSdk({ promptImpl: (text) => text === 'Terminal preflight' ? terminalPreflight : undefined })
+  let extensionOptions
+  await runFakeHarness({
+    config: { configDir: testConfigDir }, sdk, cwd: 'C:\\work',
+    createExtension(options) {
+      extensionOptions = options
+      assert.equal(options.canSubmitWorkcellIntent(), false)
+      assert.throws(() => options.submitWorkcellIntent('Not ready'), /not ready/)
+      return () => {}
+    },
+    createMode(runtime) {
+      return { async run() {
+        assert.equal(extensionOptions.canSubmitWorkcellIntent(), true)
+        const firstSession = runtime.session
+        const pending = firstSession.prompt('Terminal preflight')
+        assert.equal(extensionOptions.canSubmitWorkcellIntent(), false)
+        await assert.rejects(extensionOptions.submitWorkcellIntent('Competing browser input'), { code: 'ERR_HARNESS_PROMPT_BUSY' })
+        assert.equal(calls.prompts.length, 1)
+        releaseTerminal()
+        await pending
+        assert.equal(extensionOptions.canSubmitWorkcellIntent(), true)
+        await extensionOptions.submitWorkcellIntent('Inspect the first workcell')
+        assert.equal(calls.prompts[1].session, firstSession)
+        assert.deepEqual(calls.prompts[1].args, ['Inspect the first workcell', { expandPromptTemplates: false, source: 'interactive' }])
+        assert.equal(calls.sessions.length, 1)
+
+        const nextSession = await runtime.replaceSession()
+        assert.notEqual(nextSession, firstSession)
+        const secondPending = nextSession.prompt('Terminal preflight')
+        assert.equal(extensionOptions.canSubmitWorkcellIntent(), false, 'session replacement installs a fresh gate')
+        await assert.rejects(extensionOptions.submitWorkcellIntent('Competing after replacement'), { code: 'ERR_HARNESS_PROMPT_BUSY' })
+        await secondPending
+        await extensionOptions.submitWorkcellIntent('Inspect the replacement workcell')
+        assert.equal(calls.prompts.at(-1).session, nextSession)
+        assert.deepEqual(calls.prompts.at(-1).args, ['Inspect the replacement workcell', { expandPromptTemplates: false, source: 'interactive' }])
+        assert.equal(calls.sessions.length, 2, 'only the explicit session replacement creates another session')
+      } }
+    },
+  })
+  assert.equal(calls.disposed, true)
+  assert.equal(extensionOptions.canSubmitWorkcellIntent(), false)
+  assert.throws(() => extensionOptions.submitWorkcellIntent('After shutdown'), /has ended/)
+})
+
+test('optional owned Node credential goes only to the reviewed extension and closes with Harness', async () => {
+  const { sdk, calls } = fakeSdk()
+  const env = { PHYSICAL_NODE_EXECUTABLE: 'explicit-test-only' }
+  const environment = { ...env, TINYEDGE_PHYSICAL_NODE_URL: 'http://127.0.0.1:39127', PHYSICAL_NODE_EXECUTION_TOKEN: 'private-synthetic-session-token' }
+  let closed = 0, extensionOptions
+  await runFakeHarness({ config: { configDir: testConfigDir }, sdk, env,
+    async startNodeSupervisorImpl(options) { assert.equal(options.env, env); return { environment, async dispose() { closed += 1 } } },
+    createExtension(options) { extensionOptions = options; return () => {} }, createMode: () => ({ async run() {} }),
+  })
+  assert.equal(extensionOptions.env, environment)
+  assert.equal(env.PHYSICAL_NODE_EXECUTION_TOKEN, undefined)
+  assert.equal(calls.services.resourceLoaderOptions.systemPrompt.includes(environment.PHYSICAL_NODE_EXECUTION_TOKEN), false)
+  assert.equal(closed, 1)
+})
+
+test('owned Node closes after Pi initialization failure and unconfirmed shutdown is not hidden', async () => {
+  let closed = 0
+  const { sdk } = fakeSdk({ onModelRuntimeCreate() { throw new Error('Pi failed') } })
+  await assert.rejects(runFakeHarness({ config: { configDir: testConfigDir }, sdk, env: {},
+    async startNodeSupervisorImpl() { return { environment: {}, async dispose() { closed += 1; throw new Error('Unconfirmed') } } },
+  }), /local Node shutdown is unconfirmed/)
+  assert.equal(closed, 1)
 })
 
 test('native Harness isolates Pi startup side effects and restores its caller environment', async (t) => {
@@ -117,8 +275,8 @@ test('native Harness isolates Pi startup side effects and restores its caller en
     assert.equal(process.env.TMUX, undefined)
   }
   const { sdk } = fakeSdk({ onModelRuntimeCreate: assertIsolated })
-  await harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { return { connected: false } } },
     sdk,
     cwd: 'C:\\work',
@@ -145,8 +303,8 @@ test('native Harness restores an absent Pi startup environment after initializat
       throw initializationError
     },
   })
-  await assert.rejects(harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await assert.rejects(runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { return { connected: false } } },
     sdk,
     cwd: 'C:\\work',
@@ -159,8 +317,8 @@ test('native Harness restores an absent Pi startup environment after initializat
 
 test('native Harness aborts if the reviewed security extension fails to load', async () => {
   const { sdk } = fakeSdk({ extensionErrors: [{ path: 'inline', error: 'broken' }] })
-  await assert.rejects(harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await assert.rejects(runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { return { connected: false } } },
     sdk,
     cwd: 'C:\\work',
@@ -171,8 +329,8 @@ test('native Harness aborts if the reviewed security extension fails to load', a
 
 test('native Harness disposes the runtime if mode construction fails', async () => {
   const { sdk, calls } = fakeSdk()
-  await assert.rejects(harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await assert.rejects(runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { return { connected: false } } },
     sdk,
     cwd: 'C:\\work',
@@ -185,8 +343,8 @@ test('native Harness disposes the runtime if mode construction fails', async () 
 test('native Harness stops the TUI and disposes the runtime if run fails', async () => {
   const { sdk, calls } = fakeSdk()
   let stopped = false
-  await assert.rejects(harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await assert.rejects(runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { return { connected: false } } },
     sdk,
     cwd: 'C:\\work',
@@ -203,8 +361,8 @@ test('native Harness stops the TUI and disposes the runtime if run fails', async
 test('native Harness preserves the run failure if cleanup also fails', async () => {
   const runError = new Error('mode run failed')
   const { sdk, calls } = fakeSdk({ disposeError: new Error('dispose failed') })
-  await assert.rejects(harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await assert.rejects(runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { return { connected: false } } },
     sdk,
     cwd: 'C:\\work',
@@ -255,8 +413,8 @@ test('native Harness uses the TinyEdge interactive mode wrapper by default', asy
     getChangelogForDisplay() { return 'pi notes' }
     async run() {}
   }
-  await harnessCommand({
-    config: { configDir: 'C:\\TinyEdge', scopes: ['tinyedge:read'] },
+  await runFakeHarness({
+    config: { configDir: testConfigDir, scopes: ['tinyedge:read'] },
     tokenStore: { async summary() { return { connected: false } } },
     sdk,
     cwd: 'C:\\work',

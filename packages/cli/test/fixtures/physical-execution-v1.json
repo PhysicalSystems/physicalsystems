@@ -1,0 +1,664 @@
+{
+  "status": {
+    "contractVersion": "physicalsystems-execution-status-v1",
+    "availability": "available",
+    "mode": "simulation",
+    "configurations": [
+      {
+        "configurationId": "simulation-transfer-v1",
+        "displayName": "SIMULATION ONLY: container transfer",
+        "capabilityId": "transfer-container",
+        "implementationId": "simulation-taught-transfer-v1",
+        "configurationDigest": "sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99",
+        "implementationDigest": "sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545",
+        "mode": "simulation"
+      }
+    ],
+    "reason": null,
+    "physicalExecutionAuthorized": false
+  },
+  "prepared": {
+    "approval": {
+      "approvedAt": null,
+      "digest": "sha256:031d6ff245b72bf2f3e443161a95c830361e3e63ec772cf647dc3a321aa0723b",
+      "expiresAt": "2026-09-02T20:33:32.369Z"
+    },
+    "capabilityId": "transfer-container",
+    "configurationDigest": "sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99",
+    "configurationId": "simulation-transfer-v1",
+    "contractVersion": "physicalsystems-run-v1",
+    "createdAt": "2026-09-02T20:32:32.369Z",
+    "implementationDigest": "sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545",
+    "implementationId": "simulation-taught-transfer-v1",
+    "inputs": {
+      "destination": "station-b",
+      "source": "station-a"
+    },
+    "mode": "simulation",
+    "outcome": null,
+    "phase": "WAITING_FOR_APPROVAL",
+    "physicalExecutionAuthorized": false,
+    "routeReceiptDigest": "sha256:d962777285c80e9f785390916b76aeb563dc56b30352c06282f4bb323d3d7246",
+    "runId": "run-e8fed73769324643bb9f1461c1f18566",
+    "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9",
+    "stopStatus": "NOT_REQUESTED",
+    "updatedAt": "2026-09-02T20:32:32.385Z",
+    "revision": 2,
+    "events": [
+      {
+        "at": "2026-09-02T20:32:32.385Z",
+        "detail": {
+          "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9"
+        },
+        "type": "prepared",
+        "sequence": 1
+      }
+    ],
+    "runDigest": "sha256:498d27b86b22eac5cc352572f5d5fa66bd6388aae3737ee4e1dcbb8b694af02b"
+  },
+  "approved": {
+    "approval": {
+      "approvedAt": "2026-09-02T20:32:32.417Z",
+      "digest": "sha256:031d6ff245b72bf2f3e443161a95c830361e3e63ec772cf647dc3a321aa0723b",
+      "expiresAt": "2026-09-02T20:33:32.369Z"
+    },
+    "capabilityId": "transfer-container",
+    "configurationDigest": "sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99",
+    "configurationId": "simulation-transfer-v1",
+    "contractVersion": "physicalsystems-run-v1",
+    "createdAt": "2026-09-02T20:32:32.369Z",
+    "implementationDigest": "sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545",
+    "implementationId": "simulation-taught-transfer-v1",
+    "inputs": {
+      "destination": "station-b",
+      "source": "station-a"
+    },
+    "mode": "simulation",
+    "outcome": null,
+    "phase": "READY",
+    "physicalExecutionAuthorized": false,
+    "routeReceiptDigest": "sha256:d962777285c80e9f785390916b76aeb563dc56b30352c06282f4bb323d3d7246",
+    "runId": "run-e8fed73769324643bb9f1461c1f18566",
+    "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9",
+    "stopStatus": "NOT_REQUESTED",
+    "updatedAt": "2026-09-02T20:32:32.417Z",
+    "revision": 3,
+    "events": [
+      {
+        "at": "2026-09-02T20:32:32.385Z",
+        "detail": {
+          "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9"
+        },
+        "sequence": 1,
+        "type": "prepared"
+      },
+      {
+        "at": "2026-09-02T20:32:32.417Z",
+        "detail": {
+          "observation": {
+            "evidence": {
+              "mode": "simulation",
+              "physicalQualification": false,
+              "physicalTaskSuccessFromDriverAck": false,
+              "readinessChecks": {
+                "destinationClear": true,
+                "detectorQuality": true,
+                "imageQuality": true,
+                "markerGeometry": true,
+                "sourcePresent": true
+              },
+              "scene": {
+                "destinationOccupiedByOtherObject": false,
+                "objectLocation": "station-a"
+              },
+              "source": "independent-simulated-scene"
+            },
+            "observedMonotonic": 42487.046,
+            "preconditionsMet": true,
+            "stopped": true,
+            "verified": null
+          }
+        },
+        "type": "operator_approved",
+        "sequence": 2
+      }
+    ],
+    "runDigest": "sha256:c029373a6cc5a63a872f923380220d7f70e1df03183f6e9e9755cd70054c376e"
+  },
+  "run": {
+    "approval": {
+      "approvedAt": "2026-09-02T20:32:32.417Z",
+      "digest": "sha256:031d6ff245b72bf2f3e443161a95c830361e3e63ec772cf647dc3a321aa0723b",
+      "expiresAt": "2026-09-02T20:33:32.369Z"
+    },
+    "capabilityId": "transfer-container",
+    "configurationDigest": "sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99",
+    "configurationId": "simulation-transfer-v1",
+    "contractVersion": "physicalsystems-run-v1",
+    "createdAt": "2026-09-02T20:32:32.369Z",
+    "implementationDigest": "sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545",
+    "implementationId": "simulation-taught-transfer-v1",
+    "inputs": {
+      "destination": "station-b",
+      "source": "station-a"
+    },
+    "mode": "simulation",
+    "outcome": {
+      "evidenceDigest": "sha256:b3874b3adcccc90b0f78b3434df7a67e904745a9aa57fd23dba5a39897560ecd",
+      "reason": "Independent observation verified the required outcome",
+      "status": "VERIFIED_SUCCESS"
+    },
+    "phase": "VERIFIED_SUCCESS",
+    "physicalExecutionAuthorized": false,
+    "routeReceiptDigest": "sha256:d962777285c80e9f785390916b76aeb563dc56b30352c06282f4bb323d3d7246",
+    "runId": "run-e8fed73769324643bb9f1461c1f18566",
+    "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9",
+    "stopStatus": "NOT_REQUESTED",
+    "updatedAt": "2026-09-02T20:32:32.586Z",
+    "revision": 13,
+    "events": [
+      {
+        "at": "2026-09-02T20:32:32.385Z",
+        "detail": {
+          "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9"
+        },
+        "sequence": 1,
+        "type": "prepared"
+      },
+      {
+        "at": "2026-09-02T20:32:32.417Z",
+        "detail": {
+          "observation": {
+            "evidence": {
+              "mode": "simulation",
+              "physicalQualification": false,
+              "physicalTaskSuccessFromDriverAck": false,
+              "readinessChecks": {
+                "destinationClear": true,
+                "detectorQuality": true,
+                "imageQuality": true,
+                "markerGeometry": true,
+                "sourcePresent": true
+              },
+              "scene": {
+                "destinationOccupiedByOtherObject": false,
+                "objectLocation": "station-a"
+              },
+              "source": "independent-simulated-scene"
+            },
+            "observedMonotonic": 42487.046,
+            "preconditionsMet": true,
+            "stopped": true,
+            "verified": null
+          }
+        },
+        "sequence": 2,
+        "type": "operator_approved"
+      },
+      {
+        "at": "2026-09-02T20:32:32.445Z",
+        "detail": {},
+        "sequence": 3,
+        "type": "dispatch_intent"
+      },
+      {
+        "at": "2026-09-02T20:32:32.456Z",
+        "detail": {},
+        "sequence": 4,
+        "type": "execution_started"
+      },
+      {
+        "at": "2026-09-02T20:32:32.470Z",
+        "detail": {
+          "acknowledged": false,
+          "commandId": "grasp",
+          "dispatchedMonotonic": 42487.093,
+          "index": 0,
+          "mode": "simulation"
+        },
+        "sequence": 5,
+        "type": "command_dispatch_intent"
+      },
+      {
+        "at": "2026-09-02T20:32:32.483Z",
+        "detail": {
+          "acknowledged": true,
+          "acknowledgedMonotonic": 42487.109,
+          "commandId": "grasp",
+          "dispatchedMonotonic": 42487.093,
+          "index": 0,
+          "mode": "simulation"
+        },
+        "sequence": 6,
+        "type": "command_acknowledged"
+      },
+      {
+        "at": "2026-09-02T20:32:32.496Z",
+        "detail": {
+          "acknowledged": false,
+          "commandId": "transit",
+          "dispatchedMonotonic": 42487.125,
+          "index": 1,
+          "mode": "simulation"
+        },
+        "sequence": 7,
+        "type": "command_dispatch_intent"
+      },
+      {
+        "at": "2026-09-02T20:32:32.510Z",
+        "detail": {
+          "acknowledged": true,
+          "acknowledgedMonotonic": 42487.14,
+          "commandId": "transit",
+          "dispatchedMonotonic": 42487.125,
+          "index": 1,
+          "mode": "simulation"
+        },
+        "sequence": 8,
+        "type": "command_acknowledged"
+      },
+      {
+        "at": "2026-09-02T20:32:32.523Z",
+        "detail": {
+          "acknowledged": false,
+          "commandId": "release",
+          "dispatchedMonotonic": 42487.156,
+          "index": 2,
+          "mode": "simulation"
+        },
+        "sequence": 9,
+        "type": "command_dispatch_intent"
+      },
+      {
+        "at": "2026-09-02T20:32:32.538Z",
+        "detail": {
+          "acknowledged": true,
+          "acknowledgedMonotonic": 42487.171,
+          "commandId": "release",
+          "dispatchedMonotonic": 42487.156,
+          "index": 2,
+          "mode": "simulation"
+        },
+        "sequence": 10,
+        "type": "command_acknowledged"
+      },
+      {
+        "at": "2026-09-02T20:32:32.555Z",
+        "detail": {
+          "evidence": {
+            "mode": "simulation",
+            "objectPlacementVerified": false
+          },
+          "records": [
+            {
+              "acknowledged": true,
+              "acknowledgedMonotonic": 42487.109,
+              "commandId": "grasp",
+              "dispatchedMonotonic": 42487.093,
+              "index": 0,
+              "mode": "simulation"
+            },
+            {
+              "acknowledged": true,
+              "acknowledgedMonotonic": 42487.14,
+              "commandId": "transit",
+              "dispatchedMonotonic": 42487.125,
+              "index": 1,
+              "mode": "simulation"
+            },
+            {
+              "acknowledged": true,
+              "acknowledgedMonotonic": 42487.171,
+              "commandId": "release",
+              "dispatchedMonotonic": 42487.156,
+              "index": 2,
+              "mode": "simulation"
+            }
+          ]
+        },
+        "sequence": 11,
+        "type": "controller_acknowledged"
+      },
+      {
+        "at": "2026-09-02T20:32:32.586Z",
+        "detail": {
+          "observation": {
+            "evidence": {
+              "mode": "simulation",
+              "physicalQualification": false,
+              "physicalTaskSuccessFromDriverAck": false,
+              "readinessChecks": {
+                "destinationClear": true,
+                "detectorQuality": true,
+                "imageQuality": true,
+                "markerGeometry": true,
+                "sourcePresent": false
+              },
+              "scene": {
+                "destinationOccupiedByOtherObject": false,
+                "objectLocation": "station-b"
+              },
+              "source": "independent-simulated-scene"
+            },
+            "observedMonotonic": 42487.203,
+            "preconditionsMet": null,
+            "stopped": true,
+            "verified": true
+          }
+        },
+        "sequence": 12,
+        "type": "verification_observed"
+      }
+    ],
+    "runDigest": "sha256:8065087373c577ef2c882088bd57e2ef457b70cd2ced29734839bdd0188837e6"
+  },
+  "receipt": {
+    "contractVersion": "physicalsystems-run-receipt-v1",
+    "run": {
+      "approval": {
+        "approvedAt": "2026-09-02T20:32:32.417Z",
+        "digest": "sha256:031d6ff245b72bf2f3e443161a95c830361e3e63ec772cf647dc3a321aa0723b",
+        "expiresAt": "2026-09-02T20:33:32.369Z"
+      },
+      "capabilityId": "transfer-container",
+      "configurationDigest": "sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99",
+      "configurationId": "simulation-transfer-v1",
+      "contractVersion": "physicalsystems-run-v1",
+      "createdAt": "2026-09-02T20:32:32.369Z",
+      "implementationDigest": "sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545",
+      "implementationId": "simulation-taught-transfer-v1",
+      "inputs": {
+        "destination": "station-b",
+        "source": "station-a"
+      },
+      "mode": "simulation",
+      "outcome": {
+        "evidenceDigest": "sha256:b3874b3adcccc90b0f78b3434df7a67e904745a9aa57fd23dba5a39897560ecd",
+        "reason": "Independent observation verified the required outcome",
+        "status": "VERIFIED_SUCCESS"
+      },
+      "phase": "VERIFIED_SUCCESS",
+      "physicalExecutionAuthorized": false,
+      "routeReceiptDigest": "sha256:d962777285c80e9f785390916b76aeb563dc56b30352c06282f4bb323d3d7246",
+      "runId": "run-e8fed73769324643bb9f1461c1f18566",
+      "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9",
+      "stopStatus": "NOT_REQUESTED",
+      "updatedAt": "2026-09-02T20:32:32.586Z",
+      "revision": 13,
+      "events": [
+        {
+          "at": "2026-09-02T20:32:32.385Z",
+          "detail": {
+            "snapshotDigest": "sha256:c69d4136fd9893b8896ed7239575b9c1493e4f55372811f263be54e4bc8d30e9"
+          },
+          "sequence": 1,
+          "type": "prepared"
+        },
+        {
+          "at": "2026-09-02T20:32:32.417Z",
+          "detail": {
+            "observation": {
+              "evidence": {
+                "mode": "simulation",
+                "physicalQualification": false,
+                "physicalTaskSuccessFromDriverAck": false,
+                "readinessChecks": {
+                  "destinationClear": true,
+                  "detectorQuality": true,
+                  "imageQuality": true,
+                  "markerGeometry": true,
+                  "sourcePresent": true
+                },
+                "scene": {
+                  "destinationOccupiedByOtherObject": false,
+                  "objectLocation": "station-a"
+                },
+                "source": "independent-simulated-scene"
+              },
+              "observedMonotonic": 42487.046,
+              "preconditionsMet": true,
+              "stopped": true,
+              "verified": null
+            }
+          },
+          "sequence": 2,
+          "type": "operator_approved"
+        },
+        {
+          "at": "2026-09-02T20:32:32.445Z",
+          "detail": {},
+          "sequence": 3,
+          "type": "dispatch_intent"
+        },
+        {
+          "at": "2026-09-02T20:32:32.456Z",
+          "detail": {},
+          "sequence": 4,
+          "type": "execution_started"
+        },
+        {
+          "at": "2026-09-02T20:32:32.470Z",
+          "detail": {
+            "acknowledged": false,
+            "commandId": "grasp",
+            "dispatchedMonotonic": 42487.093,
+            "index": 0,
+            "mode": "simulation"
+          },
+          "sequence": 5,
+          "type": "command_dispatch_intent"
+        },
+        {
+          "at": "2026-09-02T20:32:32.483Z",
+          "detail": {
+            "acknowledged": true,
+            "acknowledgedMonotonic": 42487.109,
+            "commandId": "grasp",
+            "dispatchedMonotonic": 42487.093,
+            "index": 0,
+            "mode": "simulation"
+          },
+          "sequence": 6,
+          "type": "command_acknowledged"
+        },
+        {
+          "at": "2026-09-02T20:32:32.496Z",
+          "detail": {
+            "acknowledged": false,
+            "commandId": "transit",
+            "dispatchedMonotonic": 42487.125,
+            "index": 1,
+            "mode": "simulation"
+          },
+          "sequence": 7,
+          "type": "command_dispatch_intent"
+        },
+        {
+          "at": "2026-09-02T20:32:32.510Z",
+          "detail": {
+            "acknowledged": true,
+            "acknowledgedMonotonic": 42487.14,
+            "commandId": "transit",
+            "dispatchedMonotonic": 42487.125,
+            "index": 1,
+            "mode": "simulation"
+          },
+          "sequence": 8,
+          "type": "command_acknowledged"
+        },
+        {
+          "at": "2026-09-02T20:32:32.523Z",
+          "detail": {
+            "acknowledged": false,
+            "commandId": "release",
+            "dispatchedMonotonic": 42487.156,
+            "index": 2,
+            "mode": "simulation"
+          },
+          "sequence": 9,
+          "type": "command_dispatch_intent"
+        },
+        {
+          "at": "2026-09-02T20:32:32.538Z",
+          "detail": {
+            "acknowledged": true,
+            "acknowledgedMonotonic": 42487.171,
+            "commandId": "release",
+            "dispatchedMonotonic": 42487.156,
+            "index": 2,
+            "mode": "simulation"
+          },
+          "sequence": 10,
+          "type": "command_acknowledged"
+        },
+        {
+          "at": "2026-09-02T20:32:32.555Z",
+          "detail": {
+            "evidence": {
+              "mode": "simulation",
+              "objectPlacementVerified": false
+            },
+            "records": [
+              {
+                "acknowledged": true,
+                "acknowledgedMonotonic": 42487.109,
+                "commandId": "grasp",
+                "dispatchedMonotonic": 42487.093,
+                "index": 0,
+                "mode": "simulation"
+              },
+              {
+                "acknowledged": true,
+                "acknowledgedMonotonic": 42487.14,
+                "commandId": "transit",
+                "dispatchedMonotonic": 42487.125,
+                "index": 1,
+                "mode": "simulation"
+              },
+              {
+                "acknowledged": true,
+                "acknowledgedMonotonic": 42487.171,
+                "commandId": "release",
+                "dispatchedMonotonic": 42487.156,
+                "index": 2,
+                "mode": "simulation"
+              }
+            ]
+          },
+          "sequence": 11,
+          "type": "controller_acknowledged"
+        },
+        {
+          "at": "2026-09-02T20:32:32.586Z",
+          "detail": {
+            "observation": {
+              "evidence": {
+                "mode": "simulation",
+                "physicalQualification": false,
+                "physicalTaskSuccessFromDriverAck": false,
+                "readinessChecks": {
+                  "destinationClear": true,
+                  "detectorQuality": true,
+                  "imageQuality": true,
+                  "markerGeometry": true,
+                  "sourcePresent": false
+                },
+                "scene": {
+                  "destinationOccupiedByOtherObject": false,
+                  "objectLocation": "station-b"
+                },
+                "source": "independent-simulated-scene"
+              },
+              "observedMonotonic": 42487.203,
+              "preconditionsMet": null,
+              "stopped": true,
+              "verified": true
+            }
+          },
+          "sequence": 12,
+          "type": "verification_observed"
+        }
+      ],
+      "runDigest": "sha256:8065087373c577ef2c882088bd57e2ef457b70cd2ced29734839bdd0188837e6"
+    },
+    "snapshot": {
+      "configurationId": "simulation-transfer-v1",
+      "configurationSnapshotDigest": "sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99",
+      "contractVersion": "physicalsystems-run-snapshot-v1",
+      "preparationObservation": {
+        "evidence": {
+          "mode": "simulation",
+          "physicalQualification": false,
+          "physicalTaskSuccessFromDriverAck": false,
+          "readinessChecks": {
+            "destinationClear": true,
+            "detectorQuality": true,
+            "imageQuality": true,
+            "markerGeometry": true,
+            "sourcePresent": true
+          },
+          "scene": {
+            "destinationOccupiedByOtherObject": false,
+            "objectLocation": "station-a"
+          },
+          "source": "independent-simulated-scene"
+        },
+        "observedMonotonic": 42486.968,
+        "preconditionsMet": true,
+        "stopped": true,
+        "verified": null
+      },
+      "prepared": {
+        "capabilityId": "transfer-container",
+        "configurationDigest": "sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99",
+        "implementationDigest": "sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545",
+        "implementationId": "simulation-taught-transfer-v1",
+        "inputs": {
+          "destination": "station-b",
+          "source": "station-a"
+        },
+        "mode": "simulation",
+        "plan": {
+          "commands": [
+            "grasp",
+            "transit",
+            "release"
+          ],
+          "destination": "station-b",
+          "kind": "simulated-transfer-v1",
+          "physicalExecution": false,
+          "source": "station-a"
+        },
+        "resources": [
+          "simulation:fixed-camera",
+          "simulation:so101-follower",
+          "simulation:transfer-workspace"
+        ]
+      },
+      "routeReceiptCanonicalJson": "{\"assessmentTimestamps\":[{\"observedMonotonicNs\":\"42486937000000\",\"preconditionId\":\"simulation-scene-ready\"}],\"capabilityId\":\"transfer-container\",\"contractVersion\":\"experimental-physical-route-receipt-v1\",\"decision\":{\"candidates\":[{\"execution_target\":{\"digest\":\"sha256:a8d40ae523b9e45a7a7d10326042c7d897e565e6753eb3f29e94b32f7c59836c\",\"kind\":\"robot-controller\"},\"implementation_digest\":\"sha256:6548e2c114a4ae8ff58a257f77c0fdf1107d0a50de97f91a6acceec45594ee78\",\"implementation_id\":\"simulation-taught-transfer-v1\",\"mechanism\":\"taught-waypoints\",\"provider\":\"explicit-transfer-simulation\",\"rejection_codes\":[],\"status\":\"selected\"}],\"catalog_digest\":\"sha256:8a8d27cf1270d8be95ad2307f836e7ac9e58c7518725e0317fe65584a4fc6433\",\"contract_version\":\"tinyedge-runtime-physical-skill-route-decision-v1\",\"decision_digest\":\"sha256:be6331f58dac6fbe1694a5e190bee55af1e1c8bf09cb5b5f74256ba6b9463916\",\"decision_status\":\"selected\",\"invocation_digest\":\"sha256:ce58e20ce0dcf7e381279e008beb85ae86e36c2544b68d77a5a8335a040cb179\",\"physical_execution_authorized\":false,\"policy_digest\":\"sha256:342bf10e9ebeebcef381aad8c1f8ec8a67c995a60d23e28139344938dd6b2ea0\",\"request_digest\":\"sha256:2e4a897b683eeb08a6202ab9b3da7a2adfece26fcc7d01f6158fbe38d9dcbe69\",\"request_id\":\"route-18f3de2a3ea9bfef\",\"request_rejection_codes\":[],\"selected_execution_target\":{\"digest\":\"sha256:a8d40ae523b9e45a7a7d10326042c7d897e565e6753eb3f29e94b32f7c59836c\",\"kind\":\"robot-controller\"},\"selected_implementation_digest\":\"sha256:6548e2c114a4ae8ff58a257f77c0fdf1107d0a50de97f91a6acceec45594ee78\",\"selected_implementation_id\":\"simulation-taught-transfer-v1\",\"state_digest\":\"sha256:de06c6816f253cd0290564219139745bbfa6045dc78469fb84448eec0e90bd55\"},\"evaluatedAt\":\"2026-09-02T20:32:32.307607Z\",\"evaluationMonotonicNs\":\"42486937000000\",\"hostEvidence\":{\"activity\":\"idle\",\"artifact_bindings\":[{\"binding_id\":\"simulation-taught-transfer-v1\",\"digest\":\"sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545\",\"kind\":\"implementation-artifact\"}],\"calibration_bindings\":[{\"binding_id\":\"simulation-workspace\",\"digest\":\"sha256:1581c2c1426b03750f8cabd514c03eb57cc9a8fe890767a79d3b1b82a42773a9\",\"kind\":\"geometry\"}],\"dependency_bindings\":[{\"binding_id\":\"simulation-adapter\",\"digest\":\"sha256:385336ddf9e2728ea41d30b1af1cda4729f081d9adbaa1c1b3b2bac0c02e29c4\",\"kind\":\"adapter\"}],\"execution_targets\":[{\"digest\":\"sha256:a8d40ae523b9e45a7a7d10326042c7d897e565e6753eb3f29e94b32f7c59836c\",\"kind\":\"robot-controller\"}],\"mode\":\"simulation\",\"observedAt\":\"2026-09-02T20:32:32.305313Z\",\"observed_monotonic_ns\":42486937000000,\"physicalQualification\":false,\"preconditions\":[{\"evidence_digest\":\"sha256:7ae73c0aff67e216cf981a4565c2737511e47253b8c1fce0f91b042c444f11e6\",\"invocation_digest\":\"sha256:ce58e20ce0dcf7e381279e008beb85ae86e36c2544b68d77a5a8335a040cb179\",\"observed_monotonic_ns\":42486937000000,\"precondition_id\":\"simulation-scene-ready\",\"requirement_digest\":\"sha256:008ecfbbae7b5455e92743f5767f317ea2ecebb90f6aef75573c12b5bc86837e\",\"state_digest\":\"sha256:de06c6816f253cd0290564219139745bbfa6045dc78469fb84448eec0e90bd55\",\"status\":\"met\"}],\"qualification_conditions\":[{\"binding_id\":\"simulation-taught-transfer-v1\",\"digest\":\"sha256:dc66c1862399a3061121d21865e32a1c34d9657363594320cedff2b096018e99\",\"kind\":\"qualification-conditions\"}],\"state_digest\":\"sha256:de06c6816f253cd0290564219139745bbfa6045dc78469fb84448eec0e90bd55\"},\"hostEvidenceDigest\":\"sha256:a55c36694e3c5f74cde01615391dfcc68b340bf0f8f40778fb850e55012e8414\",\"implementations\":[{\"implementationId\":\"simulation-taught-transfer-v1\",\"qualificationStatus\":\"qualified\"}],\"observedAt\":\"2026-09-02T20:32:32.305313Z\",\"physicalExecutionAuthorized\":false,\"policyVersion\":{\"contractVersion\":\"tinyedge-runtime-physical-skill-route-request-v1\",\"policyDigest\":\"sha256:342bf10e9ebeebcef381aad8c1f8ec8a67c995a60d23e28139344938dd6b2ea0\",\"policyId\":\"explicit-simulation-only-v1\"},\"receiptDigest\":\"sha256:d962777285c80e9f785390916b76aeb563dc56b30352c06282f4bb323d3d7246\",\"registrySnapshotDigest\":\"sha256:3f9c7691385c4b4b83a0defee74525f854b957cb1a5c4aa989507327eb1a3552\",\"request\":{\"arguments\":[{\"name\":\"destination\",\"value\":\"station-b\",\"value_type\":\"identifier\"},{\"name\":\"source\",\"value\":\"station-a\",\"value_type\":\"identifier\"}],\"capabilityId\":\"transfer-container\",\"contractVersion\":\"experimental-physical-route-preview-request-v1\",\"expectedCandidateBindingDigest\":\"sha256:9e670cddf827fdd66b239df763cf6e35f118440c9a577df4b7eea136212fa6f4\",\"expectedCatalogDigest\":\"sha256:8a8d27cf1270d8be95ad2307f836e7ac9e58c7518725e0317fe65584a4fc6433\",\"expectedRegistryDigest\":\"sha256:ed0afb58fe8d20d5bdcce4a4a99e0b971b995d81ad6f51c099df8feec54a17a6\",\"expectedWorkcellDigest\":\"sha256:fd79682fb42c6a2d0824abc7b5824652056d070680f56b3ada10141bfec46910\",\"workcellId\":\"simulation-transfer-workcell\"},\"runtimeCatalog\":{\"catalog_digest\":\"sha256:8a8d27cf1270d8be95ad2307f836e7ac9e58c7518725e0317fe65584a4fc6433\",\"catalog_id\":\"machine-local-capabilities\",\"contract_version\":\"tinyedge-runtime-physical-skill-catalog-v1\",\"implementations\":[{\"artifact_bindings\":[{\"binding_id\":\"simulation-taught-transfer-v1\",\"digest\":\"sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545\",\"kind\":\"implementation-artifact\"}],\"calibration_bindings\":[{\"binding_id\":\"simulation-workspace\",\"digest\":\"sha256:1581c2c1426b03750f8cabd514c03eb57cc9a8fe890767a79d3b1b82a42773a9\",\"kind\":\"geometry\"}],\"declared_status\":\"available\",\"dependency_bindings\":[{\"binding_id\":\"simulation-adapter\",\"digest\":\"sha256:385336ddf9e2728ea41d30b1af1cda4729f081d9adbaa1c1b3b2bac0c02e29c4\",\"kind\":\"adapter\"}],\"eligibility_requirements\":[],\"execution_target\":{\"digest\":\"sha256:a8d40ae523b9e45a7a7d10326042c7d897e565e6753eb3f29e94b32f7c59836c\",\"kind\":\"robot-controller\"},\"implementation_digest\":\"sha256:6548e2c114a4ae8ff58a257f77c0fdf1107d0a50de97f91a6acceec45594ee78\",\"implementation_id\":\"simulation-taught-transfer-v1\",\"manifest_digest\":\"sha256:fd79682fb42c6a2d0824abc7b5824652056d070680f56b3ada10141bfec46910\",\"mechanism\":\"taught-waypoints\",\"provider\":\"explicit-transfer-simulation\",\"qualification_binding\":{\"binding_id\":\"simulation-taught-transfer-v1\",\"digest\":\"sha256:bec041cea187afb92cd267c27ad29b0ed6bfe709808648523a181426e950cf5e\",\"kind\":\"qualification-record\"},\"qualification_status\":\"qualified\",\"skill_definition_digest\":\"sha256:91d8bce7a6a37869ff79be69db652627c03d32525986b9065cf18bd67c225fb0\",\"skill_id\":\"transfer-container\",\"workcell_digest\":\"sha256:fd79682fb42c6a2d0824abc7b5824652056d070680f56b3ada10141bfec46910\"}],\"skills\":[{\"input_fields\":[{\"maximum\":null,\"minimum\":null,\"name\":\"destination\",\"required\":true,\"unit\":null,\"value_type\":\"identifier\"},{\"maximum\":null,\"minimum\":null,\"name\":\"source\",\"required\":true,\"unit\":null,\"value_type\":\"identifier\"}],\"preconditions\":[{\"maximum_age_ns\":2000000000,\"requirement_digest\":\"sha256:008ecfbbae7b5455e92743f5767f317ea2ecebb90f6aef75573c12b5bc86837e\",\"requirement_id\":\"simulation-scene-ready\"}],\"skill_definition_digest\":\"sha256:91d8bce7a6a37869ff79be69db652627c03d32525986b9065cf18bd67c225fb0\",\"skill_id\":\"transfer-container\"}],\"workcell_digest\":\"sha256:fd79682fb42c6a2d0824abc7b5824652056d070680f56b3ada10141bfec46910\",\"workcell_id\":\"simulation-transfer-workcell\"},\"runtimeRequest\":{\"arguments\":[{\"name\":\"destination\",\"value\":\"station-b\",\"value_type\":\"identifier\"},{\"name\":\"source\",\"value\":\"station-a\",\"value_type\":\"identifier\"}],\"artifact_bindings\":[{\"binding_id\":\"simulation-taught-transfer-v1\",\"digest\":\"sha256:17d2d9738a7fdefa08c260f728c25cbda1ad5b0c72fd13fcaa18a463b8708545\",\"kind\":\"implementation-artifact\"}],\"calibration_bindings\":[{\"binding_id\":\"simulation-workspace\",\"digest\":\"sha256:1581c2c1426b03750f8cabd514c03eb57cc9a8fe890767a79d3b1b82a42773a9\",\"kind\":\"geometry\"}],\"catalog_digest\":\"sha256:8a8d27cf1270d8be95ad2307f836e7ac9e58c7518725e0317fe65584a4fc6433\",\"contract_version\":\"tinyedge-runtime-physical-skill-route-request-v1\",\"dependency_bindings\":[{\"binding_id\":\"simulation-adapter\",\"digest\":\"sha256:385336ddf9e2728ea41d30b1af1cda4729f081d9adbaa1c1b3b2bac0c02e29c4\",\"kind\":\"adapter\"}],\"evaluation_monotonic_ns\":42486937000000,\"execution_targets\":[{\"digest\":\"sha256:a8d40ae523b9e45a7a7d10326042c7d897e565e6753eb3f29e94b32f7c59836c\",\"kind\":\"robot-controller\"}],\"invocation_digest\":\"sha256:ce58e20ce0dcf7e381279e008beb85ae86e36c2544b68d77a5a8335a040cb179\",\"manifest_digest\":\"sha256:fd79682fb42c6a2d0824abc7b5824652056d070680f56b3ada10141bfec46910\",\"policy\":{\"allowed_qualification_statuses\":[\"qualified\"],\"implementation_order\":[\"simulation-taught-transfer-v1\"],\"policy_digest\":\"sha256:342bf10e9ebeebcef381aad8c1f8ec8a67c995a60d23e28139344938dd6b2ea0\",\"policy_id\":\"explicit-simulation-only-v1\"},\"preconditions\":[{\"evidence_digest\":\"sha256:7ae73c0aff67e216cf981a4565c2737511e47253b8c1fce0f91b042c444f11e6\",\"invocation_digest\":\"sha256:ce58e20ce0dcf7e381279e008beb85ae86e36c2544b68d77a5a8335a040cb179\",\"observed_monotonic_ns\":42486937000000,\"precondition_id\":\"simulation-scene-ready\",\"requirement_digest\":\"sha256:008ecfbbae7b5455e92743f5767f317ea2ecebb90f6aef75573c12b5bc86837e\",\"state_digest\":\"sha256:de06c6816f253cd0290564219139745bbfa6045dc78469fb84448eec0e90bd55\",\"status\":\"met\"}],\"qualification_bindings\":[{\"binding_id\":\"simulation-taught-transfer-v1\",\"digest\":\"sha256:bec041cea187afb92cd267c27ad29b0ed6bfe709808648523a181426e950cf5e\",\"kind\":\"qualification-record\"}],\"request_digest\":\"sha256:2e4a897b683eeb08a6202ab9b3da7a2adfece26fcc7d01f6158fbe38d9dcbe69\",\"request_id\":\"route-18f3de2a3ea9bfef\",\"skill_definition_digest\":\"sha256:91d8bce7a6a37869ff79be69db652627c03d32525986b9065cf18bd67c225fb0\",\"skill_id\":\"transfer-container\",\"state_digest\":\"sha256:de06c6816f253cd0290564219139745bbfa6045dc78469fb84448eec0e90bd55\",\"workcell_digest\":\"sha256:fd79682fb42c6a2d0824abc7b5824652056d070680f56b3ada10141bfec46910\",\"workcell_id\":\"simulation-transfer-workcell\"},\"runtimeVersion\":\"0.2.0\",\"workcellId\":\"simulation-transfer-workcell\"}",
+      "routeRequest": {
+        "arguments": [
+          {
+            "name": "destination",
+            "value": "station-b",
+            "value_type": "identifier"
+          },
+          {
+            "name": "source",
+            "value": "station-a",
+            "value_type": "identifier"
+          }
+        ],
+        "capabilityId": "transfer-container",
+        "contractVersion": "experimental-physical-route-preview-request-v1",
+        "expectedCandidateBindingDigest": "sha256:9e670cddf827fdd66b239df763cf6e35f118440c9a577df4b7eea136212fa6f4",
+        "expectedCatalogDigest": "sha256:8a8d27cf1270d8be95ad2307f836e7ac9e58c7518725e0317fe65584a4fc6433",
+        "expectedRegistryDigest": "sha256:ed0afb58fe8d20d5bdcce4a4a99e0b971b995d81ad6f51c099df8feec54a17a6",
+        "expectedWorkcellDigest": "sha256:fd79682fb42c6a2d0824abc7b5824652056d070680f56b3ada10141bfec46910",
+        "workcellId": "simulation-transfer-workcell"
+      }
+    },
+    "physicalExecutionAuthorized": false,
+    "receiptDigest": "sha256:99e7ddb41165f2d449629550d90996d15b9009a6824eb3fb6a152b63ed20e5a1"
+  }
+}

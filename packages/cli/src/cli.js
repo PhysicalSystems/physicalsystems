@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { doctorCommand } from './commands/doctor.js'
 import { chatCommand } from './commands/chat.js'
 import { harnessCommand } from './commands/harness.js'
+import { setupNodeCommand, parseSetupNodeArgs } from './commands/setup-node.js'
 import { loginCommand } from './commands/login.js'
 import { logoutCommand } from './commands/logout.js'
 import { whoamiCommand } from './commands/whoami.js'
@@ -25,6 +26,7 @@ Usage: physicalsystems [--base-url URL] [command]
 
 Commands:
   harness  Open the local Physical Systems Harness (default)
+  setup-node  Install the separately distributed local Node
   login    Connect optional TinyEdge cloud tools with read-only access
   chat     Inspect, plan, or run work allowed by the saved OAuth scopes
   provider Configure the model provider used by the terminal assistant
@@ -43,6 +45,8 @@ Options:
   provider login PROVIDER [--oauth|--api-key]
   provider logout PROVIDER
   models [--provider PROVIDER]
+  setup-node [--yes] [--python ABSOLUTE_PATH]
+  setup-node --manifest ABSOLUTE_PATH --sha256 HEX [--wheelhouse ABSOLUTE_PATH]
   --version       Print the CLI version
 `
 }
@@ -157,6 +161,8 @@ export async function runCli(argv = process.argv.slice(2), dependencies = {}) {
       createExtension: dependencies.createHarnessExtension,
       cwd: dependencies.cwd,
     })
+  } else if (command === 'setup-node') {
+    await (dependencies.setupNodeCommand || setupNodeCommand)({ ...shared, env, input: dependencies.input, output: dependencies.output, ...parseSetupNodeArgs(extra) })
   } else if (command === 'login') {
     const requested = parseLoginArgs(extra)
     await loginCommand({

@@ -1,0 +1,1251 @@
+{
+  "catalog": {
+    "capabilities": [
+      {
+        "availableForRouting": true,
+        "capabilityId": "transfer-container",
+        "definitionDigest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+        "displayName": "Transfer container",
+        "inputFields": [
+          {
+            "maximum": null,
+            "minimum": null,
+            "name": "destination",
+            "required": true,
+            "unit": null,
+            "value_type": "identifier"
+          },
+          {
+            "maximum": null,
+            "minimum": null,
+            "name": "source",
+            "required": true,
+            "unit": null,
+            "value_type": "identifier"
+          },
+          {
+            "maximum": 0.25,
+            "minimum": 0.05,
+            "name": "speed-scale",
+            "required": true,
+            "unit": "ratio",
+            "value_type": "number"
+          }
+        ],
+        "preconditions": [
+          {
+            "maximum_age_ns": 1000,
+            "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "requirement_id": "workspace-clear"
+          }
+        ],
+        "reasonCodes": []
+      }
+    ],
+    "contractVersion": "experimental-physical-capability-catalog-v1",
+    "currentCandidateBindingDigest": "sha256:f81ee982f0cf48269e529b0f4d294cbbb25af1c7340547b3641db9449cb47d17",
+    "physicalExecutionAuthorized": false,
+    "registryDigest": "sha256:3842836e750badf26b90be2a4ffe1dc24e11e46e9dbdf23f47bed1a6f3055ea5",
+    "runtimeVersion": "0.2.0",
+    "workcells": [
+      {
+        "catalogDigest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+        "workcellDigest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+        "workcellId": "cup-workcell"
+      }
+    ]
+  },
+  "request": {
+    "arguments": [
+      {
+        "name": "destination",
+        "value": "station-b",
+        "value_type": "identifier"
+      },
+      {
+        "name": "source",
+        "value": "station-a",
+        "value_type": "identifier"
+      },
+      {
+        "name": "speed-scale",
+        "value": 0.1,
+        "value_type": "number"
+      }
+    ],
+    "capabilityId": "transfer-container",
+    "contractVersion": "experimental-physical-route-preview-request-v1",
+    "expectedCandidateBindingDigest": "sha256:f81ee982f0cf48269e529b0f4d294cbbb25af1c7340547b3641db9449cb47d17",
+    "expectedCatalogDigest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+    "expectedRegistryDigest": "sha256:3842836e750badf26b90be2a4ffe1dc24e11e46e9dbdf23f47bed1a6f3055ea5",
+    "expectedWorkcellDigest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+    "workcellId": "cup-workcell"
+  },
+  "selected": {
+    "assessmentTimestamps": [
+      {
+        "observedMonotonicNs": "9999999999",
+        "preconditionId": "workspace-clear"
+      }
+    ],
+    "capabilityId": "transfer-container",
+    "contractVersion": "experimental-physical-route-receipt-v1",
+    "decision": {
+      "candidates": [
+        {
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:03744388d464c275d94dbc466b0e59bb4eea54cc6d57021caaffb686cac770a1",
+          "implementation_id": "a-waypoint",
+          "mechanism": "taught-waypoints",
+          "provider": "fake-provider",
+          "rejection_codes": [],
+          "status": "selected"
+        },
+        {
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:05a56d507bf87e48d59f8a1ce513f22285df7fc4ce01b59284c02753c4e09ec4",
+          "implementation_id": "b-learned",
+          "mechanism": "learned-policy",
+          "provider": "fake-provider",
+          "rejection_codes": [
+            "artifact_missing",
+            "implementation_blocked",
+            "precondition_missing",
+            "qualification_missing",
+            "qualification_status_not_allowed"
+          ],
+          "status": "rejected"
+        }
+      ],
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "contract_version": "tinyedge-runtime-physical-skill-route-decision-v1",
+      "decision_digest": "sha256:44d594774e231e6994f000d48b7ee09697cb5d595861d1bcefb753417655fe18",
+      "decision_status": "selected",
+      "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+      "physical_execution_authorized": false,
+      "policy_digest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+      "request_digest": "sha256:52ec4178a7ad11aee8f35fa56a9c7592ade130f46053c3903b05f281127f3d4c",
+      "request_id": "route-a0221e9cd9137112",
+      "request_rejection_codes": [],
+      "selected_execution_target": {
+        "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "kind": "robot-controller"
+      },
+      "selected_implementation_digest": "sha256:03744388d464c275d94dbc466b0e59bb4eea54cc6d57021caaffb686cac770a1",
+      "selected_implementation_id": "a-waypoint",
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "evaluatedAt": "2026-09-02T17:00:00Z",
+    "evaluationMonotonicNs": "10000000000",
+    "hostEvidence": {
+      "activity": "idle",
+      "artifact_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "kind": "implementation-artifact"
+        }
+      ],
+      "calibration_bindings": [
+        {
+          "binding_id": "workspace",
+          "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "geometry"
+        }
+      ],
+      "dependency_bindings": [
+        {
+          "binding_id": "motion-adapter",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "adapter"
+        }
+      ],
+      "execution_targets": [
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "kind": "robot-controller"
+        }
+      ],
+      "observedAt": "2026-09-02T17:00:00Z",
+      "observed_monotonic_ns": 9999999999,
+      "preconditions": [
+        {
+          "evidence_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+          "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+          "observed_monotonic_ns": 9999999999,
+          "precondition_id": "workspace-clear",
+          "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "status": "met"
+        }
+      ],
+      "qualification_conditions": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+          "kind": "qualification-conditions"
+        }
+      ],
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "hostEvidenceDigest": "sha256:c29557da81cae22e4811eb3345c15afa0b284091134c70aa9e375c98af02906f",
+    "implementations": [
+      {
+        "implementationId": "a-waypoint",
+        "qualificationStatus": "qualified"
+      },
+      {
+        "implementationId": "b-learned",
+        "qualificationStatus": "blocked"
+      }
+    ],
+    "observedAt": "2026-09-02T17:00:00Z",
+    "physicalExecutionAuthorized": false,
+    "policyVersion": {
+      "contractVersion": "tinyedge-runtime-physical-skill-route-request-v1",
+      "policyDigest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+      "policyId": "h01-qualified-waypoint-first-v1"
+    },
+    "receiptDigest": "sha256:5bef04bf5c0f31e2b4685c8d9a5bc248ec241e20850dd204bd1ad1a4d4315eb6",
+    "registrySnapshotDigest": "sha256:4f325455639df28c9e810936233c0fe86110a96055862205e3dba8abac75bcbd",
+    "request": {
+      "arguments": [
+        {
+          "name": "destination",
+          "value": "station-b",
+          "value_type": "identifier"
+        },
+        {
+          "name": "source",
+          "value": "station-a",
+          "value_type": "identifier"
+        },
+        {
+          "name": "speed-scale",
+          "value": 0.1,
+          "value_type": "number"
+        }
+      ],
+      "capabilityId": "transfer-container",
+      "contractVersion": "experimental-physical-route-preview-request-v1",
+      "expectedCandidateBindingDigest": "sha256:f81ee982f0cf48269e529b0f4d294cbbb25af1c7340547b3641db9449cb47d17",
+      "expectedCatalogDigest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "expectedRegistryDigest": "sha256:3842836e750badf26b90be2a4ffe1dc24e11e46e9dbdf23f47bed1a6f3055ea5",
+      "expectedWorkcellDigest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcellId": "cup-workcell"
+    },
+    "runtimeCatalog": {
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "catalog_id": "machine-local-capabilities",
+      "contract_version": "tinyedge-runtime-physical-skill-catalog-v1",
+      "implementations": [
+        {
+          "artifact_bindings": [
+            {
+              "binding_id": "a-waypoint",
+              "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+              "kind": "implementation-artifact"
+            }
+          ],
+          "calibration_bindings": [
+            {
+              "binding_id": "workspace",
+              "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "kind": "geometry"
+            }
+          ],
+          "declared_status": "available",
+          "dependency_bindings": [
+            {
+              "binding_id": "motion-adapter",
+              "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "kind": "adapter"
+            }
+          ],
+          "eligibility_requirements": [],
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:03744388d464c275d94dbc466b0e59bb4eea54cc6d57021caaffb686cac770a1",
+          "implementation_id": "a-waypoint",
+          "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+          "mechanism": "taught-waypoints",
+          "provider": "fake-provider",
+          "qualification_binding": {
+            "binding_id": "a-waypoint",
+            "digest": "sha256:96c3c86123ad63df58678b801957ee21efb06d69a3a6a9747fcdd48ca81d1df6",
+            "kind": "qualification-record"
+          },
+          "qualification_status": "qualified",
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container",
+          "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113"
+        },
+        {
+          "artifact_bindings": [
+            {
+              "binding_id": "b-learned",
+              "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+              "kind": "implementation-artifact"
+            }
+          ],
+          "calibration_bindings": [
+            {
+              "binding_id": "workspace",
+              "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "kind": "geometry"
+            }
+          ],
+          "declared_status": "blocked",
+          "dependency_bindings": [
+            {
+              "binding_id": "motion-adapter",
+              "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "kind": "adapter"
+            }
+          ],
+          "eligibility_requirements": [
+            {
+              "maximum_age_ns": 1000000000,
+              "requirement_digest": "sha256:e01d806958789e6c801d20b147b133754c9d7494152407c8550103fa2c9f5aa8",
+              "requirement_id": "operator-approved-learned-fallback"
+            }
+          ],
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:05a56d507bf87e48d59f8a1ce513f22285df7fc4ce01b59284c02753c4e09ec4",
+          "implementation_id": "b-learned",
+          "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+          "mechanism": "learned-policy",
+          "provider": "fake-provider",
+          "qualification_binding": {
+            "binding_id": "b-learned",
+            "digest": "sha256:b11a713ea7de6d22153c816b2f406560e1babe9b0d58aaf61be1309c1d9bac6d",
+            "kind": "qualification-record"
+          },
+          "qualification_status": "blocked",
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container",
+          "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113"
+        }
+      ],
+      "skills": [
+        {
+          "input_fields": [
+            {
+              "maximum": null,
+              "minimum": null,
+              "name": "destination",
+              "required": true,
+              "unit": null,
+              "value_type": "identifier"
+            },
+            {
+              "maximum": null,
+              "minimum": null,
+              "name": "source",
+              "required": true,
+              "unit": null,
+              "value_type": "identifier"
+            },
+            {
+              "maximum": 0.25,
+              "minimum": 0.05,
+              "name": "speed-scale",
+              "required": true,
+              "unit": "ratio",
+              "value_type": "number"
+            }
+          ],
+          "preconditions": [
+            {
+              "maximum_age_ns": 1000,
+              "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "requirement_id": "workspace-clear"
+            }
+          ],
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container"
+        }
+      ],
+      "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcell_id": "cup-workcell"
+    },
+    "runtimeRequest": {
+      "arguments": [
+        {
+          "name": "destination",
+          "value": "station-b",
+          "value_type": "identifier"
+        },
+        {
+          "name": "source",
+          "value": "station-a",
+          "value_type": "identifier"
+        },
+        {
+          "name": "speed-scale",
+          "value": 0.1,
+          "value_type": "number"
+        }
+      ],
+      "artifact_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "kind": "implementation-artifact"
+        }
+      ],
+      "calibration_bindings": [
+        {
+          "binding_id": "workspace",
+          "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "geometry"
+        }
+      ],
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "contract_version": "tinyedge-runtime-physical-skill-route-request-v1",
+      "dependency_bindings": [
+        {
+          "binding_id": "motion-adapter",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "adapter"
+        }
+      ],
+      "evaluation_monotonic_ns": 10000000000,
+      "execution_targets": [
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "kind": "robot-controller"
+        }
+      ],
+      "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+      "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "policy": {
+        "allowed_qualification_statuses": [
+          "qualified"
+        ],
+        "implementation_order": [
+          "a-waypoint",
+          "b-learned"
+        ],
+        "policy_digest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+        "policy_id": "h01-qualified-waypoint-first-v1"
+      },
+      "preconditions": [
+        {
+          "evidence_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+          "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+          "observed_monotonic_ns": 9999999999,
+          "precondition_id": "workspace-clear",
+          "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "status": "met"
+        }
+      ],
+      "qualification_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:96c3c86123ad63df58678b801957ee21efb06d69a3a6a9747fcdd48ca81d1df6",
+          "kind": "qualification-record"
+        }
+      ],
+      "request_digest": "sha256:52ec4178a7ad11aee8f35fa56a9c7592ade130f46053c3903b05f281127f3d4c",
+      "request_id": "route-a0221e9cd9137112",
+      "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+      "skill_id": "transfer-container",
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcell_id": "cup-workcell"
+    },
+    "runtimeVersion": "0.2.0",
+    "workcellId": "cup-workcell"
+  },
+  "stale": {
+    "assessmentTimestamps": [
+      {
+        "observedMonotonicNs": "9999998999",
+        "preconditionId": "workspace-clear"
+      }
+    ],
+    "capabilityId": "transfer-container",
+    "contractVersion": "experimental-physical-route-receipt-v1",
+    "decision": {
+      "candidates": [
+        {
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:03744388d464c275d94dbc466b0e59bb4eea54cc6d57021caaffb686cac770a1",
+          "implementation_id": "a-waypoint",
+          "mechanism": "taught-waypoints",
+          "provider": "fake-provider",
+          "rejection_codes": [
+            "precondition_stale"
+          ],
+          "status": "rejected"
+        },
+        {
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:05a56d507bf87e48d59f8a1ce513f22285df7fc4ce01b59284c02753c4e09ec4",
+          "implementation_id": "b-learned",
+          "mechanism": "learned-policy",
+          "provider": "fake-provider",
+          "rejection_codes": [
+            "artifact_missing",
+            "implementation_blocked",
+            "precondition_missing",
+            "precondition_stale",
+            "qualification_missing",
+            "qualification_status_not_allowed"
+          ],
+          "status": "rejected"
+        }
+      ],
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "contract_version": "tinyedge-runtime-physical-skill-route-decision-v1",
+      "decision_digest": "sha256:7eee8776f3cb9bb8bc33a77a5f07e191208afac1e3fe0b63f252d8f9ddac7365",
+      "decision_status": "no_match",
+      "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+      "physical_execution_authorized": false,
+      "policy_digest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+      "request_digest": "sha256:7c7c486cfadb72ac62cb832d4d5286ea008f60ec4efecdb3c7c86bd3ddfc5c20",
+      "request_id": "route-a0221e9cd9137112",
+      "request_rejection_codes": [],
+      "selected_execution_target": null,
+      "selected_implementation_digest": null,
+      "selected_implementation_id": null,
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "evaluatedAt": "2026-09-02T17:00:00Z",
+    "evaluationMonotonicNs": "10000000000",
+    "hostEvidence": {
+      "activity": "idle",
+      "artifact_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "kind": "implementation-artifact"
+        }
+      ],
+      "calibration_bindings": [
+        {
+          "binding_id": "workspace",
+          "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "geometry"
+        }
+      ],
+      "dependency_bindings": [
+        {
+          "binding_id": "motion-adapter",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "adapter"
+        }
+      ],
+      "execution_targets": [
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "kind": "robot-controller"
+        }
+      ],
+      "observedAt": "2026-09-02T17:00:00Z",
+      "observed_monotonic_ns": 9999999999,
+      "preconditions": [
+        {
+          "evidence_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+          "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+          "observed_monotonic_ns": 9999998999,
+          "precondition_id": "workspace-clear",
+          "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "status": "met"
+        }
+      ],
+      "qualification_conditions": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+          "kind": "qualification-conditions"
+        }
+      ],
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "hostEvidenceDigest": "sha256:2acd89cc7896e3090bc1e5d1777e1ba5651b9e2ec4da66922c6f0cb63d75727c",
+    "implementations": [
+      {
+        "implementationId": "a-waypoint",
+        "qualificationStatus": "qualified"
+      },
+      {
+        "implementationId": "b-learned",
+        "qualificationStatus": "blocked"
+      }
+    ],
+    "observedAt": "2026-09-02T17:00:00Z",
+    "physicalExecutionAuthorized": false,
+    "policyVersion": {
+      "contractVersion": "tinyedge-runtime-physical-skill-route-request-v1",
+      "policyDigest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+      "policyId": "h01-qualified-waypoint-first-v1"
+    },
+    "receiptDigest": "sha256:99593ba0c374acb0ff3e7f04fcf033f1226c2dc272f9b023757fa2a9f31bd16d",
+    "registrySnapshotDigest": "sha256:4f325455639df28c9e810936233c0fe86110a96055862205e3dba8abac75bcbd",
+    "request": {
+      "arguments": [
+        {
+          "name": "destination",
+          "value": "station-b",
+          "value_type": "identifier"
+        },
+        {
+          "name": "source",
+          "value": "station-a",
+          "value_type": "identifier"
+        },
+        {
+          "name": "speed-scale",
+          "value": 0.1,
+          "value_type": "number"
+        }
+      ],
+      "capabilityId": "transfer-container",
+      "contractVersion": "experimental-physical-route-preview-request-v1",
+      "expectedCandidateBindingDigest": "sha256:f81ee982f0cf48269e529b0f4d294cbbb25af1c7340547b3641db9449cb47d17",
+      "expectedCatalogDigest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "expectedRegistryDigest": "sha256:3842836e750badf26b90be2a4ffe1dc24e11e46e9dbdf23f47bed1a6f3055ea5",
+      "expectedWorkcellDigest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcellId": "cup-workcell"
+    },
+    "runtimeCatalog": {
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "catalog_id": "machine-local-capabilities",
+      "contract_version": "tinyedge-runtime-physical-skill-catalog-v1",
+      "implementations": [
+        {
+          "artifact_bindings": [
+            {
+              "binding_id": "a-waypoint",
+              "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+              "kind": "implementation-artifact"
+            }
+          ],
+          "calibration_bindings": [
+            {
+              "binding_id": "workspace",
+              "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "kind": "geometry"
+            }
+          ],
+          "declared_status": "available",
+          "dependency_bindings": [
+            {
+              "binding_id": "motion-adapter",
+              "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "kind": "adapter"
+            }
+          ],
+          "eligibility_requirements": [],
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:03744388d464c275d94dbc466b0e59bb4eea54cc6d57021caaffb686cac770a1",
+          "implementation_id": "a-waypoint",
+          "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+          "mechanism": "taught-waypoints",
+          "provider": "fake-provider",
+          "qualification_binding": {
+            "binding_id": "a-waypoint",
+            "digest": "sha256:96c3c86123ad63df58678b801957ee21efb06d69a3a6a9747fcdd48ca81d1df6",
+            "kind": "qualification-record"
+          },
+          "qualification_status": "qualified",
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container",
+          "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113"
+        },
+        {
+          "artifact_bindings": [
+            {
+              "binding_id": "b-learned",
+              "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+              "kind": "implementation-artifact"
+            }
+          ],
+          "calibration_bindings": [
+            {
+              "binding_id": "workspace",
+              "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "kind": "geometry"
+            }
+          ],
+          "declared_status": "blocked",
+          "dependency_bindings": [
+            {
+              "binding_id": "motion-adapter",
+              "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "kind": "adapter"
+            }
+          ],
+          "eligibility_requirements": [
+            {
+              "maximum_age_ns": 1000000000,
+              "requirement_digest": "sha256:e01d806958789e6c801d20b147b133754c9d7494152407c8550103fa2c9f5aa8",
+              "requirement_id": "operator-approved-learned-fallback"
+            }
+          ],
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:05a56d507bf87e48d59f8a1ce513f22285df7fc4ce01b59284c02753c4e09ec4",
+          "implementation_id": "b-learned",
+          "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+          "mechanism": "learned-policy",
+          "provider": "fake-provider",
+          "qualification_binding": {
+            "binding_id": "b-learned",
+            "digest": "sha256:b11a713ea7de6d22153c816b2f406560e1babe9b0d58aaf61be1309c1d9bac6d",
+            "kind": "qualification-record"
+          },
+          "qualification_status": "blocked",
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container",
+          "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113"
+        }
+      ],
+      "skills": [
+        {
+          "input_fields": [
+            {
+              "maximum": null,
+              "minimum": null,
+              "name": "destination",
+              "required": true,
+              "unit": null,
+              "value_type": "identifier"
+            },
+            {
+              "maximum": null,
+              "minimum": null,
+              "name": "source",
+              "required": true,
+              "unit": null,
+              "value_type": "identifier"
+            },
+            {
+              "maximum": 0.25,
+              "minimum": 0.05,
+              "name": "speed-scale",
+              "required": true,
+              "unit": "ratio",
+              "value_type": "number"
+            }
+          ],
+          "preconditions": [
+            {
+              "maximum_age_ns": 1000,
+              "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "requirement_id": "workspace-clear"
+            }
+          ],
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container"
+        }
+      ],
+      "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcell_id": "cup-workcell"
+    },
+    "runtimeRequest": {
+      "arguments": [
+        {
+          "name": "destination",
+          "value": "station-b",
+          "value_type": "identifier"
+        },
+        {
+          "name": "source",
+          "value": "station-a",
+          "value_type": "identifier"
+        },
+        {
+          "name": "speed-scale",
+          "value": 0.1,
+          "value_type": "number"
+        }
+      ],
+      "artifact_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "kind": "implementation-artifact"
+        }
+      ],
+      "calibration_bindings": [
+        {
+          "binding_id": "workspace",
+          "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "geometry"
+        }
+      ],
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "contract_version": "tinyedge-runtime-physical-skill-route-request-v1",
+      "dependency_bindings": [
+        {
+          "binding_id": "motion-adapter",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "adapter"
+        }
+      ],
+      "evaluation_monotonic_ns": 10000000000,
+      "execution_targets": [
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "kind": "robot-controller"
+        }
+      ],
+      "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+      "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "policy": {
+        "allowed_qualification_statuses": [
+          "qualified"
+        ],
+        "implementation_order": [
+          "a-waypoint",
+          "b-learned"
+        ],
+        "policy_digest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+        "policy_id": "h01-qualified-waypoint-first-v1"
+      },
+      "preconditions": [
+        {
+          "evidence_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+          "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+          "observed_monotonic_ns": 9999998999,
+          "precondition_id": "workspace-clear",
+          "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "status": "met"
+        }
+      ],
+      "qualification_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:96c3c86123ad63df58678b801957ee21efb06d69a3a6a9747fcdd48ca81d1df6",
+          "kind": "qualification-record"
+        }
+      ],
+      "request_digest": "sha256:7c7c486cfadb72ac62cb832d4d5286ea008f60ec4efecdb3c7c86bd3ddfc5c20",
+      "request_id": "route-a0221e9cd9137112",
+      "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+      "skill_id": "transfer-container",
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcell_id": "cup-workcell"
+    },
+    "runtimeVersion": "0.2.0",
+    "workcellId": "cup-workcell"
+  },
+  "unknown": {
+    "assessmentTimestamps": [
+      {
+        "observedMonotonicNs": null,
+        "preconditionId": "workspace-clear"
+      }
+    ],
+    "capabilityId": "transfer-container",
+    "contractVersion": "experimental-physical-route-receipt-v1",
+    "decision": {
+      "candidates": [
+        {
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:03744388d464c275d94dbc466b0e59bb4eea54cc6d57021caaffb686cac770a1",
+          "implementation_id": "a-waypoint",
+          "mechanism": "taught-waypoints",
+          "provider": "fake-provider",
+          "rejection_codes": [
+            "precondition_unknown"
+          ],
+          "status": "rejected"
+        },
+        {
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:05a56d507bf87e48d59f8a1ce513f22285df7fc4ce01b59284c02753c4e09ec4",
+          "implementation_id": "b-learned",
+          "mechanism": "learned-policy",
+          "provider": "fake-provider",
+          "rejection_codes": [
+            "artifact_missing",
+            "implementation_blocked",
+            "precondition_missing",
+            "precondition_unknown",
+            "qualification_missing",
+            "qualification_status_not_allowed"
+          ],
+          "status": "rejected"
+        }
+      ],
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "contract_version": "tinyedge-runtime-physical-skill-route-decision-v1",
+      "decision_digest": "sha256:4092610e0596b759d088422572dbf1f4069f25a6300a40c4036d511ba78401bc",
+      "decision_status": "no_match",
+      "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+      "physical_execution_authorized": false,
+      "policy_digest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+      "request_digest": "sha256:42021b026648a04017885bb404a87509f1aa986e544981cb06342efd9459fd39",
+      "request_id": "route-a0221e9cd9137112",
+      "request_rejection_codes": [],
+      "selected_execution_target": null,
+      "selected_implementation_digest": null,
+      "selected_implementation_id": null,
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "evaluatedAt": "2026-09-02T17:00:00Z",
+    "evaluationMonotonicNs": "10000000000",
+    "hostEvidence": {
+      "activity": "idle",
+      "artifact_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "kind": "implementation-artifact"
+        }
+      ],
+      "calibration_bindings": [
+        {
+          "binding_id": "workspace",
+          "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "geometry"
+        }
+      ],
+      "dependency_bindings": [
+        {
+          "binding_id": "motion-adapter",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "adapter"
+        }
+      ],
+      "execution_targets": [
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "kind": "robot-controller"
+        }
+      ],
+      "observedAt": "2026-09-02T17:00:00Z",
+      "observed_monotonic_ns": 9999999999,
+      "preconditions": [
+        {
+          "evidence_digest": null,
+          "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+          "observed_monotonic_ns": null,
+          "precondition_id": "workspace-clear",
+          "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "status": "unknown"
+        }
+      ],
+      "qualification_conditions": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+          "kind": "qualification-conditions"
+        }
+      ],
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "hostEvidenceDigest": "sha256:90994a141d96eb2fc8ed6e7c78b44b56e91babae7e68aa52fcd9af52b2f7f275",
+    "implementations": [
+      {
+        "implementationId": "a-waypoint",
+        "qualificationStatus": "qualified"
+      },
+      {
+        "implementationId": "b-learned",
+        "qualificationStatus": "blocked"
+      }
+    ],
+    "observedAt": "2026-09-02T17:00:00Z",
+    "physicalExecutionAuthorized": false,
+    "policyVersion": {
+      "contractVersion": "tinyedge-runtime-physical-skill-route-request-v1",
+      "policyDigest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+      "policyId": "h01-qualified-waypoint-first-v1"
+    },
+    "receiptDigest": "sha256:1ec478ef171f1397bdd9194f1ee2c7202d236a5ccf20bcd8ebcbca197dfbc4ef",
+    "registrySnapshotDigest": "sha256:4f325455639df28c9e810936233c0fe86110a96055862205e3dba8abac75bcbd",
+    "request": {
+      "arguments": [
+        {
+          "name": "destination",
+          "value": "station-b",
+          "value_type": "identifier"
+        },
+        {
+          "name": "source",
+          "value": "station-a",
+          "value_type": "identifier"
+        },
+        {
+          "name": "speed-scale",
+          "value": 0.1,
+          "value_type": "number"
+        }
+      ],
+      "capabilityId": "transfer-container",
+      "contractVersion": "experimental-physical-route-preview-request-v1",
+      "expectedCandidateBindingDigest": "sha256:f81ee982f0cf48269e529b0f4d294cbbb25af1c7340547b3641db9449cb47d17",
+      "expectedCatalogDigest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "expectedRegistryDigest": "sha256:3842836e750badf26b90be2a4ffe1dc24e11e46e9dbdf23f47bed1a6f3055ea5",
+      "expectedWorkcellDigest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcellId": "cup-workcell"
+    },
+    "runtimeCatalog": {
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "catalog_id": "machine-local-capabilities",
+      "contract_version": "tinyedge-runtime-physical-skill-catalog-v1",
+      "implementations": [
+        {
+          "artifact_bindings": [
+            {
+              "binding_id": "a-waypoint",
+              "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+              "kind": "implementation-artifact"
+            }
+          ],
+          "calibration_bindings": [
+            {
+              "binding_id": "workspace",
+              "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "kind": "geometry"
+            }
+          ],
+          "declared_status": "available",
+          "dependency_bindings": [
+            {
+              "binding_id": "motion-adapter",
+              "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "kind": "adapter"
+            }
+          ],
+          "eligibility_requirements": [],
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:03744388d464c275d94dbc466b0e59bb4eea54cc6d57021caaffb686cac770a1",
+          "implementation_id": "a-waypoint",
+          "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+          "mechanism": "taught-waypoints",
+          "provider": "fake-provider",
+          "qualification_binding": {
+            "binding_id": "a-waypoint",
+            "digest": "sha256:96c3c86123ad63df58678b801957ee21efb06d69a3a6a9747fcdd48ca81d1df6",
+            "kind": "qualification-record"
+          },
+          "qualification_status": "qualified",
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container",
+          "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113"
+        },
+        {
+          "artifact_bindings": [
+            {
+              "binding_id": "b-learned",
+              "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+              "kind": "implementation-artifact"
+            }
+          ],
+          "calibration_bindings": [
+            {
+              "binding_id": "workspace",
+              "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "kind": "geometry"
+            }
+          ],
+          "declared_status": "blocked",
+          "dependency_bindings": [
+            {
+              "binding_id": "motion-adapter",
+              "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "kind": "adapter"
+            }
+          ],
+          "eligibility_requirements": [
+            {
+              "maximum_age_ns": 1000000000,
+              "requirement_digest": "sha256:e01d806958789e6c801d20b147b133754c9d7494152407c8550103fa2c9f5aa8",
+              "requirement_id": "operator-approved-learned-fallback"
+            }
+          ],
+          "execution_target": {
+            "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "kind": "robot-controller"
+          },
+          "implementation_digest": "sha256:05a56d507bf87e48d59f8a1ce513f22285df7fc4ce01b59284c02753c4e09ec4",
+          "implementation_id": "b-learned",
+          "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+          "mechanism": "learned-policy",
+          "provider": "fake-provider",
+          "qualification_binding": {
+            "binding_id": "b-learned",
+            "digest": "sha256:b11a713ea7de6d22153c816b2f406560e1babe9b0d58aaf61be1309c1d9bac6d",
+            "kind": "qualification-record"
+          },
+          "qualification_status": "blocked",
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container",
+          "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113"
+        }
+      ],
+      "skills": [
+        {
+          "input_fields": [
+            {
+              "maximum": null,
+              "minimum": null,
+              "name": "destination",
+              "required": true,
+              "unit": null,
+              "value_type": "identifier"
+            },
+            {
+              "maximum": null,
+              "minimum": null,
+              "name": "source",
+              "required": true,
+              "unit": null,
+              "value_type": "identifier"
+            },
+            {
+              "maximum": 0.25,
+              "minimum": 0.05,
+              "name": "speed-scale",
+              "required": true,
+              "unit": "ratio",
+              "value_type": "number"
+            }
+          ],
+          "preconditions": [
+            {
+              "maximum_age_ns": 1000,
+              "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "requirement_id": "workspace-clear"
+            }
+          ],
+          "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+          "skill_id": "transfer-container"
+        }
+      ],
+      "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcell_id": "cup-workcell"
+    },
+    "runtimeRequest": {
+      "arguments": [
+        {
+          "name": "destination",
+          "value": "station-b",
+          "value_type": "identifier"
+        },
+        {
+          "name": "source",
+          "value": "station-a",
+          "value_type": "identifier"
+        },
+        {
+          "name": "speed-scale",
+          "value": 0.1,
+          "value_type": "number"
+        }
+      ],
+      "artifact_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "kind": "implementation-artifact"
+        }
+      ],
+      "calibration_bindings": [
+        {
+          "binding_id": "workspace",
+          "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "geometry"
+        }
+      ],
+      "catalog_digest": "sha256:8e7dc50d2f991692b2a6edb758cc1ad3575badb6d65db221fc2b08c831f69b95",
+      "contract_version": "tinyedge-runtime-physical-skill-route-request-v1",
+      "dependency_bindings": [
+        {
+          "binding_id": "motion-adapter",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "adapter"
+        }
+      ],
+      "evaluation_monotonic_ns": 10000000000,
+      "execution_targets": [
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "kind": "robot-controller"
+        }
+      ],
+      "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+      "manifest_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "policy": {
+        "allowed_qualification_statuses": [
+          "qualified"
+        ],
+        "implementation_order": [
+          "a-waypoint",
+          "b-learned"
+        ],
+        "policy_digest": "sha256:484745e127558d363c8c7241fcf770172d708f28c61b12c797e4a3a2b39cca75",
+        "policy_id": "h01-qualified-waypoint-first-v1"
+      },
+      "preconditions": [
+        {
+          "evidence_digest": null,
+          "invocation_digest": "sha256:1cafa4e57589cc6d4135469f28ae6fa65269c30a4567ec7995cfbbf2a2a00cde",
+          "observed_monotonic_ns": null,
+          "precondition_id": "workspace-clear",
+          "requirement_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "status": "unknown"
+        }
+      ],
+      "qualification_bindings": [
+        {
+          "binding_id": "a-waypoint",
+          "digest": "sha256:96c3c86123ad63df58678b801957ee21efb06d69a3a6a9747fcdd48ca81d1df6",
+          "kind": "qualification-record"
+        }
+      ],
+      "request_digest": "sha256:42021b026648a04017885bb404a87509f1aa986e544981cb06342efd9459fd39",
+      "request_id": "route-a0221e9cd9137112",
+      "skill_definition_digest": "sha256:6aa29aa7e4deafef75663609ee1babc52ca693308fc416ae8a2c6023bed8bcc6",
+      "skill_id": "transfer-container",
+      "state_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "workcell_digest": "sha256:8028f34d93cba686c4ac9fad9db53e7724626ec7b1aa2e0b048e06f32669e113",
+      "workcell_id": "cup-workcell"
+    },
+    "runtimeVersion": "0.2.0",
+    "workcellId": "cup-workcell"
+  }
+}

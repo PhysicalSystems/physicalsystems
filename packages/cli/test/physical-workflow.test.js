@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -8,8 +9,228 @@ import {
   createPhysicalWorkflowState,
   renderPhysicalWorkflow,
   updatePhysicalWorkflow,
+  PHYSICAL_CAPABILITIES_TOOL,
+  PHYSICAL_ROUTE_TOOL,
 } from '../src/physical/workflow.js'
 import { createPhysicalCommissioningDraft } from '../src/physical/exploration.js'
+
+function routeFixture() {
+  return JSON.parse(readFileSync(new URL('./fixtures/physical-route-v1.json', import.meta.url), 'utf8'))
+}
+
+function modelRouteRequest(request) {
+  const { contractVersion: _version, ...modelInput } = request
+  return modelInput
+}
+
+test('four physical tools expose catalog and route preview without an execution tool', async () => {
+  const fixture = routeFixture()
+  const events = []
+  const requests = []
+  const tools = createPhysicalPiTools({
+    defineTool: (value) => value,
+    client: {
+      origin: 'http://127.0.0.1:8876',
+      async capabilities() { requests.push('catalog'); return fixture.catalog },
+      async previewCapability(request) { requests.push(request); return fixture.selected },
+    },
+    onRouteChecking(kind) { events.push(['checking', kind]); return 12 },
+    onCatalog(value, generation) { events.push(['catalog', value, generation]); return true },
+    onRoute(value, generation) { events.push(['route', value, generation]); return true },
+  })
+  assert.deepEqual(tools.map(({ name }) => name).sort(), [
+    'inspect_physical_system', 'plan_physical_workflow', 'inspect_physical_capabilities',
+    'preview_physical_capability',
+  ].sort())
+  const catalog = await tools.find(({ name }) => name === PHYSICAL_CAPABILITIES_TOOL).execute('catalog', {})
+  const route = await tools.find(({ name }) => name === PHYSICAL_ROUTE_TOOL).execute('route', modelRouteRequest(fixture.request))
+  assert.equal(JSON.parse(catalog.content[0].text).physicalExecutionAuthorized, false)
+  const result = JSON.parse(route.content[0].text)
+  assert.equal(result.physicalExecutionAuthorized, false)
+  assert.equal(result.decision.physical_execution_authorized, false)
+  assert.match(result.receiptUrl, /^http:\/\/127\.0\.0\.1:8876\/v2\/physical\/routes\/[0-9a-f]{64}$/)
+  assert.deepEqual(requests, ['catalog', fixture.request])
+  assert.equal(events.find(([kind]) => kind === 'catalog')[2], 12)
+  assert.equal(events.find(([kind]) => kind === 'route')[2], 12)
+})
+
+test('model-facing route tool rejects every extra field including the injected version', async () => {
+  const fixture = routeFixture()
+  let requests = 0
+  const errors = []
+  const tools = createPhysicalPiTools({
+    defineTool: (value) => value,
+    client: { async previewCapability() { requests += 1; throw new Error('unexpected request') } },
+    onRouteError(error) { errors.push(error); return true },
+  })
+  const tool = tools.find(({ name }) => name === PHYSICAL_ROUTE_TOOL)
+  for (const extra of [
+    { contractVersion: fixture.request.contractVersion }, { physicalExecutionAuthorized: true },
+    { state: { ready: true } }, { preconditions: [] }, { implementationId: 'invented' },
+  ]) {
+    await assert.rejects(tool.execute('bad', { ...modelRouteRequest(fixture.request), ...extra }), /unsupported|missing|unexpected|fields|inputs/i)
+  }
+  assert.equal(requests, 0)
+  assert.equal(errors.length, 5)
+})
+
+test('no-input capability lookup rejects model-supplied evidence before contacting node', async () => {
+  let calls = 0
+  const tools = createPhysicalPiTools({
+    defineTool: (value) => value,
+    client: { async capabilities() { calls += 1; throw new Error('unexpected request') } },
+  })
+  const tool = tools.find(({ name }) => name === PHYSICAL_CAPABILITIES_TOOL)
+  await assert.rejects(tool.execute('bad', { ready: true }), /input|fields|argument|parameter/i)
+  assert.equal(calls, 0)
+})
+
+test('superseded catalog and preview results are not delivered to the model', async () => {
+  const fixture = routeFixture()
+  for (const name of [PHYSICAL_CAPABILITIES_TOOL, PHYSICAL_ROUTE_TOOL]) {
+    const tools = createPhysicalPiTools({
+      defineTool: (value) => value,
+      client: {
+        origin: 'http://127.0.0.1:8876',
+        async capabilities() { return fixture.catalog },
+        async previewCapability() { return fixture.selected },
+      },
+      onRouteChecking() { return 3 },
+      onCatalog(_catalog, generation) { assert.equal(generation, 3); return false },
+      onRoute(_receipt, generation) { assert.equal(generation, 3); return false },
+      onRouteError(_error, generation) { assert.equal(generation, 3); return false },
+    })
+    const tool = tools.find((entry) => entry.name === name)
+    await assert.rejects(tool.execute('stale', name === PHYSICAL_ROUTE_TOOL ? modelRouteRequest(fixture.request) : {}), /superseded/i)
+  }
+})
+
+test('route failure clears the proposal and preserves host rejection rather than retrying', async () => {
+  const fixture = routeFixture()
+  const failure = new Error('workcell_not_idle')
+  const events = []
+  let calls = 0
+  const tools = createPhysicalPiTools({
+    defineTool: (value) => value,
+    client: { async previewCapability() { calls += 1; throw failure } },
+    onRouteChecking() { return 7 },
+    onRoute() { throw new Error('failed route cannot publish selection') },
+    onRouteError(error, generation) { events.push([error, generation]); return true },
+  })
+  await assert.rejects(tools.find(({ name }) => name === PHYSICAL_ROUTE_TOOL).execute('failed', modelRouteRequest(fixture.request)), (error) => error === failure)
+  assert.equal(calls, 1)
+  assert.deepEqual(events, [[failure, 7]])
+})
+
+test('route widget separates Agent Skill, capability and implementation and keeps execution locked', () => {
+  const fixture = routeFixture()
+  let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
+  state = updatePhysicalWorkflow(state, { type: 'agent-skill', skillId: 'transfer-container' })
+  state = updatePhysicalWorkflow(state, { type: 'capability-catalog', catalog: fixture.catalog })
+  state = updatePhysicalWorkflow(state, { type: 'route', receipt: fixture.selected })
+  const lines = renderPhysicalWorkflow(state, 500).join('\n')
+  assert.match(lines, /Agent Skill · transfer-container · instructions only/)
+  assert.match(lines, /Physical capability · transfer-container/)
+  assert.match(lines, /Capability implementation ·/)
+  assert.match(lines, /implementation selected/)
+  assert.match(lines, /not approved for execution/)
+  assert.match(lines, /Route receipt · sha256:/)
+  assert.match(lines, /— Run/)
+  assert.match(lines, /— Verify/)
+  assert.doesNotMatch(lines, /✓ Run|✓ Verify|movement completed|transfer successful/i)
+})
+
+test('unknown and stale observations render rejection reasons without selected or verified claims', () => {
+  const fixture = routeFixture()
+  for (const name of ['unknown', 'stale']) {
+    let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+    state = updatePhysicalWorkflow(state, { type: 'route', receipt: fixture[name] })
+    const lines = renderPhysicalWorkflow(state, 500).join('\n')
+    assert.match(lines, /no eligible implementation/)
+    assert.match(lines, name === 'unknown' ? /state is unknown/ : /observation is stale/i)
+    assert.match(lines, /— Run/)
+    assert.doesNotMatch(lines, /Eligible under|✓ Plan|✓ Verify/)
+  }
+})
+
+test('new workflow generations ignore delayed route, catalog and error events', () => {
+  const fixture = routeFixture()
+  const invalidations = [
+    { type: 'checking' }, { type: 'catalog-checking' }, { type: 'route-checking' },
+    { type: 'snapshot', snapshot: snapshotFixture() }, { type: 'reset-intent' },
+    { type: 'intent', response: intentFixture(), requestedIntent: 'New request' },
+    { type: 'error', error: new Error('node disconnected') },
+    { type: 'plan-error', error: new Error('changed intent'), requestedIntent: 'New request' },
+  ]
+  for (const invalidation of invalidations) {
+    let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+    state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
+    state = updatePhysicalWorkflow(state, { type: 'capability-catalog', catalog: fixture.catalog })
+    state = updatePhysicalWorkflow(state, { type: 'route-checking' })
+    const oldGeneration = state.generation
+    const changed = updatePhysicalWorkflow(state, invalidation)
+    assert.ok(changed.generation > oldGeneration)
+    assert.equal(changed.routeReceipt, null)
+    for (const event of [
+      { type: 'route', receipt: fixture.selected },
+      { type: 'capability-catalog', catalog: fixture.catalog },
+      { type: 'route-error', error: new Error('old response failed') },
+    ]) {
+      assert.equal(updatePhysicalWorkflow(changed, { ...event, generation: oldGeneration }), changed)
+    }
+    if (invalidation.type === 'catalog-checking') assert.equal(changed.capabilityCatalog, null)
+  }
+})
+
+test('deferred preview cannot restore a selection after a new discovery snapshot', async () => {
+  const fixture = routeFixture()
+  let complete
+  let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  const tools = createPhysicalPiTools({
+    defineTool: (value) => value,
+    client: {
+      origin: 'http://127.0.0.1:8876',
+      previewCapability() { return new Promise((resolve) => { complete = resolve }) },
+    },
+    onRouteChecking(kind) {
+      state = updatePhysicalWorkflow(state, { type: kind })
+      return state.generation
+    },
+    onRoute(receipt, generation) {
+      if (state.generation !== generation) return false
+      state = updatePhysicalWorkflow(state, { type: 'route', receipt, generation })
+      return true
+    },
+    onRouteError(error, generation) {
+      if (state.generation !== generation) return false
+      state = updatePhysicalWorkflow(state, { type: 'route-error', error, generation })
+      return true
+    },
+  })
+  const pending = tools.find(({ name }) => name === PHYSICAL_ROUTE_TOOL).execute('old', modelRouteRequest(fixture.request))
+  state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
+  const refreshed = state
+  complete(fixture.selected)
+  await assert.rejects(pending, /superseded/)
+  assert.equal(state, refreshed)
+  assert.equal(state.routeReceipt, null)
+  assert.equal(state.routeError, null)
+})
+
+test('catalog lookup failure removes stale catalog/selection while preserving a truthful error', () => {
+  const fixture = routeFixture()
+  let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  state = updatePhysicalWorkflow(state, { type: 'capability-catalog', catalog: fixture.catalog })
+  state = updatePhysicalWorkflow(state, { type: 'route', receipt: fixture.selected })
+  state = updatePhysicalWorkflow(state, { type: 'catalog-checking' })
+  assert.equal(state.capabilityCatalog, null)
+  assert.equal(state.routeReceipt, null)
+  state = updatePhysicalWorkflow(state, { type: 'route-error', error: new Error('runtime_unavailable'), generation: state.generation })
+  assert.equal(state.capabilityCatalog, null)
+  assert.equal(state.routeReceipt, null)
+  assert.match(renderPhysicalWorkflow(state, 200).join('\n'), /runtime_unavailable/)
+})
 
 function snapshotFixture({ ready = true } = {}) {
   return {

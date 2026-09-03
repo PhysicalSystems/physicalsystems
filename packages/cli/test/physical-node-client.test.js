@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -9,6 +10,160 @@ import {
   PHYSICAL_NODE_INTENT_VERSION,
   PHYSICAL_NODE_STATE_VERSION,
 } from '../src/physical/node-client.js'
+
+function routeFixture() {
+  return JSON.parse(readFileSync(new URL('./fixtures/physical-route-v1.json', import.meta.url), 'utf8'))
+}
+
+test('capability catalog, route preview and receipt retrieval use bounded loopback requests', async () => {
+  const fixture = routeFixture()
+  const calls = []
+  const client = createPhysicalNodeClient({
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options })
+      return jsonResponse(url.pathname.endsWith('/capabilities') ? fixture.catalog : fixture.selected)
+    },
+  })
+  const catalog = await client.capabilities()
+  const selected = await client.previewCapability(fixture.request)
+  const retained = await client.routeReceipt(selected.receiptDigest)
+  assert.equal(catalog.physicalExecutionAuthorized, false)
+  assert.equal(selected.physicalExecutionAuthorized, false)
+  assert.equal(selected.decision.physical_execution_authorized, false)
+  assert.equal(selected.decision.decision_status, 'selected')
+  assert.equal(retained.receiptDigest, selected.receiptDigest)
+  assert.deepEqual(calls.map(({ url, options }) => [url.pathname, options.method]), [
+    ['/v2/physical/capabilities', 'GET'],
+    ['/v2/physical/routes:preview', 'POST'],
+    [`/v2/physical/routes/${selected.receiptDigest.slice(7)}`, 'GET'],
+  ])
+  assert.deepEqual(JSON.parse(calls[1].options.body), fixture.request)
+  for (const { url, options } of calls) {
+    assert.equal(url.origin, 'http://127.0.0.1:8876')
+    assert.equal(options.redirect, 'error')
+    assert.equal(options.cache, 'no-store')
+    assert.ok(options.signal instanceof AbortSignal)
+    assert.equal(options.headers.Accept, 'application/json')
+  }
+})
+
+test('capability preview rejects invented authority/evidence fields before making a request', async () => {
+  let calls = 0
+  const client = createPhysicalNodeClient({ fetchImpl: async () => { calls += 1; throw new Error('unexpected request') } })
+  const fixture = routeFixture()
+  for (const injected of [
+    { physicalExecutionAuthorized: true }, { preconditions: [] }, { qualification: 'qualified' },
+    { policy: {} }, { implementationId: 'invented' },
+  ]) {
+    await assert.rejects(client.previewCapability({ ...fixture.request, ...injected }), /unsupported|missing fields/)
+  }
+  assert.equal(calls, 0)
+})
+
+test('capability route errors preserve host conflict code and never retry or fall back', async () => {
+  const fixture = routeFixture()
+  const calls = []
+  const client = createPhysicalNodeClient({
+    fetchImpl: async (url) => {
+      calls.push(url.pathname)
+      return jsonResponse({ error: 'Registry changed; inspect again', code: 'snapshot_mismatch' }, { status: 409 })
+    },
+  })
+  await assert.rejects(client.previewCapability(fixture.request), (error) => {
+    assert.equal(error.status, 409)
+    assert.equal(error.code, 'snapshot_mismatch')
+    return /Registry changed/.test(error.message)
+  })
+  assert.deepEqual(calls, ['/v2/physical/routes:preview'])
+})
+
+test('absent capability routing reports unavailable without legacy intent fallback', async () => {
+  const calls = []
+  const client = createPhysicalNodeClient({
+    fetchImpl: async (url) => {
+      calls.push(url.pathname)
+      return jsonResponse({ error: 'Pinned Runtime unavailable', code: 'runtime_unavailable' }, { status: 503 })
+    },
+  })
+  await assert.rejects(client.capabilities(), (error) => error.status === 503 && error.code === 'runtime_unavailable')
+  assert.deepEqual(calls, ['/v2/physical/capabilities'])
+})
+
+test('preview receipt must match the requested invocation and retained receipt digest', async () => {
+  const fixture = routeFixture()
+  const client = createPhysicalNodeClient({ fetchImpl: async () => jsonResponse(fixture.selected) })
+  await assert.rejects(client.previewCapability({ ...fixture.request, workcellId: 'different-workcell' }), /match/)
+  await assert.rejects(client.routeReceipt(`sha256:${'f'.repeat(64)}`), /different route receipt/)
+  await assert.rejects(client.routeReceipt('../receipt'), /digest/)
+})
+
+test('unknown and stale physical observations remain no-match responses', async () => {
+  const fixture = routeFixture()
+  for (const name of ['unknown', 'stale']) {
+    const client = createPhysicalNodeClient({ fetchImpl: async () => jsonResponse(fixture[name]) })
+    const receipt = await client.previewCapability(fixture[name].request)
+    assert.equal(receipt.decision.decision_status, 'no_match')
+    assert.equal(receipt.decision.selected_implementation_id, null)
+    assert.equal(receipt.physicalExecutionAuthorized, false)
+    assert.ok(receipt.decision.candidates.some((candidate) => candidate.rejection_codes.includes(`precondition_${name}`)))
+  }
+})
+
+test('route JSON accepts more than 256 KiB through 2 MiB without increasing legacy limits', async () => {
+  const fixture = routeFixture()
+  const rawReceipt = JSON.stringify(fixture.selected)
+  for (const bytes of [300 * 1024, 2 * 1024 * 1024]) {
+    // Legal JSON whitespace exercises transport size without changing the
+    // authentic Node-generated contract or its content-addressed digests.
+    const body = `${' '.repeat(bytes - Buffer.byteLength(rawReceipt))}${rawReceipt}`
+    const client = createPhysicalNodeClient({
+      fetchImpl: async () => ({
+        ok: true, status: 200,
+        headers: { get: (name) => ({ 'content-type': 'application/json', 'content-length': String(bytes) })[name] ?? null },
+        async text() { return body },
+      }),
+    })
+    assert.equal((await client.previewCapability(fixture.request)).receiptDigest, fixture.selected.receiptDigest)
+    assert.equal((await client.routeReceipt(fixture.selected.receiptDigest)).receiptDigest, fixture.selected.receiptDigest)
+    await assert.rejects(client.inspect(), /too large/)
+  }
+})
+
+test('route JSON over 2 MiB is rejected for declared and streamed response sizes', async () => {
+  const fixture = routeFixture()
+  let readBody = false
+  const declared = createPhysicalNodeClient({
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      headers: { get: (name) => ({ 'content-type': 'application/json', 'content-length': String(2 * 1024 * 1024 + 1) })[name] ?? null },
+      async text() { readBody = true; return '{}' },
+    }),
+  })
+  await assert.rejects(declared.previewCapability(fixture.request), /too large/)
+  assert.equal(readBody, false)
+  let cancelled = false
+  const streamed = createPhysicalNodeClient({
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      headers: { get: (name) => name === 'content-type' ? 'application/json' : null },
+      body: {
+        getReader() {
+          let emitted = false
+          return {
+            async read() {
+              if (emitted) return { done: true }
+              emitted = true
+              return { done: false, value: new Uint8Array(2 * 1024 * 1024 + 1) }
+            },
+            async cancel() { cancelled = true },
+          }
+        },
+      },
+    }),
+  })
+  await assert.rejects(streamed.routeReceipt(fixture.selected.receiptDigest), /too large/)
+  assert.equal(cancelled, true)
+})
 
 function jsonResponse(value, { status = 200, headers = {} } = {}) {
   const body = JSON.stringify(value)

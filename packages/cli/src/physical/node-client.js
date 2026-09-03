@@ -1,6 +1,14 @@
+import {
+  normalizePhysicalCapabilityCatalog,
+  normalizePhysicalRouteReceipt,
+  normalizePhysicalRouteRequest,
+  physicalRouteReceiptPath,
+} from './route-contracts.js'
+
 const DEFAULT_PHYSICAL_NODE_URL = 'http://127.0.0.1:8876'
 const DEFAULT_TIMEOUT_MS = 5_000
 const MAX_RESPONSE_BYTES = 256 * 1024
+const MAX_ROUTE_RESPONSE_BYTES = 2 * 1024 * 1024
 const MAX_INTENT_CHARACTERS = 500
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
@@ -529,7 +537,7 @@ function contentLength(response) {
   return parsed
 }
 
-async function boundedResponseText(response) {
+async function boundedResponseText(response, maximumBytes) {
   if (!response.body || typeof response.body.getReader !== 'function') {
     return response.text()
   }
@@ -541,7 +549,7 @@ async function boundedResponseText(response) {
     if (done) break
     if (!(value instanceof Uint8Array)) throw new Error('Physical node returned invalid response bytes')
     total += value.byteLength
-    if (total > MAX_RESPONSE_BYTES) {
+    if (total > maximumBytes) {
       await reader.cancel().catch(() => {})
       throw new Error('Physical node response is too large')
     }
@@ -561,7 +569,7 @@ export function createPhysicalNodeClient({
     throw new TypeError('Physical node timeout must be between 100 and 30000 ms')
   }
 
-  async function request(path, { method = 'GET', body } = {}) {
+  async function request(path, { method = 'GET', body, maximumBytes = MAX_RESPONSE_BYTES } = {}) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     let response
@@ -587,15 +595,15 @@ export function createPhysicalNodeClient({
     let raw
     try {
       const declaredLength = contentLength(response)
-      if (declaredLength != null && declaredLength > MAX_RESPONSE_BYTES) {
+      if (declaredLength != null && declaredLength > maximumBytes) {
         throw new Error('Physical node response is too large')
       }
       const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase()
       if (!contentType.startsWith('application/json')) {
         throw new Error('Physical node returned a non-JSON response')
       }
-      raw = await boundedResponseText(response)
-      if (Buffer.byteLength(raw, 'utf8') > MAX_RESPONSE_BYTES) {
+      raw = await boundedResponseText(response, maximumBytes)
+      if (Buffer.byteLength(raw, 'utf8') > maximumBytes) {
         throw new Error('Physical node response is too large')
       }
     } catch (error) {
@@ -615,6 +623,7 @@ export function createPhysicalNodeClient({
       const detail = typeof payload?.error === 'string' ? payload.error.slice(0, 300) : `HTTP ${response.status}`
       const error = new Error(`Physical node request failed: ${detail}`)
       error.status = response.status
+      if (typeof payload?.code === 'string' && /^[a-z][a-z0-9_-]{0,127}$/.test(payload.code)) error.code = payload.code
       throw error
     }
     return payload
@@ -622,6 +631,20 @@ export function createPhysicalNodeClient({
 
   return Object.freeze({
     origin,
+    async capabilities() {
+      return normalizePhysicalCapabilityCatalog(await request('/v2/physical/capabilities', { maximumBytes: MAX_ROUTE_RESPONSE_BYTES }))
+    },
+    async previewCapability(value) {
+      const body = normalizePhysicalRouteRequest(value)
+      return normalizePhysicalRouteReceipt(await request('/v2/physical/routes:preview', {
+        method: 'POST', body, maximumBytes: MAX_ROUTE_RESPONSE_BYTES,
+      }), body)
+    },
+    async routeReceipt(receiptDigest) {
+      const receipt = normalizePhysicalRouteReceipt(await request(physicalRouteReceiptPath(receiptDigest), { maximumBytes: MAX_ROUTE_RESPONSE_BYTES }))
+      if (receipt.receiptDigest !== receiptDigest) throw new Error('Physical node returned a different route receipt')
+      return receipt
+    },
     async inspect() {
       let candidates
       try {

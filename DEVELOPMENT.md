@@ -54,9 +54,17 @@ the versioned state and intent routes when a commissioned configuration exists.
 A candidate can be physically detected while its adapter remains unavailable;
 those are deliberately separate facts.
 
-Port `8876` is a loopback JSON API, not another user interface. The npm package
-does not yet install or supervise the Python node. Non-loopback plaintext node
-origins are rejected.
+Port `8876` is a loopback JSON API, not another user interface. Non-loopback
+plaintext node origins are rejected. This is the manual/external-node path.
+
+The source candidate also implements managed first-run installation and owned
+Node supervision. Its downloadable release index intentionally remains empty
+until separately distributed, exact Node/Runtime wheels pass release review.
+Maintainers can exercise this path using an explicitly reviewed local manifest,
+SHA-256 and wheelhouse via `setup-node`; see the
+[managed setup contract](packages/cli/README.md#managed-first-run-setup-release-candidate).
+Managed launch selects an ephemeral loopback port and starts discovery only.
+It never opens a camera or configures an executor automatically.
 
 ## Provider and compatibility commands
 

@@ -7,6 +7,10 @@ import {
   physicalSystemsSystemPrompt,
 } from '../chat/pi-session.js'
 import { createHarnessMode } from '../harness/interactive-mode.js'
+import { loadCuratedAgentSkills } from '../harness/agent-skills.js'
+import { installSessionPromptGate } from '../harness/session-prompt-gate.js'
+import { startNodeSupervisor } from '../harness/node-supervisor.js'
+import { managedNodeEnvironment } from './setup-node.js'
 import { createTinyEdgePiExtension } from '../pi-extension.js'
 
 function extensionLoadErrors(services) {
@@ -55,8 +59,10 @@ async function runHarnessCommand({
   initialMessage,
   createExtension = createTinyEdgePiExtension,
   createMode,
+  env = process.env,
 }) {
   const sdk = suppliedSdk || await loadOfficialPiSdk()
+  const agentSkillRegistry = loadCuratedAgentSkills({ loadSkillsFromDir: sdk.loadSkillsFromDir })
   const agentDir = path.join(config.configDir, 'pi-internal')
   const sessionDir = path.join(config.configDir, 'harness-sessions')
   const credentials = createPiCredentialStore({ configDir: config.configDir, secretStore })
@@ -66,10 +72,21 @@ async function runHarnessCommand({
     refreshOnCreate: false,
   })
   const sessionManager = sdk.SessionManager.create(cwd, sessionDir)
+  const promptGates = new WeakMap()
+  let runtime
+  let acceptingPrompts = false
   const extensionFactory = createExtension({
+    env,
     standalone: true,
     cloudEnabled: false,
     showHeader: true,
+    agentSkillRegistry,
+    canSubmitWorkcellIntent: () => Boolean(acceptingPrompts && runtime?.session
+      && promptGates.get(runtime.session)?.isBusy() === false),
+    submitWorkcellIntent: (text) => {
+      if (!acceptingPrompts || !runtime?.session) throw new Error('Harness session is not ready or has ended')
+      return runtime.session.prompt(text, { expandPromptTemplates: false, source: 'interactive' })
+    },
     createConfigImpl: () => config,
     ...(secretStore ? { createSecretStoreImpl: () => secretStore } : {}),
   })
@@ -90,7 +107,7 @@ async function runHarnessCommand({
         noPromptTemplates: true,
         noThemes: true,
         noContextFiles: true,
-        systemPrompt: physicalSystemsSystemPrompt(),
+        systemPrompt: `${physicalSystemsSystemPrompt()}\n\n${agentSkillRegistry.prompt()}`,
         extensionFactories: [extensionFactory],
       },
     })
@@ -106,14 +123,16 @@ async function runHarnessCommand({
       // permanent ceiling for tools registered by the reviewed extension.
       tools: [...PHYSICAL_HARNESS_TOOL_ALLOWLIST],
     })
+    promptGates.set(created.session, installSessionPromptGate(created.session))
     return { ...created, services, diagnostics }
   }
 
-  const runtime = await sdk.createAgentSessionRuntime(createRuntime, {
+  runtime = await sdk.createAgentSessionRuntime(createRuntime, {
     cwd,
     agentDir,
     sessionManager,
   })
+  acceptingPrompts = true
   const Mode = createMode || ((runtimeHost, options) => createHarnessMode(sdk, runtimeHost, options))
   let mode
   let runCompleted = false
@@ -126,6 +145,7 @@ async function runHarnessCommand({
     primaryFailure = error
     throw error
   } finally {
+    acceptingPrompts = false
     let cleanupFailure
     if (!runCompleted) {
       try {
@@ -148,9 +168,21 @@ export async function harnessCommand(options) {
   // catalog refreshes, update checks, and install telemetry. They do not block
   // inference through the model selected for the TinyEdge session.
   const restoreEnvironment = isolatePiStartupEnvironment()
+  let node, primaryFailure
   try {
-    return await runHarnessCommand(options)
+    const environment = await (options.managedNodeEnvironmentImpl || managedNodeEnvironment)({ ...options, env: options.env || process.env })
+    node = await (options.startNodeSupervisorImpl || startNodeSupervisor)({ env: environment })
+    return await runHarnessCommand({ ...options, env: node?.environment || environment })
+  } catch (error) {
+    primaryFailure = error
+    throw error
   } finally {
-    restoreEnvironment()
+    try { await node?.dispose() }
+    catch (error) {
+      // A failed shutdown is itself actionable; never silently force-kill a
+      // possibly active physical controller or start its replacement.
+      if (!primaryFailure) throw error
+      throw new Error('Harness failed and local Node shutdown is unconfirmed. Inspect the existing Node and use the physical stop procedure.')
+    } finally { restoreEnvironment() }
   }
 }

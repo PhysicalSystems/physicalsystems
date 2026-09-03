@@ -24,6 +24,12 @@ OIDC, and is protected by the `npm-release` environment.
 
 The workflow:
 
+Before building, checks the bundled managed-Node release index and raw manifest
+hashes. An empty index, placeholder artifact URLs, or missing Ubuntu x64 Python
+3.10/3.12 manifests blocks publication. This metadata gate does not replace
+clean installation tests of the actual downloadable bytes. Source tests and
+review-candidate packing remain available before those artifacts are published.
+
 1. Builds `physicalsystems@0.2.0` once on Windows x64 and records exact
    tarball checksums.
 2. Verifies those same bytes on Windows x64, native Windows ARM64, Ubuntu
@@ -51,6 +57,37 @@ The workflow:
 The workflow does not use a long-lived npm token, publish the runtime, change
 `latest`, or contain a lifecycle publishing script. Local packing and tests
 never publish or alter registry state.
+
+### Linux first-run acceptance
+
+The protected Linux jobs select CPython 3.10 on Ubuntu 22.04 and 3.12 on Ubuntu
+24.04 and probe `venv`/`ensurepip`. After the separate command-shim and bare-CLI
+dispatch checks, a source-only PTY wrapper invokes the freshly installed
+package's real `runCli`, Harness, installer and supervisor. It starts with an
+exclusively created config directory and removes inherited external-node,
+executor, simulation and Python override settings from the test child. A private
+`XDG_CONFIG_HOME` also isolates the Node's default discovery registry; the test
+does not read the operator's existing workcell configuration.
+
+For a bundled Node release, this isolated test answers the exact software-only
+first-run consent prompt once, permits up to ten minutes for installation, and
+requires the selected manifest digest to match the bundled release. It then
+checks authenticated discovery status (`mode: null`, no configurations or runs),
+separate camera credentials and idle camera status, renders the Harness, sends
+Ctrl+D and confirms that the owned Node listener closed. Pi currently calls
+`process.exit` for interactive quit, so the PTY parent independently waits for
+connection refusal on the exact owned loopback port after Harness exit/Node
+stdin EOF; a timeout is not shutdown proof. It does not select a
+camera, capture a frame, commission hardware or dispatch motion. No credentials
+are included in acceptance markers.
+
+An empty-index source candidate still exercises the interactive Harness but is
+explicitly reported as **NO managed Node acceptance**; it cannot satisfy the
+protected publication gate. Synthetic regression fixtures test the acceptance
+logic without downloading wheels or opening hardware and are not release-byte
+evidence. The bundled index now pins the actual published Node 0.2.0 files;
+fresh packaged managed-Node acceptance must pass with those descriptors before
+this npm release can be published.
 
 ## One-time namespace bootstrap
 
