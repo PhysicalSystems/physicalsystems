@@ -9,9 +9,12 @@ import { checkBundledNodeReleaseIndex } from '../../../scripts/check-node-releas
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
 async function fixture(t) {
-  const directory = await fs.mkdtemp(path.join(tmpdir(), 'ps-node-release-gate-'))
+  // Windows runners may expose TEMP through an 8.3 alias. Canonicalize only
+  // the test base; keep the release gate's production no-link checks intact.
+  const base = await fs.realpath(tmpdir())
+  const directory = await fs.mkdtemp(path.join(base, 'ps-node-release-gate-'))
   t.after(async () => {
-    assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()))
+    assert.equal(path.dirname(path.resolve(directory)), path.resolve(base))
     assert.ok(path.basename(directory).startsWith('ps-node-release-gate-'))
     assert.equal((await fs.lstat(directory)).isSymbolicLink(), false)
     await fs.rm(directory, { recursive: true, force: true })

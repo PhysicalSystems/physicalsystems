@@ -18,9 +18,12 @@ function fixture() {
   return { manifest, digest: sha(JSON.stringify(manifest)) }
 }
 async function temporary(t) {
-  const root = await fs.mkdtemp(path.join(tmpdir(), 'ps-ni-'))
+  // Windows runners may expose TEMP through an 8.3 alias. Use its canonical
+  // base so ordinary fixtures still exercise the production no-link checks.
+  const base = await fs.realpath(tmpdir())
+  const root = await fs.mkdtemp(path.join(base, 'ps-ni-'))
   t.after(async () => {
-    assert.equal(path.dirname(path.resolve(root)), path.resolve(tmpdir()))
+    assert.equal(path.dirname(path.resolve(root)), path.resolve(base))
     assert.ok(path.basename(root).startsWith('ps-ni-'))
     assert.equal((await fs.lstat(root)).isSymbolicLink(), false)
     await fs.rm(root, { recursive: true, force: true })
