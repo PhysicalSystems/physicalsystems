@@ -58,6 +58,36 @@ The workflow does not use a long-lived npm token, publish the runtime, change
 `latest`, or contain a lifecycle publishing script. Local packing and tests
 never publish or alter registry state.
 
+### Linux first-run acceptance
+
+The protected Linux jobs select CPython 3.10 on Ubuntu 22.04 and 3.12 on Ubuntu
+24.04 and probe `venv`/`ensurepip`. After the separate command-shim and bare-CLI
+dispatch checks, a source-only PTY wrapper invokes the freshly installed
+package's real `runCli`, Harness, installer and supervisor. It starts with an
+exclusively created config directory and removes inherited external-node,
+executor, simulation and Python override settings from the test child. A private
+`XDG_CONFIG_HOME` also isolates the Node's default discovery registry; the test
+does not read the operator's existing workcell configuration.
+
+For a bundled Node release, this isolated test answers the exact software-only
+first-run consent prompt once, permits up to ten minutes for installation, and
+requires the selected manifest digest to match the bundled release. It then
+checks authenticated discovery status (`mode: null`, no configurations or runs),
+separate camera credentials and idle camera status, renders the Harness, sends
+Ctrl+D and confirms that the owned Node listener closed. Pi currently calls
+`process.exit` for interactive quit, so the PTY parent independently waits for
+connection refusal on the exact owned loopback port after Harness exit/Node
+stdin EOF; a timeout is not shutdown proof. It does not select a
+camera, capture a frame, commission hardware or dispatch motion. No credentials
+are included in acceptance markers.
+
+An empty-index source candidate still exercises the interactive Harness but is
+explicitly reported as **NO managed Node acceptance**; it cannot satisfy the
+protected publication gate. Synthetic regression fixtures test the acceptance
+logic without downloading wheels or opening hardware and are not release-byte
+evidence. The current empty index means fresh downloadable-Node acceptance has
+not yet been demonstrated by this source candidate.
+
 ## One-time namespace bootstrap
 
 npm trusted publishing can be configured only after the package exists. A

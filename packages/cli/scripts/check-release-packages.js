@@ -1114,17 +1114,20 @@ async function verifyRelease(artifactDirectory) {
         cwd: temporaryRoot,
         timeout: 120_000,
       })
-      run('python3', [
+      console.log(run('python3', [
         path.join(SCRIPT_DIR, 'check-linux-harness-pty.py'),
-        localShim,
+        process.execPath,
+        path.join(SCRIPT_DIR, 'check-managed-harness.mjs'),
+        installedPhysicalSystemsDirectory,
       ], {
         cwd: temporaryRoot,
         env: {
           TINYEDGE_CONFIG_DIR: path.join(temporaryRoot, 'linux-harness-config'),
           TERM: 'xterm-256color',
         },
-        timeout: 120_000,
-      })
+        timeout: 12 * 60_000,
+        phase: 'Linux instrumented packaged Harness first-run acceptance',
+      }))
     }
   } finally {
     removeTemporaryDirectory(temporaryRoot)

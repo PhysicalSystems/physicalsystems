@@ -277,6 +277,14 @@ then records the successful selection. No `postinstall` or other npm lifecycle
 script downloads software. System Python must already include `venv`/`ensurepip`;
 missing prerequisites produce one actionable error rather than invoking sudo.
 
+The **managed Node candidate** matrix is Linux x64 and Windows x64 with CPython
+3.10, 3.11 or 3.12 (candidate wheel tests use Ubuntu 22.04 and Windows Server
+2022). This is separate from the broader Harness-only npm platform matrix above:
+Windows ARM64 npm checks do not qualify a managed Node wheel set. The generic
+installer recognizes Python 3.13, but no approved 3.13 artifact is available.
+Managed setup always requires an approved bundled manifest for the exact
+platform and Python minor version; a nonempty index with no match fails closed.
+
 For the qualified Windows 0.2.0 wheel set, the generated environment path must
 be at most 126 characters. Setup checks this before installation because legacy
 Windows path limits can prevent a required NumPy DLL from being installed.
