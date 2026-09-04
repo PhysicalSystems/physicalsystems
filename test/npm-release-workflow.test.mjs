@@ -522,14 +522,15 @@ test('the export boundary accepts the guarded source-license transition without 
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.pi-runtime.txt', runtimeNoticeTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/THIRD_PARTY_NOTICES.md', thirdPartyNoticesTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/TRADEMARKS.md', trademarksTemplate)
-    for (const file of ['product.json', 'migration.json', 'README.md']) {
+    for (const file of ['product.json', 'migration.json', 'README.md', 'publisher-verification.py']) {
       writeFixtureFile(fixtureRoot, `release/${file}`, readFileSync(path.join(root, 'release', file)))
     }
     // Exercise the real import gate in every license-state scenario. Preserve
     // original receipt/payload bytes rather than replacing the gate with a stub.
-    for (const directory of ['packages/runtime', 'release/node']) {
+    for (const directory of ['packages/runtime', 'release/node', 'release/runtime']) {
       cpSync(path.join(root, directory), path.join(fixtureRoot, directory), { recursive: true, errorOnExist: true, force: false })
     }
+    for (const component of ['runtime', 'node']) writeFixtureFile(fixtureRoot, `.github/workflows/${component}-release.yml`, readFileSync(path.join(root, `.github/workflows/${component}-release.yml`)))
     for (const governanceFile of [
       '.github/CODEOWNERS',
       'SECURITY.md',
@@ -686,7 +687,10 @@ test('direct preview publishing fails closed on environment, provenance, and lic
   }
   assert.doesNotMatch(workflow.slice(0, publishJob), /UNLICENSED/)
   assert.doesNotMatch(packageChecker, /must declare its intended release license/)
-  assert.doesNotMatch(workflow, /workflow_dispatch:\s*\n\s+inputs:/)
+  const dispatchInputs = workflow.slice(workflow.indexOf('    inputs:'), workflow.indexOf('\npermissions:'))
+  assert.deepEqual([...dispatchInputs.matchAll(/^      ([a-z_]+):$/gm)].map((match) => match[1]), ['coordinator_id', 'expected_head_sha'])
+  assert.match(workflow, /test "\$EXPECTED_HEAD_SHA" = "\$GITHUB_SHA"/)
+  assert.doesNotMatch(dispatchInputs, /(?:version|token|artifact|publish_mode):/)
   assert.doesNotMatch(
     workflow,
     /allow-private|license-override|policy-override|acknowledge-private|acknowledge-provenance/i,

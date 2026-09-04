@@ -20,9 +20,13 @@ remain outside this repository.
   contracts, adapter protocols, deterministic strategies, fakes and conformance.
   Its `tinyedge-runtime` distribution and `tinyedge_runtime` imports are not
   renamed. It imports no private Node, Platform or Evaluation implementation.
-- `release/node`: already-public release verifier, tests, notice and an inactive
-  publisher template. It accepts an explicitly reviewed wheel plus metadata;
+- `release/node`: already-public release verifier, tests, notice and historical
+  template, used by the consolidated protected Node workflow. It accepts an explicitly reviewed wheel plus metadata;
   it does not build or contain the private Node implementation.
+- `release/runtime` and the shared publisher verifier: component-only publication
+  of reviewed public Runtime artifacts and protected OIDC verification. They do
+  not add a long-lived credential or copy private source. The root maintainer
+  coordinator dispatches these reviewed workflows; it cannot approve deployments.
 - Each imported module has a `SOURCE-IMPORT.json` recording the exact public
   commit and original blob/byte hashes, excluded files and deliberate changes.
   The import inventory is checked without access to private repositories.

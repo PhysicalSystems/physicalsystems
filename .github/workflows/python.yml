@@ -119,3 +119,9 @@ jobs:
       - name: Test the public release verifier with synthetic evidence only
         working-directory: release/node
         run: python -B -m pytest -q -p no:cacheprovider tests
+      - name: Test Runtime release tooling with synthetic evidence only
+        run: python -B -m pytest -q -p no:cacheprovider release/runtime/tests
+      - name: Test the shared publisher verification with mocked authentication
+        run: python -B -m unittest discover -s test -p test_publisher_verification.py
+      - name: Test bounded release evidence archive parsing
+        run: python -B -m unittest discover -s test -p test_release_evidence.py

@@ -2,7 +2,7 @@
   "contractVersion": "physicalsystems-source-migration-v1",
   "publicSourceRepository": "PhysicalSystems/physicalsystems",
   "privateNodeRepository": "PhysicalSystems/node",
-  "publisherCutover": "pending-verification",
+  "publisherCutover": "workflows-ready",
   "preserveHistoricalAssets": true,
   "publishers": {
     "runtime": {

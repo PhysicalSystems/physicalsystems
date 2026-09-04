@@ -1,71 +1,133 @@
-# One public product workspace, one private Node
+# One public release workspace, one private Node
 
 `physicalsystems` owns the Harness, public Runtime and reviewed Node release
 tooling. The private `node` repository owns the hardware host and private
-implementations. Source ownership is consolidated; package lifecycles remain
-separate so a Harness change need not rebuild and republish Python dependencies.
+implementations. These are separate packages, not separate publishing repos:
+a Harness-only change reuses the existing Python releases.
 
-## One maintainer entry point
+| Component | Source/tooling here | Protected workflow | Environment |
+| --- | --- | --- | --- |
+| npm `physicalsystems` | `packages/cli` | `npm-release.yml` | `npm-release` |
+| PyPI `tinyedge-runtime` | `packages/runtime`, `release/runtime` | `runtime-release.yml` | `runtime-pypi` |
+| PyPI `physicalsystems-node` | `release/node` (reviewed export only) | `node-release.yml` | `physical-node-pypi` |
+
+The Pi compatibility package is frozen. Runtime imports no private Node code.
+Keep each `SOURCE-IMPORT.json`: it records historical public source bytes and
+explicit adaptations, not a claim that adapted files are still unchanged.
+
+## Normal product release
 
 ```sh
-npm run release -- plan
 npm run release -- check
-npm run release -- migration
-npm run release -- prepare --output ABSOLUTE_NEW_ARTIFACT_DIRECTORY
+npm run release -- publish --output ABSOLUTE_NEW_RECEIPT_DIRECTORY
 ```
 
-`plan`/`check` verify the current product pins; `prepare` produces a review
-candidate. `migration` checks the public-source import receipts and reports
-publisher cutover separately. None uploads, changes permissions, retires a
-repository or authorizes physical execution. Ordinary source contributions
-do not require running the complete installed-package release matrix.
+Run from a clean reviewed checkout of current `main`, using the pinned Node/npm
+toolchain, Python 3.10+ (`python` on Windows, `python3` on Linux) and authenticated
+`gh`. Python's standard library parses bounded evidence archives in memory without
+extracting paths; no additional package installation is needed. The coordinator verifies product pins, checks
+the official registries, reuses unchanged versions, and dispatches the protected
+npm workflow. Existing versions are never overwritten. The complete native npm
+installation matrix and human approval remain mandatory for a new product.
+`plan`, `check`, `migration` and `prepare --output ABSOLUTE_NEW_DIRECTORY` remain
+read-only/preparation routes with no publication authority.
 
-## What moved
+The command returns while GitHub is testing or waiting for review. To continue:
 
-| Component | Source of truth here | Identity preserved |
-| --- | --- | --- |
-| Operator Harness | `packages/cli` | npm `physicalsystems` |
-| Public execution kernel | `packages/runtime` | PyPI `tinyedge-runtime`, import `tinyedge_runtime` |
-| Reviewed Node export verifier | `release/node` | PyPI `physicalsystems-node`; private Node source stays outside this repository |
+```sh
+npm run release -- resume --output ABSOLUTE_RECEIPT_DIRECTORY
+```
 
-Each imported module records its original public commit, file hashes and
-deliberate migration changes in `SOURCE-IMPORT.json`. Runtime source, schemas,
-fixtures and tests are imported unchanged. Keep that origin record when
-evolving the module; declare additions/adaptations explicitly. The existing
-Pi compatibility runtime is a different, frozen MIT package.
+The receipt records source SHA, product plan digest, UUID, exact run IDs and
+proofs. Dispatch intent is saved before the network request. An uncertain
+response is recovered by finding that UUID, never by repeating a dispatch.
+Every workflow receives the expected source SHA, rejecting a racing main update.
+`resume` checks current-attempt jobs and publisher receipts, not just a green
+top-level status (which could hide skipped jobs). It never approves a deployment.
+It downloads evidence by exact artifact ID, verifies the archive digest, and
+compares the receipt with any previous evidence instead of trusting cached files.
 
-## Publisher cutover is not yet complete
+## When a Python component actually changes
 
-Existing Runtime and Node publishing configurations remain in their historical
-repositories. This source change does not activate another uploader or claim
-that a PyPI trust configuration has moved. The Node workflow is a disabled
-template outside `.github/workflows`; its six native install proofs, exact
-capsule hash, human approval and public readback checks are retained for review.
+There are two review phases because final registry download URLs do not exist
+until a new backend is published. Do not fabricate those URLs to make a single
+source revision appear releasable.
 
-The proposed replacement identities are recorded in `migration.json`:
+1. Review the versioned Runtime source or minimal private Node export, and stage
+   the exact approved candidate assets in this repository. Follow
+   [Runtime](runtime/README.md) or [Node](node/README.md) artifact contracts.
+2. Publish that component via the same maintainer entry point:
 
-| Distribution | Repository | Workflow filename | Environment |
-| --- | --- | --- | --- |
-| `tinyedge-runtime` | `PhysicalSystems/physicalsystems` | `runtime-release.yml` | `runtime-pypi` |
-| `physicalsystems-node` | `PhysicalSystems/physicalsystems` | `node-release.yml` | `physical-node-pypi` |
+   ```sh
+   npm run release -- publish-component --component runtime --runtime-candidate RELEASE_ID --runtime-metadata-sha256 SHA256 --output ABSOLUTE_NEW_RECEIPT_DIRECTORY
+   npm run release -- publish-component --component node --node-candidate RELEASE_ID --node-metadata-sha256 SHA256 --output ABSOLUTE_NEW_RECEIPT_DIRECTORY
+   ```
 
-Cutover requires owner-configured PyPI publishers and GitHub environment
-protections, reviewed component-scoped workflow triggers, an explicitly
-authorized new candidate, exact artifact qualification and public readback.
-Runtime's old generic `v<version>` release trigger must not be copied into
-the product tag namespace. Do not activate the Node template just by copying
-it; its deliberate disabled guards and migration tests must change in the
-same reviewed cutover. Never configure an alternative token-based upload.
+   Run only changed components, Runtime before a Node which depends on it.
+   The component command binds its readback to the approved capsule, independently
+   of the old npm manifests. It does not edit pins or launch npm publication.
+3. Adopt/review the generated real download manifests and immutable hashes in
+   `release/product.json` and the CLI manifests; update the npm version. Then run
+   the normal product command. Unchanged backends are reused without another
+   build, publisher approval or upload.
 
-Changed components progress in dependency order: Runtime if changed, then
-Node if changed, then the npm product. Reuse unchanged published hashes. A
-source build at version `0.2.0` is not the already-published Runtime wheel and
-must not replace its pinned hash. Changed-backend publishing is not automated
-by the current local preparation command.
+New Runtime candidates use `runtime-v<VERSION>-candidate`; Node candidates use
+`physicalsystems-node-v<VERSION>-candidate`. Generic product tags do not trigger
+Python publication. The coordinator never exports private source, stages assets,
+bumps versions, promotes `latest`, supplies a write token or bypasses review.
 
-After an uncertain upload, read back the exact version/hash; do not retry
-upload or skip existing files automatically. Record publisher and artifact
-evidence before disabling the legacy route. Keep historical repositories,
-release tags, assets and existing PyPI/npm downloads available through the
-migration and rollback window. No repository is deleted or made public by
-this consolidation.
+## Verify the publisher migration without a needless software version
+
+The reviewed workflows support `operation=verify-published` by default. Start
+both independent component checks together:
+
+```sh
+npm run release -- verify-publishers --node-candidate RELEASE_ID --node-metadata-sha256 SHA256 --output ABSOLUTE_NEW_RECEIPT_DIRECTORY
+```
+
+Runtime uses its existing product wheel pin; Node uses an exact public two-asset
+copy of the approved candidate. Both install the real pinned wheel across
+Linux/Windows x64 and Python 3.10/3.11/3.12. After human approval, a shared probe
+performs the real GitHub OIDC to PyPI token exchange and discards the token.
+The workflow then verifies public bytes and retains safe evidence. It does
+not rebuild or upload the already-published package.
+
+An accepted exchange proves that PyPI accepted that workflow identity, but its
+response does not identify authorized projects or confirm that the configured
+PyPI environment was nonempty. The account owner must also verify the two
+entries on the existing projects' publishing pages (not pending projects):
+
+- [Runtime publishing](https://pypi.org/manage/project/tinyedge-runtime/settings/publishing/):
+  owner `PhysicalSystems`, repository `physicalsystems`, workflow `runtime-release.yml`,
+  environment `runtime-pypi`.
+- [Node publishing](https://pypi.org/manage/project/physicalsystems-node/settings/publishing/):
+  owner `PhysicalSystems`, repository `physicalsystems`, workflow `node-release.yml`,
+  environment `physical-node-pypi`.
+
+Both GitHub environments require a named human reviewer, exact `main` branch
+policy and disabled admin bypass. Node additionally requires repository variable
+`PHYSICAL_NODE_PUBLISH_POLICY=v1-minimal-node-preview`. No source test needs OIDC.
+
+## Cutover evidence and recovery
+
+`migration` reports checked-in workflow readiness, not live configuration or
+retirement. Completion requires owner configuration evidence, actual six-target
+proofs and token exchange receipts from each replacement, exact anonymous public
+readback, and a verified disabled state for the historical Runtime `release.yml`
+and Node `publish.yml` workflows. Then remove the obsolete PyPI publisher entries.
+Keep historical repositories, tags, assets and download URLs. No repository
+deletion, archive or visibility change is implied by disabling its uploader.
+
+Do not retry an uncertain upload or enable `skip-existing`: inspect public
+readback and the original run. A failed upload remains a failed job even if
+readback proves the bytes exist; that does not identify who uploaded them.
+For an interrupted local coordinator, a leftover `coordinator.lock` or
+`coordinator.next.json` blocks automatic recovery. Confirm no coordinator is
+running, preserve both files, reconcile the saved intent with GitHub's UUID/run
+record, then repair only that receipt directory. Never blindly delete the lock
+and start another publication. A missing run in the bounded lookup also requires
+inspection; absence is not retry permission.
+
+Workflow artifacts expire after 90 days. Preserve their safe receipts and
+digests in the release evidence archive before expiration; missing/expired
+evidence must not be reported as a newly verified successful migration.

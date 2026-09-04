@@ -1,19 +1,25 @@
 #!/usr/bin/env node
 // Maintainer entry point. Planning and preparation never grant publication
-// authority; only the existing protected GitHub workflow can publish.
+// authority; only the protected GitHub workflows can publish.
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createReleasePlan, readProductRelease } from './release-plan.mjs'
 import { parsePreparationArguments, prepareProductCandidate } from './prepare-product-candidate.mjs'
 import { createMigrationReport } from './release-migration.mjs'
+import { parsePublishArguments, runPublishCoordinator } from './publish-coordinator.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const usage = 'Usage: npm run release -- plan | check | migration | prepare --output ABSOLUTE_NEW_DIRECTORY'
+const usage = 'Usage: npm run release -- plan | check | migration | prepare --output ABSOLUTE_NEW_DIRECTORY | verify-publishers/publish/publish-component/resume --output ABSOLUTE_RECEIPT_DIRECTORY [component candidate options]'
 
 export function parseReleaseArguments(args) {
   const [action = 'plan', ...rest] = args
   if (['plan', 'check', 'migration'].includes(action) && rest.length === 0) return { action }
+  if (['verify-publishers', 'publish', 'publish-component', 'resume'].includes(action)) {
+    if (rest.length === 0) throw new Error(usage)
+    parsePublishArguments(rest)
+    return { action, args: rest }
+  }
   if (action === 'prepare') {
     const values = parsePreparationArguments(rest)
     if (values.offline) throw new Error('Use the explicit release:prepare -- --offline review route for offline artifacts; they are not npm release candidates')
@@ -62,6 +68,9 @@ export async function runReleaseCommand(args, { sourceRoot = root, print = conso
   }
   const plan = await createReleasePlan(sourceRoot)
   await checkWorkflowReleaseConfiguration(sourceRoot)
+  if (['verify-publishers', 'publish', 'publish-component', 'resume'].includes(command.action)) {
+    return runPublishCoordinator(command.action, command.args, { sourceRoot, print })
+  }
   if (command.action === 'plan') {
     print(JSON.stringify(plan, null, 2))
   } else if (command.action === 'check') {

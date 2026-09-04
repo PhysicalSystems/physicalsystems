@@ -3,8 +3,9 @@
 Copyright 2026 Lienert De Maeyer / Physical Systems.
 SPDX-License-Identifier: Apache-2.0
 
-Modified for TIN-417: import this directory's verifier by exact path, and test
-the consolidated repository/workflow binding including legacy rejection.
+Modified for TIN-417: import this directory's verifier by exact path, test the
+consolidated authority binding and distinguish no-upload verification from new
+version publication, including legacy and duplicate-publication rejection.
 """
 import base64
 import copy
@@ -229,6 +230,58 @@ def test_public_registry_identity(sample, fault):
     elif fault == "sdist": item["packagetype"] = "sdist"
     elif fault == "duplicate": metadata["urls"].append(dict(item))
     with pytest.raises(r.ReleaseError): r.verify_public(artifact, metadata)
+
+
+@pytest.mark.parametrize("fault", [None, "different-bytes", "yanked", "missing", "different-hash"])
+def test_verify_published_requires_exact_public_node_without_upload(sample, monkeypatch, fault):
+    artifact = {**sample["capsule"]["wheel"], "url": "https://files.pythonhosted.org/packages/synthetic/" + r.NODE_WHEEL}
+    metadata = metadata_for(artifact)
+    if fault == "yanked": metadata["urls"][0]["yanked"] = True
+    elif fault == "missing": metadata["urls"] = []
+    elif fault == "different-hash": metadata["urls"][0]["digests"]["sha256"] = "0" * 64
+    monkeypatch.setattr(r, "public_metadata", lambda name, version: metadata)
+    monkeypatch.setattr(r, "public_read", lambda url, maximum: b"changed" if fault == "different-bytes" else sample["wheel"])
+    monkeypatch.setattr(r.subprocess, "run", lambda *a, **k: pytest.fail("Verification must not execute an upload"))
+    if fault:
+        with pytest.raises(r.ReleaseError):
+            r.verify_registry_mode("verify-published", sample["capsule"], sample["wheel"])
+    else:
+        r.verify_registry_mode("verify-published", sample["capsule"], sample["wheel"])
+
+
+@pytest.mark.parametrize("metadata", [{"urls": []}, {"urls": [{"yanked": True}]}, {"urls": [{"yanked": False}]}])
+def test_publish_never_reuses_an_existing_pypi_version(sample, monkeypatch, metadata):
+    monkeypatch.setattr(r, "public_metadata", lambda name, version: metadata)
+    monkeypatch.setattr(r, "public_read", lambda *args: pytest.fail("No wheel read or upload is needed for an existing version"))
+    with pytest.raises(r.ReleaseError, match="already exists on PyPI"):
+        r.verify_registry_mode("publish", sample["capsule"], sample["wheel"])
+
+
+@pytest.mark.parametrize("status,official", [(404, True), (404, False), (403, True), (429, True), (500, True)])
+def test_publish_requires_explicit_404_from_exact_official_version_endpoint(sample, monkeypatch, status, official):
+    endpoint = f"https://pypi.org/pypi/physicalsystems-node/{r.VERSION}/json"
+    def metadata(name, version):
+        assert name == "physicalsystems-node" and version == r.VERSION
+        raise r.urllib.error.HTTPError(endpoint if official else "https://unapproved.invalid/", status,
+            "synthetic diagnostic never logged", {}, None)
+    monkeypatch.setattr(r, "public_metadata", metadata)
+    if status == 404 and official:
+        r.verify_registry_mode("publish", sample["capsule"], sample["wheel"])
+    else:
+        with pytest.raises(r.ReleaseError, match="Cannot establish"):
+            r.verify_registry_mode("publish", sample["capsule"], sample["wheel"])
+
+
+@pytest.mark.parametrize("operation", ["verify", "stage"])
+def test_release_commands_require_explicit_mode_before_any_network(operation, monkeypatch):
+    monkeypatch.setattr(r, "workflow_identity", lambda: pytest.fail("No implicit mode may reach evidence APIs"))
+    with pytest.raises(r.ReleaseError, match="explicit verification or publication mode"):
+        r.main([operation, "--release-metadata-sha256", "a" * 64])
+
+
+def test_unknown_mode_refused_before_registry_read(sample, monkeypatch):
+    monkeypatch.setattr(r, "public_metadata", lambda *a: pytest.fail("Unrecognized mode reached registry"))
+    with pytest.raises(r.ReleaseError): r.verify_registry_mode("skip-existing", sample["capsule"], sample["wheel"])
 
 
 @pytest.fixture
@@ -493,13 +546,14 @@ def test_stage_rechecks_identity_and_protection_after_all_mutable_reads(monkeypa
         return sample["capsule"], {"release.json": raw, r.NODE_WHEEL: sample["wheel"]}
     monkeypatch.setattr(r, "fetch_candidate", fetch)
     monkeypatch.setattr(r, "validate_proofs", lambda *args: calls.append("proofs"))
-    command = ["stage", "--candidate-release-id", "77", "--release-metadata-sha256", r.sha(raw), "--output", str(tmp_path / "stage")]
+    monkeypatch.setattr(r, "verify_registry_mode", lambda *args: calls.append("registry"))
+    command = ["stage", "--mode", "verify-published", "--candidate-release-id", "77", "--release-metadata-sha256", r.sha(raw), "--output", str(tmp_path / "stage")]
     if fault:
         with pytest.raises(r.ReleaseError): r.main(command)
     else: r.main(command)
-    assert calls[:4] == ["identity", "protection", "fetch", "proofs"]
-    assert calls[4] == "identity"
-    if fault != "identity": assert calls[5] == "protection"
+    assert calls[:6] == ["identity", "protection", "fetch", "registry", "proofs", "registry"]
+    assert calls[6] == "identity"
+    if fault != "identity": assert calls[7] == "protection"
 
 
 @pytest.mark.parametrize("fault", [None, "historical-node-version", "coupled-runtime-version"])

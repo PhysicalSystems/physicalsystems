@@ -13,6 +13,8 @@ function fixture(body) {
   try {
     mkdirSync(path.join(directory, 'release'))
     copyFileSync(path.join(root, 'release/migration.json'), path.join(directory, 'release/migration.json'))
+    mkdirSync(path.join(directory, '.github/workflows'), { recursive: true })
+    for (const component of ['runtime', 'node']) copyFileSync(path.join(root, `.github/workflows/${component}-release.yml`), path.join(directory, `.github/workflows/${component}-release.yml`))
     body(directory)
   } finally { rmSync(directory, { recursive: true, force: true }) }
 }
@@ -43,10 +45,9 @@ test('configuration cannot claim cutover success or change the publisher identit
   }
 }))
 
-test('accidental activation of a replacement workflow is rejected', () => fixture((directory) => {
-  mkdirSync(path.join(directory, '.github/workflows'), { recursive: true })
+test('replacement workflows must retain manual verification and protected environments', () => fixture((directory) => {
   writeFileSync(path.join(directory, '.github/workflows/node-release.yml'), 'name: not-yet-authorized\n')
-  assert.throws(() => readMigrationPlan(directory), /must not be active/)
+  assert.throws(() => readMigrationPlan(directory), /must be manually dispatched/)
 }))
 
 test('source migration report is deterministic and preserves existing distributions', () => {

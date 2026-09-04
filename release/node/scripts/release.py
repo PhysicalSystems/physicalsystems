@@ -7,9 +7,10 @@ This is public release tooling, not a Node build system or hardware client.
 It never builds a package, publishes, approves an environment, or reads a
 private repository. The publishing Action is a separate protected step.
 
-Modified for TIN-417: bind future release evidence to the consolidated public
-repository and node-release.yml. The imported workflow is an inactive template;
-this relocation does not authorize or activate a publisher.
+Modified for TIN-417: bind release evidence to the consolidated public repository
+and node-release.yml. Explicit verify-published mode checks existing bytes without
+uploading; publish mode refuses existing versions. Human approval and trusted
+publisher configuration remain separate from software/source availability.
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 from urllib.parse import urlsplit
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -340,6 +342,32 @@ def verify_public(artifact, metadata):
     return url
 
 
+def verify_published_node(capsule, raw):
+    """Anonymous exact readback, never an upload or a skip-existing shortcut."""
+    url = verify_public(capsule["wheel"], public_metadata("physicalsystems-node", VERSION))
+    require(public_read(url, MAX_WHEEL) == raw, "PyPI readback differs from the approved Node wheel")
+    return url
+
+
+def verify_registry_mode(mode, capsule, raw):
+    require(mode in {"verify-published", "publish"}, "Choose an explicit verification or publication mode")
+    if mode == "verify-published":
+        verify_published_node(capsule, raw)
+        return
+    # A new version must be absent, not merely missing one expected filename.
+    # Only the exact official endpoint's 404 establishes that absence. Other
+    # failures, redirects, malformed data or existing/yanked versions refuse.
+    endpoint = f"https://pypi.org/pypi/physicalsystems-node/{VERSION}/json"
+    try:
+        public_metadata("physicalsystems-node", VERSION)
+    except urllib.error.HTTPError as error:
+        absent = error.code == 404 and error.geturl() == endpoint
+        error.close()
+        require(absent, "Cannot establish that the new Node version is unpublished")
+        return
+    raise ReleaseError("Node version already exists on PyPI; use verify-published without uploading")
+
+
 def dependencies_public(capsule):
     metadata = {name: public_metadata(name, version) for name, version in PINS.items()}
     for target in capsule["targets"]:
@@ -524,9 +552,7 @@ def check_stage(directory, metadata_sha):
 def published(directory, metadata_sha, output):
     capsule, raw = check_stage(directory, metadata_sha)
     dependencies_public(capsule)
-    url = verify_public(capsule["wheel"], public_metadata("physicalsystems-node", VERSION))
-    remote = public_read(url, MAX_WHEEL)
-    require(remote == raw, "PyPI readback differs from the approved uploaded wheel")
+    url = verify_published_node(capsule, raw)
     result = Path(output)
     require(not result.exists(), "Published evidence output already exists")
     result.mkdir(parents=True)
@@ -548,7 +574,10 @@ def main(argv=None):
     parser.add_argument("--proofs")
     parser.add_argument("--directory")
     parser.add_argument("--output")
+    parser.add_argument("--mode", choices=("verify-published", "publish"))
     args = parser.parse_args(argv)
+    if args.operation in {"verify", "stage"}:
+        require(args.mode in {"verify-published", "publish"}, "Choose an explicit verification or publication mode")
     if args.operation == "readback":
         published(args.directory, args.release_metadata_sha256, args.output)
         print("Exact public Node wheel verified; six install descriptors written.")
@@ -565,10 +594,12 @@ def main(argv=None):
         identity = workflow_identity()
         protections()
         capsule, fetched = fetch_candidate(args.candidate_release_id, args.release_metadata_sha256)
+        verify_registry_mode(args.mode, capsule, fetched[NODE_WHEEL])
     if args.operation == "verify":
         if args.output:
             stage(args.output, fetched)
-        print(json.dumps({"releaseMetadataSha256": args.release_metadata_sha256, "wheelSha256": capsule["wheel"]["sha256"], "targets": 6}))
+        print(json.dumps({"mode": args.mode, "releaseMetadataSha256": args.release_metadata_sha256,
+            "wheelSha256": capsule["wheel"]["sha256"], "targets": 6}))
     elif args.operation == "install":
         result = install_probe(capsule, fetched, args.platform, args.python)
         proof = {"contractVersion": "physicalsystems-node-public-install-proof-v1", "status": "passed", "platform": args.platform,
@@ -582,6 +613,7 @@ def main(argv=None):
         validate_proofs(args.proofs, capsule, args.release_metadata_sha256, identity)
         stage(args.output, fetched)
         check_stage(args.output, args.release_metadata_sha256)
+        verify_registry_mode(args.mode, capsule, fetched[NODE_WHEEL])
         # Network evidence reads can take time. Do not hand a stage to PyPA if
         # main/attempt/protection changed while those bounded reads completed.
         require(workflow_identity() == identity, "Workflow identity changed during stage verification")

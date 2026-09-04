@@ -67,15 +67,15 @@
   "deliberateChanges": [
     {
       "path": "scripts/release.py",
-      "reason": "Prominent TIN-417 modification notice; bind future workflow evidence to PhysicalSystems/physicalsystems and .github/workflows/node-release.yml; adjust repository wording. Wheel/dependency pins, 26-module scope and release protocol remain unchanged."
+      "reason": "TIN-417 authority binding to PhysicalSystems/physicalsystems/node-release.yml; explicit verify-published exact readback without upload, publish-mode refusal for existing versions and registry recheck after proof validation. Wheel/dependency pins, 26-module scope, native-install proof and protected main/current-attempt checks remain intact."
     },
     {
       "path": "tests/test_release.py",
-      "reason": "Import the relocated verifier by exact local path without root scripts namespace collision; update repository/workflow fixtures and assert legacy publisher identity rejection."
+      "reason": "Import the relocated verifier by exact local path; assert consolidated/legacy identity handling, explicit verification versus publish modes, exact existing-wheel readback and refusal of existing versions or uncertain registry absence."
     },
     {
       "path": "tests/test_workflows.py",
-      "reason": "Check the relocated non-active template, literal fail-closed guards, future repository/workflow binding and preserved six-target evidence protocol. Root Python source CI is tested separately."
+      "reason": "Retain inactive imported template checks and verify the new protected root node-release.yml: explicit no-upload default, conditional uploader, canonical coordinator identity and expected source SHA, shared no-upload token-exchange proof, preserved six-target/current-attempt evidence and readback after an ambiguous upload failure. The new active root workflow is tracked by root source provenance, outside this imported subtree."
     },
     {
       "path": "workflows/node-release.yml.template",
@@ -83,7 +83,7 @@
     },
     {
       "path": "README.md",
-      "reason": "Document import provenance, directory boundaries, inactive migration state and required owner-verified publisher cutover; adapt future workflow and local test paths without altering historical releases or licensing."
+      "reason": "Document import provenance, private/public licensing boundaries, protected verification/publication modes, independent owner-verified PyPI registration, current immutable 0.2.1 readback and retained historical template. No release/version or source ownership changes are claimed."
     }
   ],
   "addedFiles": []
