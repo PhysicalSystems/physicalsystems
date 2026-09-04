@@ -1,7 +1,8 @@
 # Contributing to Physical Systems
 
 Thanks for helping improve the Physical Systems Harness. This repository
-contains the public operator client and release tooling. Read [BOUNDARY.md](BOUNDARY.md)
+contains the public operator client, reusable Python Runtime and release-only
+Node tooling. Read [BOUNDARY.md](BOUNDARY.md)
 before proposing a change; hosted control-plane, scheduling, billing, fleet,
 and optimization-policy implementations are intentionally out of scope.
 
@@ -58,6 +59,12 @@ git diff --check
 
 The bootstrap installs the reviewed compatibility runtime from local source
 without consuming the published registry bytes. It does not publish a package.
+
+Python contributors can work directly in `packages/runtime` or `release/node`
+without bootstrapping the Harness. See [DEVELOPMENT.md](DEVELOPMENT.md#python-modules)
+for independent tests and isolated build instructions. Preserve Runtime/Node
+module boundaries and the import provenance ledger. Public source migration
+does not authorize a package rename, private source export or publisher cutover.
 
 ## Pull request expectations
 

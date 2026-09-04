@@ -1,0 +1,142 @@
+# TinyEdge Runtime
+
+The canonical source is now [`packages/runtime` in
+PhysicalSystems/physicalsystems](https://github.com/PhysicalSystems/physicalsystems/tree/main/packages/runtime).
+This source consolidation preserves the `tinyedge-runtime` distribution,
+`tinyedge_runtime` import, version `0.2.0`, contracts and licenses. It does not
+republish or replace the existing release. [SOURCE-IMPORT.json](SOURCE-IMPORT.json)
+records the exact public import, excluded historical workflows and deliberate
+documentation changes.
+
+TinyEdge Runtime is the open-source execution kernel and strategy SDK for
+running model-driven workloads on edge devices and robots. It provides strict,
+versioned contracts; side-effect-free compatibility resolution; and a
+deterministic fail-closed lifecycle without owning fleet credentials, hardware
+drivers, benchmark campaigns, or cloud orchestration.
+
+Runtime v1 currently implements the synchronous `local_sync_v1` strategy. It
+is intentionally small, standard-library-only, and device-free. Concrete
+sensor, model, robot, and transport integrations live in host applications or
+separate adapter packages.
+
+Runtime also defines neutral physical-system manifest, sequential protocol and
+terminal run-record contracts. They let an Agent bind typed, unit-bounded
+commands to calibrated devices and commissioned artifacts, then keep command
+acknowledgement separate from fresh, independent-trust-domain observations and
+explicit safe-stop results. Failed preconditions can be retained without ever
+dispatching the protected command. This imports no vendor framework and grants
+no execution authority. See
+[`docs/runtime-v1.md`](docs/runtime-v1.md#physical-workflow-contracts).
+
+The 0.2 contract surface also defines deterministic physical skill
+implementation routing. A host supplies an exact typed invocation, current
+workcell bindings, fresh common and implementation-specific eligibility
+assessments, and an explicit total-order policy. Runtime explains which
+implementations were rejected or remained eligible, binds the selected
+execution target, and still grants no execution authority. Mechanism and
+provider identifiers are opaque; Runtime contains no vendor-specific routing
+logic. See
+[`docs/runtime-v1.md`](docs/runtime-v1.md#physical-skill-implementation-routing).
+
+## Install
+
+Normal product users start the Harness; they do not install or start Runtime
+as another server. Python integrators can install the existing exact release:
+
+```powershell
+python -m pip install "tinyedge-runtime==0.2.0"
+```
+
+The product's reviewed backend manifests pin the Runtime wheel's exact URL,
+size and SHA-256. The historical
+[`v0.1.0` release](https://github.com/PhysicalSystems/tinyedge-runtime/releases/tag/v0.1.0)
+and its assets remain unchanged. New source builds require a new explicit
+release decision; local builds of this imported version are verification only.
+
+For development, run the following from an external copy of this
+`packages/runtime` directory in an isolated environment. This keeps editable
+installation metadata, caches and build artifacts outside the source repository:
+
+```powershell
+python -m pip install -e ".[dev]"
+python -m pytest
+```
+
+The distribution name is `tinyedge-runtime`; the Python import is
+`tinyedge_runtime`.
+
+## Minimal example
+
+```python
+from tinyedge_runtime import RuntimeRegistry, RuntimeSession
+
+registry = RuntimeRegistry()
+registry.register_sensor(sensor)
+registry.register_model(model)
+registry.register_robot(robot)
+registry.register_bundle(qualified_bundle)
+
+resolved = registry.resolve(sealed_plan, capabilities)
+with RuntimeSession(resolved, monotonic_clock) as session:
+    session.prepare()
+    session.arm()
+    action = session.step()
+```
+
+Resolution is side-effect free. Adapter resources are opened only by
+`prepare()`. If a guarded operation fails after resource acquisition, the
+session fences output, attempts `safe_stop` at most once, closes every opened
+resource in reverse order, and preserves the primary failure.
+
+## Repository map
+
+- `src/tinyedge_runtime/`: contracts, registry, execution session and test fakes.
+- `fixtures/`: canonical Runtime v1 golden contract values.
+- `schemas/`: public JSON Schema projections of the wire contracts.
+- `tests/`: deterministic contract, compatibility and lifecycle tests.
+- `docs/runtime-v1.md`: normative Runtime v1 behavior and non-goals.
+- `BOUNDARY.md`: ownership across Runtime, Agent, Platform and Benchmarks.
+
+The wheel contains the Python Runtime package. The language-neutral JSON
+schemas and golden fixtures are release-controlled source artifacts and are
+included in the source distribution and tagged GitHub source, rather than
+installed into Python's package directory.
+
+Validate one or more contract documents with:
+
+```powershell
+tinyedge-runtime-validate fixtures/runtime-plan-v1.json
+```
+
+Physical protocol resolution is also non-actuating:
+
+```python
+from tinyedge_runtime import resolve_physical_protocol
+
+resolved = resolve_physical_protocol(manifest, protocol)
+assert resolved.physical_execution_authorized is False
+```
+
+Physical skill routing follows the same boundary:
+
+```python
+from tinyedge_runtime import route_physical_skill
+
+decision = route_physical_skill(catalog, request)
+assert decision.physical_execution_authorized is False
+```
+
+## Safety and evidence boundary
+
+Runtime can prove that its Python contracts and tested lifecycle behaved as
+specified. It cannot, by itself, prove physical robot safety, controller
+acknowledgement, model quality, deadline performance, artifact authenticity, or
+benchmark success. Those claims require separately qualified adapters,
+hardware and evidence.
+
+Read [SECURITY.md](SECURITY.md) before reporting a vulnerability and
+[CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change.
+
+## License
+
+TinyEdge Runtime is licensed under the [Apache License 2.0](LICENSE).

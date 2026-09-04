@@ -1,0 +1,19 @@
+{
+  "contractVersion": "physicalsystems-source-migration-v1",
+  "publicSourceRepository": "PhysicalSystems/physicalsystems",
+  "privateNodeRepository": "PhysicalSystems/node",
+  "publisherCutover": "pending-verification",
+  "preserveHistoricalAssets": true,
+  "publishers": {
+    "runtime": {
+      "distribution": "tinyedge-runtime",
+      "existing": { "repository": "PhysicalSystems/runtime", "workflow": "release.yml", "environment": "pypi" },
+      "target": { "repository": "PhysicalSystems/physicalsystems", "workflow": "runtime-release.yml", "environment": "runtime-pypi" }
+    },
+    "node": {
+      "distribution": "physicalsystems-node",
+      "existing": { "repository": "PhysicalSystems/node-releases", "workflow": "publish.yml", "environment": "physical-node-pypi" },
+      "target": { "repository": "PhysicalSystems/physicalsystems", "workflow": "node-release.yml", "environment": "physical-node-pypi" }
+    }
+  }
+}

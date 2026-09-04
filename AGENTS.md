@@ -1,13 +1,21 @@
-# Physical Systems Harness workspace
+# Physical Systems public product workspace
 
-This is the canonical public source workspace for the Physical Systems Harness.
+This is the canonical public source workspace for the Physical Systems Harness,
+public Python Runtime and reviewed Node release tooling (TIN-417).
 
 ## Source boundary
 
 - Keep only the `physicalsystems` command/client/extension package, audited Pi
   compatibility runtime, frozen public-package source records, public
   contracts, tests, release tooling, and documentation needed to audit the
-  device-side client.
+  device-side client. `packages/runtime` owns the reusable public execution
+  kernel, contracts, fakes and conformance. `release/node` owns release-only
+  validation of explicitly approved Node wheels, never private Node source.
+- Keep Runtime independent of Node, Platform and Evaluation implementation.
+  Preserve existing distribution/import names and versioned contract bytes.
+  Read `packages/runtime/AGENTS.md` before Runtime changes. Record deliberate
+  changes to imported files in each `SOURCE-IMPORT.json`; do not silently copy
+  a sibling working tree or replace the recorded public source commit.
 - Never copy or import hosted control-plane, database, scheduler, billing,
   rewards, production operations, fleet data, or optimizer-policy code.
 - Treat `BOUNDARY.md` as the architectural rule. Use GitHub issues for public
@@ -32,7 +40,10 @@ This is the canonical public source workspace for the Physical Systems Harness.
   explicit offline preparation as a separate, non-published review artifact.
   CI may direct-publish only the size-checked product tarball to `preview`;
   never add a lifecycle publish script, long-lived npm write token, CI
-  `latest` promotion, runtime republish, or undocumented release route.
+  `latest` promotion, runtime republish through npm, or undocumented release route.
+- The Node publisher template is not an active workflow. Source consolidation
+  does not complete PyPI Trusted Publisher cutover. Follow `release/README.md`;
+  preserve historical publishers and assets until the replacement is verified.
 - Do not stage, publish, promote, or create an installer from an ordinary code
   change. Do not advertise macOS, Linux, a public installer, or a clean-user
   npm route until exact end-to-end evidence exists.
@@ -44,6 +55,9 @@ This is the canonical public source workspace for the Physical Systems Harness.
   release checks require it.
 - Pin release dependencies and GitHub Actions to immutable versions.
 - For package or release changes, run `npm test`,
-  `npm run check:release-packages`, and `git diff --check`.
+  `npm run check:release-packages`, and `git diff --check`. For Python changes,
+  run the independent Runtime and Node release test suites as described in
+  `DEVELOPMENT.md`; no hardware or credentials are needed. Keep builds, virtual
+  environments, pytest caches and bytecode outside the source inventory.
 - Follow `CONTRIBUTING.md`, including DCO sign-off. Never treat local Git
   history alone as release or production evidence.

@@ -9,6 +9,9 @@
 /packages/cli/npm-shrinkwrap.json @lienertdemaeyer
 /packages/pi-runtime/npm-shrinkwrap.json @lienertdemaeyer
 /scripts/legal/ @lienertdemaeyer
+/packages/runtime/ @lienertdemaeyer
+/release/ @lienertdemaeyer
+/scripts/check-source-imports.mjs @lienertdemaeyer
 /LICENSE @lienertdemaeyer
 /NOTICE @lienertdemaeyer
 /THIRD_PARTY_NOTICES.md @lienertdemaeyer

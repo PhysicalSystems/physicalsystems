@@ -1,0 +1,121 @@
+name: Public Python source checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: physicalsystems-python-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+# Source/build checks only. These jobs do not fetch a Node release capsule,
+# qualify a product install, request publication credentials or publish bytes.
+# The established npm source and protected release workflows remain separate.
+jobs:
+  workflow-contract:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22.19.0
+          package-manager-cache: false
+      - run: node --test test/python-workflow.test.mjs test/source-imports.test.mjs test/release-migration.test.mjs
+
+  runtime:
+    name: Runtime source (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            python: '3.10'
+          - os: ubuntu-22.04
+            python: '3.11'
+          - os: ubuntu-22.04
+            python: '3.12'
+          - os: ubuntu-22.04
+            python: '3.13'
+          - os: windows-2022
+            python: '3.12'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Copy Runtime source to the runner's temporary build directory
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import shutil
+
+          source = Path(os.environ['GITHUB_WORKSPACE']) / 'packages/runtime'
+          temporary = Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          destination = temporary / 'physicalsystems-runtime-source'
+          if destination.exists() or destination.is_symlink():
+              raise SystemExit('Runtime temporary source already exists')
+          shutil.copytree(source, destination)
+      - name: Install the Runtime project's existing development requirements
+        working-directory: ${{ runner.temp }}/physicalsystems-runtime-source
+        run: python -B -m pip --isolated install --upgrade "pip>=25,<27"
+      - working-directory: ${{ runner.temp }}/physicalsystems-runtime-source
+        run: python -B -m pip --isolated install ".[dev]"
+      - working-directory: ${{ runner.temp }}/physicalsystems-runtime-source
+        run: python -B -m pip --isolated check
+      - name: Test public Runtime source without bytecode or pytest cache
+        working-directory: ${{ runner.temp }}/physicalsystems-runtime-source
+        run: python -B -m pytest -p no:cacheprovider
+      - name: Build and check Runtime distributions outside the source checkout
+        working-directory: ${{ runner.temp }}/physicalsystems-runtime-source
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          output = Path(os.environ['RUNNER_TEMP']).resolve(strict=True) / 'physicalsystems-runtime-dist'
+          if output.exists() or output.is_symlink():
+              raise SystemExit('Runtime distribution output already exists')
+          subprocess.run([sys.executable, '-B', '-m', 'build', '--outdir', str(output)], check=True)
+          wheels = list(output.glob('*.whl'))
+          sdists = list(output.glob('*.tar.gz'))
+          if len(wheels) != 1 or len(sdists) != 1:
+              raise SystemExit('Expected one Runtime wheel and one source distribution')
+          subprocess.run([sys.executable, '-B', '-m', 'twine', 'check', *map(str, wheels + sdists)], check=True)
+
+  node-release-tooling:
+    name: Node release tooling source (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - run: python -B -m pip --isolated install --index-url https://pypi.org/simple packaging==26.3 pytest==8.4.2
+      - name: Test the public release verifier with synthetic evidence only
+        working-directory: release/node
+        run: python -B -m pytest -q -p no:cacheprovider tests

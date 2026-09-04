@@ -1,0 +1,39 @@
+# Product and repository boundary
+
+Runtime's canonical source now lives in `PhysicalSystems/physicalsystems` under
+`packages/runtime`. The historical repository names in the ownership table
+below describe component boundaries, not additional current source checkouts.
+The public kernel still imports no private Node, Platform or Evaluation code;
+co-location with the Harness does not merge their responsibilities. See
+`SOURCE-IMPORT.json` for the exact source revision and documentation changes.
+
+TinyEdge Runtime is the public execution core, not the entire TinyEdge product.
+
+| Repository | Owns | Does not own |
+|---|---|---|
+| `tinyedge-runtime` | Contracts, adapter protocols, execution engines, strategy APIs, raw bounded telemetry, fakes and conformance | Credentials, fleet operations, benchmark claims or concrete managed hardware |
+| `tinyedge-agent` | Authenticated device host, artifact trust, daemon lifecycle, capabilities, concrete adapters, watchdogs and telemetry delivery | Runtime kernel semantics or benchmark statistics |
+| `tinyedge-platform` | Job intent, API, console, authentication, fleet and cloud control plane | Device execution implementation |
+| `tinyedge-benchmarks` | Campaigns, tasks, seeds, protocols, evaluation, statistics and sealed evidence | Runtime implementation |
+
+The dependency direction is deliberate:
+
+```text
+platform --job intent--> agent --pinned package--> runtime
+benchmarks --released contracts/conformance--> agent or runtime
+runtime --imports--> Python standard library
+```
+
+Runtime executes an explicit strategy. A managed optimizer may choose the
+strategy and parameters, but that selection intelligence does not need to live
+in the public kernel. Generic strategies can ship here; hardware-specific or
+commercial integrations can ship as separate adapter packages.
+
+For physical workflows, Runtime owns only the neutral manifest, protocol,
+run-record semantics and side-effect-free compatibility checks. Agent owns the
+explicit mapping from MHS, ROS, LeRobot or vendor drivers, current readiness,
+authorization, concrete locks, watchdogs and device I/O. A Runtime resolution
+never means that physical execution is authorized. Hardware-identity hashes are
+pseudonymous bindings, not a confidentiality mechanism. Agent must derive
+trust-domain bindings from reviewed physical and control provenance; Runtime
+only enforces the declared separation.

@@ -128,6 +128,25 @@ The Python command retains its historical name until the node package completes
 its own repository and distribution migration. That name is an implementation
 detail, not a second product or an account requirement.
 
+## Source ownership
+
+The installed product is developed in two source repositories:
+
+| Repository | Owns |
+| --- | --- |
+| Public `physicalsystems` | Harness (`packages/cli`), public Python Runtime (`packages/runtime`), shared release coordination and Node release-only verification (`release/node`) |
+| Private `node` | Hardware host, concrete adapters, supervision and private implementation |
+
+The Runtime remains an independent Python library used by Node; it is not a
+second server. The npm command still installs only the verified backend matching
+the user's computer. Consolidating source does not add Python source, wheels or
+private Node implementation to the npm archive.
+
+The imported public source commits and intentional adaptations are recorded in
+each module's `SOURCE-IMPORT.json`. Old `runtime` and `node-releases` repositories,
+release assets and package names remain available during publisher cutover.
+See [release coordination and migration status](release/README.md).
+
 ## Package contents
 
 - `physicalsystems`: the local-first operator Harness and command.
@@ -137,6 +156,9 @@ detail, not a second product or an account requirement.
   `@tinyedge/pi@0.1.3` source records retained only for published-package
   compatibility and auditability.
 - deterministic dependency, license, SBOM, package and release checks.
+- public `tinyedge-runtime` Python source in `packages/runtime`, licensed
+  separately from the frozen Pi compatibility runtime; it is not bundled into
+  the npm package by this source migration.
 
 The historical `tinyedge` names above are immutable npm identities. They do not
 mean that a TinyEdge account, cloud connection or device-family enrollment is

@@ -2,7 +2,7 @@
   "name": "physicalsystems-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "Guarded Physical Systems Harness release workspace",
+  "description": "Physical Systems public Harness, Runtime and release workspace",
   "type": "module",
   "scripts": {
     "start": "node packages/cli/src/cli.js",
@@ -10,11 +10,12 @@
     "release:prepare": "node scripts/prepare-product-candidate.mjs",
     "doctor": "node packages/cli/src/cli.js doctor",
     "check:boundary": "node scripts/check-export-boundary.mjs",
+    "check:imports": "node scripts/check-source-imports.mjs",
     "generate:provenance": "node scripts/refresh-public-provenance.mjs",
     "check:legal": "node scripts/legal/sbom.mjs --check && node --test test/legal-bundle.test.mjs",
     "generate:sbom": "node scripts/legal/sbom.mjs --write",
     "check": "npm run check:boundary && npm run check:legal && npm --prefix packages/cli run check && npm --prefix packages/cli run check:pi-sdk",
-    "test": "npm run check && npm --prefix packages/cli test && node --test test/npm-release-workflow.test.mjs test/release-plan.test.mjs test/release-coordinator.test.mjs",
+    "test": "npm run check && npm --prefix packages/cli test && node --test test/npm-release-workflow.test.mjs test/release-plan.test.mjs test/release-coordinator.test.mjs test/source-imports.test.mjs test/python-workflow.test.mjs test/release-migration.test.mjs",
     "check:release-packages": "npm --prefix packages/cli run check:release-packages"
   },
   "engines": {

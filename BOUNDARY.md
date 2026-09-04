@@ -1,9 +1,10 @@
-# Public Harness / private service boundary
+# Public product / private Node and service boundary
 
 This repository is the canonical public source for the Physical Systems
-operator Harness. The separately released runtime and node own contracts and
-hardware-host behavior. Hosted services and production data remain outside
-this repository.
+operator Harness and public Python Runtime. The private Node repository owns
+hardware-host implementation. These remain separate modules/distributions,
+not separate public source repositories. Hosted services and production data
+remain outside this repository.
 
 ## Public source
 
@@ -15,13 +16,25 @@ this repository.
   default.
 - Tests, packaging checks, security expectations and reproducible release CI
   needed to audit what runs on an operator's computer.
+- `packages/runtime`: the already-public Apache-2.0 execution kernel, versioned
+  contracts, adapter protocols, deterministic strategies, fakes and conformance.
+  Its `tinyedge-runtime` distribution and `tinyedge_runtime` imports are not
+  renamed. It imports no private Node, Platform or Evaluation implementation.
+- `release/node`: already-public release verifier, tests, notice and an inactive
+  publisher template. It accepts an explicitly reviewed wheel plus metadata;
+  it does not build or contain the private Node implementation.
+- Each imported module has a `SOURCE-IMPORT.json` recording the exact public
+  commit and original blob/byte hashes, excluded files and deliberate changes.
+  The import inventory is checked without access to private repositories.
 - `release/product.json` and its local preparation/check coordinator: reviewed
   public component metadata only, not private source, build assets or another
   publishing authority. New backend exports retain their separate review gate.
 
 ## Systems outside this repository
 
-- The Python local node, hardware adapters and execution runtime.
+- The Python local Node, concrete hardware adapters, supervision, artifact trust
+  and execution-host implementation. Moving the public kernel here does not
+  authorize copying those private implementations.
 - Account and multi-tenant control-plane implementation.
 - Fleet scheduling, work claiming, approvals, relay coordination and artifact
   control.
@@ -53,6 +66,10 @@ That offline candidate carries a backend notice and a hash-addressed backend
 SBOM; it is not eligible for the small npm publication route. This does not by
 itself authorize publication or change the protected workflow,
 or remove the private-source export review for new backend distributions.
+
+Python source and publisher tooling are not added to the npm archive; only
+the existing matching-platform manifests are included. Shared source ownership
+does not mean rebuilding or republishing unchanged backend distributions.
 
 Publishing source does not publish an npm package and does not relicense
 third-party code. Project-authored client code uses Apache-2.0. The frozen Pi
