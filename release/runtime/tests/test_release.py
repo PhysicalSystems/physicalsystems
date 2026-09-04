@@ -72,6 +72,32 @@ def validate(value):
     return r.validate_manifest(raw, r.sha(raw))
 
 
+def emulate_text_newlines(monkeypatch, default_newline):
+    """Exercise Windows text-mode translation even when CI runs on Linux."""
+    def write_text(path, data, encoding=None, errors=None, newline=None):
+        with path.open("wb") as raw:
+            with io.TextIOWrapper(raw, encoding=encoding or "utf-8", errors=errors,
+                                 newline=default_newline if newline is None else newline) as stream:
+                return stream.write(data)
+    monkeypatch.setattr(Path, "write_text", write_text)
+
+
+@pytest.mark.parametrize("host_newline", ["\n", "\r\n"])
+def test_canonical_json_writer_has_same_raw_bytes_on_every_host(tmp_path, monkeypatch, host_newline):
+    emulate_text_newlines(monkeypatch, host_newline)
+    # Verify that the simulated host really translates ordinary text writes.
+    control = tmp_path / "text-mode-control.txt"
+    control.write_text("line\n", encoding="utf-8")
+    assert control.read_bytes() == ("line" + host_newline).encode("utf-8")
+    value = {"z": [1, 2], "a": "\u00e9"}
+    output = tmp_path / "receipt.json"
+    r.write_json(output, value)
+    expected = b'{\n  "a": "\\u00e9",\n  "z": [\n    1,\n    2\n  ]\n}\n'
+    assert output.read_bytes() == expected
+    assert r.sha(output.read_bytes()) == r.sha(expected)
+    assert r.document(output.read_bytes()) == value
+
+
 def test_exact_manifest():
     assert validate(manifest())["version"] == "0.2.1"
 
@@ -200,11 +226,11 @@ def test_installed_code_gets_no_release_credentials(monkeypatch):
     assert not any(key in environment for key in ["GH_TOKEN", "GITHUB_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "PYTHONPATH", "PIP_INDEX_URL"])
 
 
-def proof_set(directory, receipt):
+def proof_set(directory, receipt, input_sha=None):
     directory.mkdir()
     wheel_sha = next(item["sha256"] for item in receipt["files"] if item["filename"].endswith(".whl"))
     for platform, python in r.TARGETS:
-        proof = {"contractVersion": "physicalsystems-runtime-install-proof-v1", "inputSha256": r.sha((json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode()),
+        proof = {"contractVersion": "physicalsystems-runtime-install-proof-v1", "inputSha256": input_sha or r.sha((json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode()),
             "platform": platform, "python": python, "testsPassed": 136, "conformanceFixtures": 12, "hardwareAccessed": False,
             "wheelSha256": wheel_sha, **r.identity()}
         r.write_json(directory / f"runtime-proof-{platform}-py{python}.json", proof)
@@ -212,6 +238,35 @@ def proof_set(directory, receipt):
 
 def jobs():
     return {"total_count": 8, "jobs": [{"name": f"install-{platform}-py{python}", "conclusion": "success"} for platform, python in r.TARGETS]}
+
+
+@pytest.mark.parametrize("host_newline", ["\n", "\r\n"])
+def test_six_target_raw_input_proofs_survive_host_newlines_and_reject_tampering(source, monkeypatch, tmp_path, host_newline):
+    emulate_text_newlines(monkeypatch, host_newline)
+    published(monkeypatch)
+    receipt, payloads = r.fetch("verify-published", "", "")
+    directory = tmp_path / "input"
+    r.store(directory, receipt, payloads)
+    assert r.check_input(directory) == receipt
+    # install() hashes actual downloaded input bytes, not reserialized JSON.
+    raw_input_sha = r.sha((directory / "input.json").read_bytes())
+    proofs = tmp_path / "proofs"
+    proof_set(proofs, receipt, input_sha=raw_input_sha)
+    monkeypatch.setattr(r, "github", lambda *a, **kw: jobs())
+    r.check_proofs(proofs, receipt)
+    assert len(list(proofs.glob("*.json"))) == 6
+
+    first = next(proofs.glob("*.json"))
+    original = r.document(first.read_bytes())
+    r.write_json(first, original | {"inputSha256": "0" * 64})
+    with pytest.raises(r.Refused, match="does not qualify"):
+        r.check_proofs(proofs, receipt)
+    r.write_json(first, original | {"runAttempt": "1"})
+    with pytest.raises(r.Refused, match="Stale"):
+        r.check_proofs(proofs, receipt)
+    first.unlink()
+    with pytest.raises(r.Refused, match="All six"):
+        r.check_proofs(proofs, receipt)
 
 
 def test_all_six_current_attempt_proofs_and_jobs_required(source, monkeypatch, tmp_path):

@@ -75,7 +75,9 @@ def document(raw):
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # Receipts are hashed as raw bytes across Windows/Linux jobs. Text-mode
+    # newline translation would make identical input produce different proofs.
+    path.write_bytes((json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 
 
 def identity(environ=os.environ):
