@@ -37,6 +37,7 @@ MINT = "https://pypi.org/_/oidc/mint-token"
 MAX_RESPONSE = 512 * 1024
 TIMEOUT_SECONDS = 20
 SCHEMA = "physicalsystems.publisher-verification.v1"
+OIDC_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 
 class VerificationError(Exception):
@@ -89,8 +90,17 @@ def checked_url(url, kind):
                     and parts.path.startswith(f"/repos/{REPOSITORY}/"), "invalid-github-origin")
         elif kind == "oidc":
             # GitHub owns this service-only DNS suffix, not user content origins.
+            # Both legacy pipelines and Run Service token routes are in use.
+            # Run Service puts two IDs AFTER idtoken; it is not a final segment.
+            # Upstream fixture: https://github.com/di/id/pull/443/files
+            # Admit the route explicitly, without broadening credential origins
+            # or accepting encoded separators, dot segments or arbitrary paths.
+            legacy_path = (re.fullmatch(r"/[A-Za-z0-9_/-]+", parts.path)
+                           and parts.path.lower().rstrip("/").endswith("/idtoken"))
+            run_service_path = re.fullmatch(
+                rf"/[0-9]{{1,20}}//idtoken/{OIDC_UUID}/{OIDC_UUID}", parts.path, re.IGNORECASE)
             require(re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.actions\.githubusercontent\.com", parts.netloc)
-                    and parts.path.lower().rstrip("/").endswith("/idtoken"), "invalid-oidc-origin")
+                    and (legacy_path or run_service_path), "invalid-oidc-origin")
         elif kind == "pypi":
             require(url == MINT, "invalid-pypi-origin")
         else:

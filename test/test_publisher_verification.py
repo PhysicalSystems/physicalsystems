@@ -24,6 +24,45 @@ SHA = "a" * 40
 GITHUB_SECRET = "github-job-SECRET"
 REQUEST_SECRET = "oidc-request-SECRET"
 MINTED_SECRET = "pypi-minted-SECRET"
+OIDC_ORIGIN = "https://run-actions-1-azure-eastus.actions.githubusercontent.com"
+OIDC_UUIDS = "01234567-89ab-cdef-0123-456789abcdef/89abcdef-0123-4567-89ab-cdef01234567"
+OIDC_NEW_PATH = f"/123456789//idtoken/{OIDC_UUIDS}"
+INVALID_OIDC_URLS = [
+    f"http://run-actions-1-azure-eastus.actions.githubusercontent.com{OIDC_NEW_PATH}",
+    f"https://actions.githubusercontent.com{OIDC_NEW_PATH}",
+    f"https://evilactions.githubusercontent.com{OIDC_NEW_PATH}",
+    f"https://run-actions-1-azure-eastus.actions.githubusercontent.com.evil.example{OIDC_NEW_PATH}",
+    f"https://user:password@run-actions-1-azure-eastus.actions.githubusercontent.com{OIDC_NEW_PATH}",
+    f"https://@run-actions-1-azure-eastus.actions.githubusercontent.com{OIDC_NEW_PATH}",
+    f"{OIDC_ORIGIN}:443{OIDC_NEW_PATH}",
+    f"{OIDC_ORIGIN}:8443{OIDC_NEW_PATH}",
+    f"{OIDC_ORIGIN}.{OIDC_NEW_PATH}",
+    f"{OIDC_ORIGIN}{OIDC_NEW_PATH}#fragment",
+    f" {OIDC_ORIGIN}{OIDC_NEW_PATH}",
+] + [OIDC_ORIGIN + path for path in (
+    "/123456789//idtoken/" + OIDC_UUIDS.split("/")[0],
+    "/123456789//idtoken/" + OIDC_UUIDS + "/" + OIDC_UUIDS.split("/")[0],
+    OIDC_NEW_PATH + "/",
+    "/123456789//other/" + OIDC_UUIDS,
+    "/123456789/idtoken/" + OIDC_UUIDS,
+    "//idtoken/" + OIDC_UUIDS,
+    "/abc//idtoken/" + OIDC_UUIDS,
+    "/-123//idtoken/" + OIDC_UUIDS,
+    "/123456789//idtoken/" + OIDC_UUIDS.replace("-", ""),
+    "/123456789//idtoken/" + OIDC_UUIDS.replace("a", "g", 1),
+    "/123456789//idtoken/{" + OIDC_UUIDS.split("/")[0] + "}/" + OIDC_UUIDS.split("/")[1],
+    OIDC_NEW_PATH.replace("//idtoken", "/%2fidtoken"),
+    OIDC_NEW_PATH.replace("//idtoken", "/%2Fidtoken"),
+    OIDC_NEW_PATH.replace("/idtoken/", "/idtoken%2f"),
+    "/123456789//idtoken/../" + OIDC_UUIDS,
+    "/123456789//idtoken/./" + OIDC_UUIDS,
+    "/123456789//idtoken/%2e%2e/" + OIDC_UUIDS,
+    "/example/_apis/jobs/../idtoken",
+    "/example/_apis/jobs/./idtoken",
+    "/example/_apis/jobs/%2e%2e/idtoken",
+    "/example/_apis/jobs/abc%2fdef/idtoken",
+    "/example/_apis/jobs/abc\\def/idtoken",
+)]
 
 
 def environment(component="runtime"):
@@ -97,6 +136,42 @@ class FakeClient:
 
 
 class VerificationTests(unittest.TestCase):
+    def test_legacy_and_current_github_oidc_routes_complete_both_component_flows(self):
+        urls = [
+            environment()["ACTIONS_ID_TOKEN_REQUEST_URL"],
+            "https://pipelines.actions.githubusercontent.com/example/_apis/jobs/abc/IDToken/?api-version=2.0",
+            OIDC_ORIGIN + OIDC_NEW_PATH + "?api-version=2.0",
+            OIDC_ORIGIN + "/123456789//idtoken/" + OIDC_UUIDS.upper() + "?api-version=2.0",
+        ]
+        for component in probe.COMPONENTS:
+            for url in urls:
+                with self.subTest(component=component, url=url):
+                    client = FakeClient(component)
+                    env = environment(component) | {"ACTIONS_ID_TOKEN_REQUEST_URL": url}
+                    receipt = probe.verify_publisher(component, env, client)
+                    self.assertTrue(receipt["tokenExchangeVerified"])
+                    self.assertFalse(receipt["publicationPerformed"])
+                    self.assertEqual(len(client.calls), 10)
+                    oidc = [(call_url, options) for call_url, options in client.calls if options["kind"] == "oidc"]
+                    self.assertEqual(len(oidc), 1)
+                    self.assertEqual(urlsplit(oidc[0][0]).path, urlsplit(url).path)
+                    self.assertEqual(parse_qs(urlsplit(oidc[0][0]).query), {"api-version": ["2.0"], "audience": ["pypi"]})
+                    self.assertEqual(oidc[0][1]["bearer"], REQUEST_SECRET)
+                    self.assertEqual(sum(options["kind"] == "pypi" for _, options in client.calls), 1)
+                    for value in (GITHUB_SECRET, REQUEST_SECRET, MINTED_SECRET, jwt(client.claims)):
+                        self.assertNotIn(value, json.dumps(receipt))
+
+    def test_invalid_oidc_origins_and_paths_stop_both_flows_before_oidc_or_pypi(self):
+        for component in probe.COMPONENTS:
+            for url in INVALID_OIDC_URLS:
+                with self.subTest(component=component, url=url):
+                    client = FakeClient(component)
+                    env = environment(component) | {"ACTIONS_ID_TOKEN_REQUEST_URL": url}
+                    with self.assertRaises(probe.VerificationError):
+                        probe.verify_publisher(component, env, client)
+                    self.assertEqual(len(client.calls), 4)
+                    self.assertTrue(all(options["kind"] == "github" for _, options in client.calls))
+
     def test_both_components_exchange_once_discard_secret_and_emit_limited_receipt(self):
         for component in probe.COMPONENTS:
             with self.subTest(component=component):
@@ -221,6 +296,16 @@ class VerificationTests(unittest.TestCase):
 
 
 class HTTPTests(unittest.TestCase):
+    def test_invalid_oidc_routes_never_construct_an_authenticated_request(self):
+        for url in INVALID_OIDC_URLS:
+            with self.subTest(url=url):
+                client = probe.HTTPClient()
+                with patch.object(probe, "Request") as request, patch.object(client.opener, "open") as opened:
+                    with self.assertRaises(probe.VerificationError):
+                        client.request_json(url, kind="oidc", bearer=REQUEST_SECRET)
+                request.assert_not_called()
+                opened.assert_not_called()
+
     def test_strict_origins_rejected_before_http_or_credential_attachment(self):
         cases = [("github", "https://api.github.com.evil.example/repos/PhysicalSystems/physicalsystems/x"),
                  ("github", "https://api.github.com/repos/other/repo/x"),
