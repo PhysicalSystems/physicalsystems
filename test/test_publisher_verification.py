@@ -274,6 +274,15 @@ class HTTPTests(unittest.TestCase):
 
 
 class CLITests(unittest.TestCase):
+    def test_only_allowlisted_diagnostic_codes_are_printed(self):
+        for reason, expected in [("current-main-mismatch", "current-main-mismatch"), (MINTED_SECRET, "verification-refused")]:
+            with tempfile.TemporaryDirectory(prefix="publisher-proof-test-") as directory:
+                stderr = io.StringIO()
+                with patch.object(probe, "verify_publisher", side_effect=probe.VerificationError(reason)), redirect_stderr(stderr):
+                    self.assertEqual(probe.main(["--component", "runtime", "--output", str(Path(directory) / "proof.json")]), 1)
+                self.assertIn(expected, stderr.getvalue())
+                self.assertNotIn(MINTED_SECRET, stderr.getvalue())
+
     def test_success_receipt_is_new_safe_json_and_existing_file_is_preserved(self):
         with tempfile.TemporaryDirectory(prefix="publisher-proof-test-") as directory:
             output = Path(directory) / "receipt.json"

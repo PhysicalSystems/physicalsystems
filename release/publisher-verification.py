@@ -276,6 +276,17 @@ def main(argv=None):
             stream.write(json.dumps(receipt, sort_keys=True, indent=2) + "\n")
         print("Publisher audit receipt written; no package upload was performed.")
         return 0
+    except VerificationError as error:
+        # Only fixed reviewed diagnostics may reach a log. Never render arbitrary
+        # exception strings, response bodies, URLs, JWTs or minted credentials.
+        safe_codes = {"current-main-mismatch", "run-attempt-mismatch", "invalid-local-workflow-identity",
+            "environment-not-protected", "named-human-reviewer-required", "exact-main-branch-policy-required",
+            "oidc-context-mismatch", "oidc-token-not-current", "pypi-exchange-not-accepted",
+            "identity-changed-during-exchange", "service-request-failed", "missing-or-invalid-credential",
+            "invalid-oidc-origin", "output-must-be-new-absolute-file"}
+        code = str(error) if str(error) in safe_codes else "verification-refused"
+        print("Publisher verification failed: " + code + "; no successful receipt was produced.", file=sys.stderr)
+        return 1
     except Exception:
         # Even unexpected library errors must not render credentials or a traceback.
         print("Publisher verification failed; no successful receipt was produced.", file=sys.stderr)

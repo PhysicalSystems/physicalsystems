@@ -23,7 +23,9 @@ npm run release -- publish --output ABSOLUTE_NEW_RECEIPT_DIRECTORY
 ```
 
 Run from a clean reviewed checkout of current `main`, using the pinned Node/npm
-toolchain and authenticated `gh`. The coordinator verifies product pins, checks
+toolchain, Python 3.10+ (`python` on Windows, `python3` on Linux) and authenticated
+`gh`. Python's standard library parses bounded evidence archives in memory without
+extracting paths; no additional package installation is needed. The coordinator verifies product pins, checks
 the official registries, reuses unchanged versions, and dispatches the protected
 npm workflow. Existing versions are never overwritten. The complete native npm
 installation matrix and human approval remain mandatory for a new product.
@@ -42,6 +44,8 @@ response is recovered by finding that UUID, never by repeating a dispatch.
 Every workflow receives the expected source SHA, rejecting a racing main update.
 `resume` checks current-attempt jobs and publisher receipts, not just a green
 top-level status (which could hide skipped jobs). It never approves a deployment.
+It downloads evidence by exact artifact ID, verifies the archive digest, and
+compares the receipt with any previous evidence instead of trusting cached files.
 
 ## When a Python component actually changes
 

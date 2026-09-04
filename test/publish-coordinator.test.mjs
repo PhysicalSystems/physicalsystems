@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import test from 'node:test'
-import { advanceCoordinator, createDispatchStages, parsePublishArguments, readPublishedComponent, validateCoordinatorState, validateWorkflowJobs, readComponentCandidate } from '../scripts/publish-coordinator.mjs'
+import { advanceCoordinator, createDispatchStages, parsePublishArguments, readPublishedComponent, validateCoordinatorState, validateWorkflowJobs, readComponentCandidate, validateEvidenceBinding } from '../scripts/publish-coordinator.mjs'
 
 const id = '01234567-89ab-4cde-8123-456789abcdef'
 const pin = { distribution: 'tinyedge-runtime', version: '0.2.0', wheelSha256: 'a'.repeat(64) }
@@ -160,4 +160,21 @@ test('changed component phase binds its own reviewed capsule independently of ol
     await assert.rejects(readComponentCandidate('node', options, { api: () => bad, readAsset: async () => raw }))
   }
   await assert.rejects(readComponentCandidate('node', options, { api: () => candidate, readAsset: async () => Buffer.alloc(raw.length) }))
+})
+
+test('evidence digest and saved receipt binding reject modified or relabeled caches', async () => {
+  const state = await fixture(), stage = state.stages[0]
+  stage.runId = '123'
+  const archive = Buffer.from('synthetic archive boundary; ZIP parsing has separate stdlib tests')
+  const artifact = { id: 88, digest: `sha256:${createHash('sha256').update(archive).digest('hex')}` }
+  const parsed = Buffer.from(JSON.stringify({ schema: 'physicalsystems.publisher-verification.v1', component: 'runtime',
+    repository: state.repository, workflow: stage.workflow, distribution: 'tinyedge-runtime', environment: 'runtime-pypi',
+    runId: '123', runAttempt: '1', headSha: state.headSha, tokenExchangeVerified: true, publicationPerformed: false,
+    distributionAuthorizationVerified: false, pypiEnvironmentBindingVerified: false }))
+  stage.evidence = validateEvidenceBinding(archive, parsed, artifact, state, stage)
+  validateEvidenceBinding(archive, parsed, artifact, state, stage)
+  assert.throws(() => validateEvidenceBinding(Buffer.from('different'), parsed, artifact, state, stage), /archive digest mismatch/)
+  assert.throws(() => validateEvidenceBinding(archive, parsed, { ...artifact, id: 89 }, state, stage), /Saved evidence differs/)
+  stage.evidence.receiptSha256 = 'a'.repeat(64)
+  assert.throws(() => validateEvidenceBinding(archive, parsed, artifact, state, stage), /Saved evidence differs/)
 })

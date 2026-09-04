@@ -186,6 +186,21 @@ export function validateWorkflowJobs(jobs, state, stage) {
   }
 }
 
+export function validateEvidenceBinding(archive, parsed, artifact, state, stage) {
+  assert.equal(`sha256:${createHash('sha256').update(archive).digest('hex')}`, artifact.digest, 'Downloaded evidence archive digest mismatch')
+  const receipt = JSON.parse(parsed)
+  assert.equal(receipt.schema, 'physicalsystems.publisher-verification.v1')
+  for (const [key, expected] of Object.entries({ component: stage.component, repository, workflow: stage.workflow,
+    distribution: stage.component === 'runtime' ? 'tinyedge-runtime' : 'physicalsystems-node',
+    environment: stage.component === 'runtime' ? 'runtime-pypi' : 'physical-node-pypi', runId: stage.runId,
+    runAttempt: '1', headSha: state.headSha, tokenExchangeVerified: true, publicationPerformed: false,
+    distributionAuthorizationVerified: false, pypiEnvironmentBindingVerified: false })) assert.equal(receipt[key], expected, `Publisher receipt ${key} mismatch`)
+  const evidence = { jobsVerified: true, runAttempt: 1, artifactId: artifact.id, artifactDigest: artifact.digest,
+    receiptSha256: createHash('sha256').update(parsed).digest('hex'), receipt }
+  if (stage.evidence) assert.deepEqual(evidence, stage.evidence, 'Saved evidence differs from the immutable verified artifact')
+  return evidence
+}
+
 export async function collectPublisherEvidence(state, stage, { api = githubApi, output }) {
   const response = api(`repos/${repository}/actions/runs/${stage.runId}/attempts/1/jobs?per_page=100`)
   assert.equal(response.total_count, response.jobs.length, 'Incomplete job listing')
@@ -202,28 +217,21 @@ export async function collectPublisherEvidence(state, stage, { api = githubApi, 
   assert.equal(artifact.workflow_run.id, Number(stage.runId))
   assert.equal(artifact.workflow_run.head_sha, state.headSha)
   assert.match(artifact.digest, /^sha256:[a-f0-9]{64}$/)
-  const directory = path.join(output, `${stage.component}-${stage.runId}-evidence`)
-  try {
-    await fs.mkdir(directory)
-    execFileSync('gh', ['run', 'download', stage.runId, '--repo', repository, '--name', artifactName, '--dir', directory],
-      { timeout: 60_000, stdio: ['ignore', 'pipe', 'pipe'] })
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw new Error('Evidence download incomplete; inspect saved files before recovery')
-  }
-  assert.ok(!(await fs.lstat(directory)).isSymbolicLink())
-  const filename = path.join(directory, stage.component === 'node' ? 'publisher-verification.json' : 'publisher.json')
-  assert.ok(!(await fs.lstat(filename)).isSymbolicLink())
-  const raw = await fs.readFile(filename)
-  assert.ok(raw.length < 16_384, 'Publisher receipt too large')
-  const receipt = JSON.parse(raw)
-  assert.equal(receipt.schema, 'physicalsystems.publisher-verification.v1')
-  for (const [key, expected] of Object.entries({ component: stage.component, repository, workflow: stage.workflow,
-    distribution: stage.component === 'runtime' ? 'tinyedge-runtime' : 'physicalsystems-node',
-    environment: stage.component === 'runtime' ? 'runtime-pypi' : 'physical-node-pypi', runId: stage.runId,
-    runAttempt: '1', headSha: state.headSha, tokenExchangeVerified: true, publicationPerformed: false,
-    distributionAuthorizationVerified: false, pypiEnvironmentBindingVerified: false })) assert.equal(receipt[key], expected, `Publisher receipt ${key} mismatch`)
-  return { jobsVerified: true, runAttempt: 1, artifactId: artifact.id, artifactDigest: artifact.digest,
-    receiptSha256: createHash('sha256').update(raw).digest('hex'), receipt }
+  assert.ok(Number.isSafeInteger(artifact.id) && artifact.id > 0)
+  const archive = execFileSync('gh', ['api', '--hostname', 'github.com', `repos/${repository}/actions/artifacts/${artifact.id}/zip`],
+    { timeout: 30_000, maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] })
+  assert.equal(`sha256:${createHash('sha256').update(archive).digest('hex')}`, artifact.digest, 'Downloaded evidence archive digest mismatch')
+  const member = stage.component === 'node' ? 'publisher-verification.json' : 'publisher.json'
+  // Parse in memory, never extract arbitrary archive paths. Re-fetch by exact ID
+  // on resume rather than trusting an editable or partially downloaded cache.
+  const parsed = execFileSync(process.platform === 'win32' ? 'python' : 'python3',
+    ['-B', path.join(root, 'scripts/read-release-evidence.py'), '--member', member],
+    { input: archive, timeout: 10_000, maxBuffer: 32 * 1024, stdio: ['pipe', 'pipe', 'pipe'] })
+  const evidence = validateEvidenceBinding(archive, parsed, artifact, state, stage)
+  const directory = await fs.mkdtemp(path.join(output, `${stage.component}-${stage.runId}-evidence-`))
+  await fs.writeFile(path.join(directory, 'artifact.zip'), archive, { flag: 'wx' })
+  await fs.writeFile(path.join(directory, member), parsed, { flag: 'wx' })
+  return evidence
 }
 
 // Check every active run once. Resume is bounded, not a background daemon and
