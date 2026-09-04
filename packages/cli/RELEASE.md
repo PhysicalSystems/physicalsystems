@@ -22,6 +22,25 @@ reuse its registry bytes rather than republishing it.
 It is manually dispatched from `main`, uses npm trusted publishing with GitHub
 OIDC, and is protected by the `npm-release` environment.
 
+### Source review versus release qualification
+
+Ordinary `.github/workflows/cli.yml` PR/main checks build one source-review
+candidate and reuse its hash-checked dependency closure for native source,
+legal, SDK and credential tests. The established Windows x64/ARM64 and Linux
+required-check names remain unchanged. These checks do not perform full fresh
+local/global/npx installs, backend downloads or managed first-run acceptance.
+A green source-review run is not installation or publication evidence.
+
+The manually dispatched release below remains the only full installation
+qualification and publication path. It builds from the exact `main` commit
+and tests those same bytes once across the required npm 11/12 platform matrix.
+PR artifacts are never promoted or used to satisfy its gates. This removes
+overlapping installation qualification without weakening final release checks
+or changing the protected environment, trusted publisher or registry tags.
+
+See [one product, one release entry point](NPM-PRODUCT-BUNDLE.md) for the
+component/repository boundaries and the separate offline preparation option.
+
 The workflow:
 
 Before building, checks the bundled managed-Node release index and raw manifest

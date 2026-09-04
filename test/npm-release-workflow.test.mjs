@@ -22,18 +22,32 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const workflow = readFileSync(path.join(root, '.github/workflows/npm-release.yml'), 'utf8')
 const cliWorkflow = readFileSync(path.join(root, '.github/workflows/cli.yml'), 'utf8')
 
-test('PR checks build once and verify the same candidate on every platform without changing publish authority', () => {
+test('PR and main source checks share one candidate without running release qualification or publishing', () => {
   assert.equal((cliWorkflow.match(/run release:prepare --/g) || []).length, 1)
   assert.doesNotMatch(cliWorkflow, /run release:pack --|bootstrap:pi-runtime --/)
   assert.doesNotMatch(cliWorkflow, /run check:release-packages|npm publish|id-token: write|environment: npm-release/)
   assert.match(cliWorkflow, /needs: candidate/)
+  assert.match(cliWorkflow, /name: Build one review candidate/)
   assert.match(cliWorkflow, /hydrate-review-dependencies\.mjs candidate-artifacts \$\{\{ github.sha \}\}/)
   assert.match(cliWorkflow, /actions\/download-artifact@[a-f0-9]{40}/)
-  assert.equal((cliWorkflow.match(/run release:verify --/g) || []).length, 2)
+  assert.doesNotMatch(cliWorkflow, /release:verify|--require-downloadable-node|--require-node-bundle|check-(?:downloaded|bundled)-node\.mjs|check-linux-harness-pty\.py/)
+  assert.doesNotMatch(cliWorkflow, /ubuntu-canary/)
+  assert.equal((cliWorkflow.match(/name: physicalsystems-0\.2\.1-source-review-\$\{\{ github.sha \}\}/g) || []).length, 2)
   assert.match(cliWorkflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
+  assert.match(cliWorkflow, /pull_request:\r?\n\s+push:\r?\n\s+branches:\r?\n\s+- main/)
+  assert.match(cliWorkflow, /name: test \(\$\{\{ matrix.check_name \}\}\)/)
+  assert.deepEqual([...cliWorkflow.matchAll(/check_name: ([^\r\n]+)/g)].map((match) => match[1]),
+    ['windows x64', 'windows arm64', 'ubuntu-22.04 x64', 'linux x64'])
+  const summaryIndex = cliWorkflow.indexOf('      - name: Record successful source-only verification scope')
+  assert.ok(summaryIndex > cliWorkflow.indexOf('run: node --test test/npm-release-workflow.test.mjs'))
+  const summary = cliWorkflow.slice(summaryIndex)
+  assert.doesNotMatch(summary, /if:/, 'Success summary must retain the default successful-step condition')
+  assert.match(summary, /NOT install-qualified/)
+  assert.match(summary, /No publishing was performed or authorized/)
+  assert.match(summary, /Full exact-artifact npm 11\/12 installation qualification remains/)
 })
 
-test('both candidate routes require pinned platform downloads while the offline bundle remains explicit', () => {
+test('both routes prepare pinned metadata but only protected releases require native download acceptance', () => {
   const prepare = readFileSync(path.join(root, 'scripts/prepare-product-candidate.mjs'), 'utf8')
   const canary = readFileSync(path.join(root, 'scripts/check-downloaded-node.mjs'), 'utf8')
   const offlineCanary = readFileSync(path.join(root, 'scripts/check-bundled-node.mjs'), 'utf8')
@@ -43,12 +57,12 @@ test('both candidate routes require pinned platform downloads while the offline 
   for (const candidateWorkflow of [cliWorkflow, workflow]) {
     assert.equal((candidateWorkflow.match(/run release:prepare --/g) || []).length, 1)
     assert.doesNotMatch(candidateWorkflow, /--offline|--require-node-bundle/)
-    const verifiers = candidateWorkflow.match(/npm --prefix packages\/cli run release:verify --[^\n]+/g) || []
-    assert.equal(verifiers.length, 2)
-    for (const verifier of verifiers) assert.match(verifier, /--require-downloadable-node/)
     assert.match(candidateWorkflow, /actions\/setup-python@[a-f0-9]{40}/)
     assert.match(candidateWorkflow, /if: matrix\.architecture == 'x64'/)
   }
+  const verifiers = workflow.match(/npm --prefix packages\/cli run release:verify --[^\n]+/g) || []
+  assert.equal(verifiers.length, 2)
+  for (const verifier of verifiers) assert.match(verifier, /--require-downloadable-node/)
   assert.match(checker, /if \(requireDownloadableNode\)\s*\{\s*const \{ index \} = await checkDownloadableNodePackage/)
   assert.match(checker, /scripts\/check-downloaded-node\.mjs/)
   assert.match(checker, /if \(requireNodeBundle\)[\s\S]{0,150}installed\.physicalsystemsNodeBundle, 'node-bundle'/)
@@ -857,6 +871,27 @@ test('one candidate is reused for Windows, Ubuntu, npm 11/12, and direct preview
   assert.match(workflow, /npm-version: 11\.19\.0/)
   assert.match(workflow, /npm-version: 12\.0\.2/)
   assert.match(workflow, /node-version: 24\.15\.0/)
+  const windows = workflow.slice(workflow.indexOf('\n  verify:'), workflow.indexOf('\n  verify-linux:'))
+  const linux = workflow.slice(workflow.indexOf('\n  verify-linux:'), workflow.indexOf('\n  verify-unsupported-node:'))
+  assert.deepEqual([...windows.matchAll(/- architecture: ([^\r\n]+)\r?\n\s+runner: ([^\r\n]+)\r?\n\s+npm-version: ([^\r\n]+)\r?\n\s+node-version: ([^\r\n]+)/g)]
+    .map((match) => match.slice(1)), [
+    ['x64', 'windows-latest', '11.19.0', '22.19.0'],
+    ['x64', 'windows-latest', '12.0.2', '24.15.0'],
+    ['arm64', 'windows-11-arm', '11.19.0', '22.19.0'],
+    ['arm64', 'windows-11-arm', '12.0.2', '24.15.0'],
+  ], 'Keep all four Windows release qualification cases')
+  assert.deepEqual([...linux.matchAll(/- runner: ([^\r\n]+)\r?\n\s+npm-version: ([^\r\n]+)\r?\n\s+node-version: ([^\r\n]+)\r?\n\s+python-version: '([^']+)'/g)]
+    .map((match) => match.slice(1)), [
+    ['ubuntu-22.04', '11.19.0', '22.19.0', '3.10'],
+    ['ubuntu-22.04', '12.0.2', '24.15.0', '3.10'],
+    ['ubuntu-24.04', '11.19.0', '22.19.0', '3.12'],
+    ['ubuntu-24.04', '12.0.2', '24.15.0', '3.12'],
+  ], 'Keep all four Ubuntu release qualification cases')
+  for (const native of [windows, linux]) {
+    assert.match(native, /needs: build/)
+    assert.match(native, /--require-downloadable-node/)
+    assert.doesNotMatch(native, /continue-on-error/)
+  }
   assert.match(workflow, /RELEASE_VERSION: 0\.2\.1/)
   assert.match(workflow, /PI_RUNTIME_VERSION: 0\.84\.2-tinyedge\.1/)
   assert.match(workflow, /endsWith\([\s\S]{0,120}physicalsystems@\$\{process\.env\.RELEASE_VERSION\}/)
@@ -1272,7 +1307,7 @@ test('pull-request CI covers release-workflow changes and its regression test', 
   assert.match(cliWorkflow, /platform: linux/)
   assert.match(cliWorkflow, /runner: ubuntu-22\.04/)
   assert.match(cliWorkflow, /runner: ubuntu-24\.04/)
-  assert.match(cliWorkflow, /Every supported desktop route exercises a packed npm artifact/)
+  assert.match(cliWorkflow, /Native source checks reuse the shared candidate's exact dependency tree/)
   assert.match(cliWorkflow, /check_name: windows x64/)
   assert.match(cliWorkflow, /check_name: windows arm64/)
   assert.match(cliWorkflow, /check_name: linux x64/)
@@ -1280,12 +1315,12 @@ test('pull-request CI covers release-workflow changes and its regression test', 
   assert.match(cliWorkflow, /gnome-keyring-daemon --unlock --components=secrets/)
   assert.match(cliWorkflow, /libsecret-tools xdg-utils/)
   assert.match(cliWorkflow, /Prepare the small npm product with pinned backend manifests once/)
-  assert.match(cliWorkflow, /physicalsystems-0\.2\.1-ubuntu-canary-\$\{\{ github\.sha \}\}/)
+  assert.match(cliWorkflow, /physicalsystems-0\.2\.1-source-review-\$\{\{ github\.sha \}\}/)
   assert.deepEqual(cliPackage.os, ['win32', 'linux'])
   assert.match(cliWorkflow, /node --test test\/npm-release-workflow\.test\.mjs/)
   assert.match(cliWorkflow, /npm install --global "npm@11\.19\.0"/)
   assert.match(cliWorkflow, /run release:prepare -- --output \$productDirectory/)
-  assert.match(cliWorkflow, /Verify the packed Linux package and interactive Harness/)
+  assert.match(cliWorkflow, /name: Check scoped Harness consent and readiness transcript regressions\r?\n\s+if: matrix.architecture == 'x64'\r?\n\s+run: python -B -m unittest discover -s packages\/cli\/test -p test_packaged_harness_transcript\.py -v/)
   assert.match(cliWorkflow, /npm run check:legal/)
   const bootstrapIndex = cliWorkflow.indexOf('run release:prepare -- --output $productDirectory')
   const legalIndex = cliWorkflow.indexOf('npm run check:legal')
