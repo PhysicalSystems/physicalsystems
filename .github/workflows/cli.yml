@@ -41,16 +41,16 @@ jobs:
       - run: npm run check:legal
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: physicalsystems-0.2.1-ubuntu-canary-${{ github.sha }}
+          name: physicalsystems-0.2.1-source-review-${{ github.sha }}
           path: candidate-artifacts
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
 
   test:
-    # Every supported desktop route exercises a packed npm artifact.
-    # Linux additionally proves fail-closed Secret Service storage and a real
-    # interactive Harness render/input/exit cycle through a pseudo-terminal.
+    # Native source checks reuse the shared candidate's exact dependency tree.
+    # These jobs do not qualify npm installation or managed backend startup.
+    # The protected npm-release workflow retains full exact-artifact acceptance.
     # Keep the three established required-check contexts stable. Ubuntu 22.04
     # is additive; the established Linux context remains the Ubuntu 24.04 job.
     name: test (${{ matrix.check_name }})
@@ -114,7 +114,7 @@ jobs:
           if ((npm --version) -ne '11.19.0') { throw 'Expected npm 11.19.0' }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: physicalsystems-0.2.1-ubuntu-canary-${{ github.sha }}
+          name: physicalsystems-0.2.1-source-review-${{ github.sha }}
           path: candidate-artifacts
       - name: Reuse the candidate dependency closure for platform source tests
         run: node scripts/hydrate-review-dependencies.mjs candidate-artifacts ${{ github.sha }}
@@ -138,16 +138,19 @@ jobs:
       - run: npm --prefix packages/cli run check
       - run: npm --prefix packages/cli test
       - run: node --test test/npm-release-workflow.test.mjs
-      - run: npm --prefix packages/cli run release:verify -- ${{ github.workspace }}/candidate-artifacts --require-downloadable-node
-        if: matrix.platform == 'windows'
-      - name: Verify the packed Linux package and interactive Harness
-        if: matrix.platform == 'linux'
-        shell: bash
+      - name: Check scoped Harness consent and readiness transcript regressions
+        if: matrix.architecture == 'x64'
+        run: python -B -m unittest discover -s packages/cli/test -p test_packaged_harness_transcript.py -v
+      - name: Record successful source-only verification scope
+        shell: pwsh
         run: |
-          runtime_directory="$(mktemp -d)"
-          export XDG_RUNTIME_DIR="$runtime_directory"
-          trap 'rm -rf "$runtime_directory"' EXIT
-          dbus-run-session -- bash -euo pipefail -c '
-            eval "$(printf "%s" "tinyedge-ephemeral-keyring" | gnome-keyring-daemon --unlock --components=secrets)"
-            npm --prefix packages/cli run release:verify -- "$GITHUB_WORKSPACE/candidate-artifacts" --require-downloadable-node
-          '
+          @'
+          ## Source-only checks passed (${{ matrix.check_name }})
+
+          - Source commit: `${{ github.sha }}`.
+          - Shared dependency artifact: `physicalsystems-0.2.1-source-review-${{ github.sha }}`; source commit and archive hash checked before hydration.
+          - Native boundary, legal, SDK and source regressions passed; Linux additionally checks Secret Service, and x64 checks the synthetic Harness transcripts.
+          - NOT install-qualified: these checks do not run npm local/global/npx acceptance, real managed backend installation or the interactive Harness PTY canary.
+          - Full exact-artifact npm 11/12 installation qualification remains in the manually dispatched, protected `npm-release.yml` workflow.
+          - No publishing was performed or authorized by this source-only result.
+          '@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

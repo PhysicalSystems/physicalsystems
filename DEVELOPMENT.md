@@ -118,3 +118,17 @@ git diff --check
 These checks use local fixtures. They do not prove live hardware operation,
 provider quota, production services or registry publication. Record source,
 clean-machine package and physical-device evidence separately.
+
+## CI and releases
+
+PR and main-branch CI share one source-review candidate across four native
+platform jobs. They check source, licenses, dependencies, platform credentials,
+SDK compatibility and workflow regressions without repeating the full fresh
+installation matrix. The checks keep their established names for branch
+protection, but their summaries explicitly identify source-only evidence.
+
+Full local/global/npx installs, actual matching backend downloads and reuse,
+and Linux managed first-run acceptance run in the manually dispatched npm
+release. That workflow tests the final package before human approval and
+publishes the same bytes. Source checks alone cannot qualify a release.
+See [the coordinated product flow](packages/cli/NPM-PRODUCT-BUNDLE.md).
