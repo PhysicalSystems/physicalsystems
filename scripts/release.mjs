@@ -6,13 +6,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createReleasePlan, readProductRelease } from './release-plan.mjs'
 import { parsePreparationArguments, prepareProductCandidate } from './prepare-product-candidate.mjs'
+import { createMigrationReport } from './release-migration.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const usage = 'Usage: npm run release -- plan | check | prepare --output ABSOLUTE_NEW_DIRECTORY'
+const usage = 'Usage: npm run release -- plan | check | migration | prepare --output ABSOLUTE_NEW_DIRECTORY'
 
 export function parseReleaseArguments(args) {
   const [action = 'plan', ...rest] = args
-  if (['plan', 'check'].includes(action) && rest.length === 0) return { action }
+  if (['plan', 'check', 'migration'].includes(action) && rest.length === 0) return { action }
   if (action === 'prepare') {
     const values = parsePreparationArguments(rest)
     if (values.offline) throw new Error('Use the explicit release:prepare -- --offline review route for offline artifacts; they are not npm release candidates')
@@ -54,6 +55,11 @@ export async function checkWorkflowReleaseConfiguration(sourceRoot = root) {
 
 export async function runReleaseCommand(args, { sourceRoot = root, print = console.log, prepare = prepareProductCandidate } = {}) {
   const command = parseReleaseArguments(args)
+  if (command.action === 'migration') {
+    const report = createMigrationReport(sourceRoot)
+    print(JSON.stringify(report, null, 2))
+    return report
+  }
   const plan = await createReleasePlan(sourceRoot)
   await checkWorkflowReleaseConfiguration(sourceRoot)
   if (command.action === 'plan') {

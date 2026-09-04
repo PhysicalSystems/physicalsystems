@@ -1,0 +1,24 @@
+Physical Systems proprietary preview notice
+
+Copyright (c) 2026 Lienert De Maeyer / Physical Systems. All rights reserved.
+
+The first-party modules included in the physicalsystems-node preview are
+proprietary software. You may download, install and use this provided preview
+for evaluation of Physical Systems on systems you are authorized to operate.
+This notice does not grant permission to redistribute or relicense the
+first-party software, or grant rights to the remainder of the private source
+repository. Additional rights require permission from the copyright holder.
+Rights that cannot be excluded by applicable law are unaffected.
+
+This experimental preview is provided AS IS, without warranties, to the extent
+permitted by applicable law. It is not a certified safety controller. Software
+installation is not authorization to operate physical equipment; commissioning,
+appropriate protective measures and explicit operation approval are separate.
+
+Third-party components are separately licensed by their respective owners.
+Their licenses and notices remain applicable and are not replaced by this
+notice. In particular, tinyedge-runtime is a separate Apache-2.0 distribution;
+NumPy and OpenCV are separate third-party distributions, not vendored here.
+
+Python wheel contents are readable Python source. This notice defines the
+first-party preview distribution's scope; it does not claim to hide its code.

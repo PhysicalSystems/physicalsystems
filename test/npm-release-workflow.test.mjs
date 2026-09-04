@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -513,16 +514,22 @@ test('the export boundary accepts the guarded source-license transition without 
   const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-locks-'))
   try {
     mkdirSync(path.join(fixtureRoot, 'scripts'), { recursive: true })
-    copyFileSync(
-      path.join(root, 'scripts/check-export-boundary.mjs'),
-      path.join(fixtureRoot, 'scripts/check-export-boundary.mjs'),
-    )
+    for (const script of ['check-export-boundary.mjs', 'check-source-imports.mjs', 'release-migration.mjs']) {
+      copyFileSync(path.join(root, 'scripts', script), path.join(fixtureRoot, 'scripts', script))
+    }
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/Apache-2.0.txt', apacheLicenseTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.txt', noticeTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.pi-runtime.txt', runtimeNoticeTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/THIRD_PARTY_NOTICES.md', thirdPartyNoticesTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/TRADEMARKS.md', trademarksTemplate)
-    writeFixtureFile(fixtureRoot, 'release/product.json', readFileSync(path.join(root, 'release/product.json')))
+    for (const file of ['product.json', 'migration.json', 'README.md']) {
+      writeFixtureFile(fixtureRoot, `release/${file}`, readFileSync(path.join(root, 'release', file)))
+    }
+    // Exercise the real import gate in every license-state scenario. Preserve
+    // original receipt/payload bytes rather than replacing the gate with a stub.
+    for (const directory of ['packages/runtime', 'release/node']) {
+      cpSync(path.join(root, directory), path.join(fixtureRoot, directory), { recursive: true, errorOnExist: true, force: false })
+    }
     for (const governanceFile of [
       '.github/CODEOWNERS',
       'SECURITY.md',

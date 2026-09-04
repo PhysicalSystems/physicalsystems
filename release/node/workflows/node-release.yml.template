@@ -1,0 +1,210 @@
+# Modified for TIN-417: inactive migration template, not an Actions workflow.
+# Keep outside .github/workflows until owner-verified publisher cutover is reviewed.
+# Literal false guards also prevent execution if this template is copied early.
+# Future protected workflow identity: .github/workflows/node-release.yml.
+name: Publish reviewed minimal Node
+
+# Never build private source here. Ingress is an explicitly approved two-asset
+# public candidate prerelease, identified by ID and an operator-reviewed hash.
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_release_id:
+        description: 'Published candidate prerelease ID containing only the approved wheel and release.json'
+        required: true
+        type: string
+      release_metadata_sha256:
+        description: 'Operator-reviewed raw SHA-256 of canonical release.json'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: physicalsystems-node-pypi
+  cancel-in-progress: false
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  GIT_CONFIG_COUNT: '1'
+  GIT_CONFIG_KEY_0: core.autocrlf
+  GIT_CONFIG_VALUE_0: 'false'
+
+jobs:
+  verify:
+    if: ${{ false && github.repository == 'PhysicalSystems/physicalsystems' && github.ref == 'refs/heads/main' && github.event.repository.private == false && vars.PHYSICAL_NODE_PUBLISH_POLICY == 'v1-minimal-node-preview' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip --isolated install --index-url https://pypi.org/simple packaging==26.3 pytest==8.4.2
+      - run: python -B -m pytest -q -p no:cacheprovider release/node/tests
+      - name: Validate operator pins, candidate prerelease scope, public dependencies and protections
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PHYSICAL_NODE_PUBLISH_POLICY: ${{ vars.PHYSICAL_NODE_PUBLISH_POLICY }}
+          RELEASE_ID: ${{ inputs.candidate_release_id }}
+          METADATA_SHA256: ${{ inputs.release_metadata_sha256 }}
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'release/node/scripts/release.py', 'verify',
+              '--candidate-release-id', os.environ['RELEASE_ID'],
+              '--release-metadata-sha256', os.environ['METADATA_SHA256']], check=True, timeout=420)
+
+  install:
+    needs: verify
+    name: install-${{ matrix.platform }}-py${{ matrix.python }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux-x64, win32-x64]
+        python: ['3.10', '3.11', '3.12']
+        include:
+          - platform: linux-x64
+            os: ubuntu-22.04
+          - platform: win32-x64
+            os: windows-2022
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip --isolated install --index-url https://pypi.org/simple packaging==26.3
+      - name: Fetch and inspect exact pinned assets without executing their code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PHYSICAL_NODE_PUBLISH_POLICY: ${{ vars.PHYSICAL_NODE_PUBLISH_POLICY }}
+          RELEASE_ID: ${{ inputs.candidate_release_id }}
+          METADATA_SHA256: ${{ inputs.release_metadata_sha256 }}
+        shell: python
+        run: |
+          import os, subprocess, sys
+          from pathlib import Path
+          subprocess.run([sys.executable, 'release/node/scripts/release.py', 'verify',
+              '--candidate-release-id', os.environ['RELEASE_ID'],
+              '--release-metadata-sha256', os.environ['METADATA_SHA256'],
+              '--output', str(Path(os.environ['RUNNER_TEMP']) / 'node-input')], check=True, timeout=420)
+      - name: Install offline and probe identities/native libraries only; no credentials or hardware
+        env:
+          METADATA_SHA256: ${{ inputs.release_metadata_sha256 }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          TARGET_PYTHON: ${{ matrix.python }}
+        shell: python
+        run: |
+          import os, subprocess, sys
+          from pathlib import Path
+          temporary = Path(os.environ['RUNNER_TEMP'])
+          subprocess.run([sys.executable, 'release/node/scripts/release.py', 'install',
+              '--directory', str(temporary / 'node-input'),
+              '--release-metadata-sha256', os.environ['METADATA_SHA256'],
+              '--platform', os.environ['TARGET_PLATFORM'], '--python', os.environ['TARGET_PYTHON'],
+              '--output', str(temporary / 'proof')], check=True, timeout=720)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: node-proof-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}-py${{ matrix.python }}
+          path: ${{ runner.temp }}/proof/*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    needs: [verify, install]
+    if: ${{ false && github.repository == 'PhysicalSystems/physicalsystems' && github.ref == 'refs/heads/main' && github.event.repository.private == false && vars.PHYSICAL_NODE_PUBLISH_POLICY == 'v1-minimal-node-preview' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    environment:
+      name: physical-node-pypi
+      url: https://pypi.org/project/physicalsystems-node/
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip --isolated install --index-url https://pypi.org/simple packaging==26.3
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: node-proof-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/node-proofs
+          merge-multiple: true
+      - name: Revalidate pins, all six current-attempt proofs, dependencies and protections after human approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PHYSICAL_NODE_PUBLISH_POLICY: ${{ vars.PHYSICAL_NODE_PUBLISH_POLICY }}
+          RELEASE_ID: ${{ inputs.candidate_release_id }}
+          METADATA_SHA256: ${{ inputs.release_metadata_sha256 }}
+        shell: python
+        run: |
+          import os, runpy, shutil, subprocess, sys
+          from pathlib import Path
+          upload_stage = Path(os.environ['GITHUB_WORKSPACE']) / '.release-stage'
+          subprocess.run([sys.executable, 'release/node/scripts/release.py', 'stage',
+              '--candidate-release-id', os.environ['RELEASE_ID'],
+              '--release-metadata-sha256', os.environ['METADATA_SHA256'],
+              '--proofs', str(Path(os.environ['RUNNER_TEMP']) / 'node-proofs'),
+              '--output', str(upload_stage)], check=True, timeout=420)
+          # PyPA writes a .publish.attestation beside the uploaded wheel.
+          # Retain a separate exact input snapshot; never relax check_stage().
+          readback_input = Path(os.environ['RUNNER_TEMP']) / 'readback-input'
+          shutil.copytree(upload_stage, readback_input)
+          runpy.run_path('release/node/scripts/release.py')['check_stage'](readback_input, os.environ['METADATA_SHA256'])
+      - name: Publish one reviewed prebuilt wheel via environment-scoped OIDC
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2 commit
+        with:
+          packages-dir: .release-stage/upload/
+          attestations: true
+          skip-existing: false
+      - name: Verify anonymous exact public readback and generate six real install manifests
+        env:
+          METADATA_SHA256: ${{ inputs.release_metadata_sha256 }}
+        shell: python
+        run: |
+          import os, subprocess, sys, time
+          from pathlib import Path
+          command = [sys.executable, 'release/node/scripts/release.py', 'readback',
+              '--directory', str(Path(os.environ['RUNNER_TEMP']) / 'readback-input'),
+              '--release-metadata-sha256', os.environ['METADATA_SHA256'],
+              '--output', str(Path(os.environ['RUNNER_TEMP']) / 'published-manifests')]
+          # Registry propagation may briefly lag upload. Retry reads only.
+          for attempt in range(4):
+              result = subprocess.run(command, capture_output=True, text=True, timeout=90)
+              if result.returncode == 0:
+                  print(result.stdout)
+                  break
+              # The verifier emits a safe one-line refusal. Do not print raw
+              # tracebacks, subprocess output, terminal controls or environment.
+              safe_errors = [line for line in result.stderr.splitlines()
+                  if line.startswith('Release refused: ') and len(line) <= 300
+                  and all(32 <= ord(char) <= 126 for char in line)]
+              if safe_errors:
+                  print(safe_errors[-1], file=sys.stderr)
+              if attempt == 3:
+                  raise RuntimeError('Upload returned; exact public readback failed. Inspect before any new upload.')
+              time.sleep(3)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: node-install-manifests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/published-manifests/*.json
+          if-no-files-found: error
+          retention-days: 90

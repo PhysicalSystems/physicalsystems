@@ -119,6 +119,35 @@ These checks use local fixtures. They do not prove live hardware operation,
 provider quota, production services or registry publication. Record source,
 clean-machine package and physical-device evidence separately.
 
+## Python modules
+
+The public Runtime and release-only Node verifier are now in this checkout.
+They can be tested independently of npm and without hardware or credentials.
+Use a development environment outside the repository, with Python 3.10 or
+newer and the dependencies declared in `packages/runtime/pyproject.toml`.
+Node release-tooling tests use `pytest==8.4.2` and `packaging==26.3`.
+
+From the repository root, select the checked-in Runtime source explicitly:
+
+```sh
+python -B -c "import sys, pytest; sys.path.insert(0, 'packages/runtime/src'); raise SystemExit(pytest.main(['-c', 'packages/runtime/pyproject.toml', '-p', 'no:cacheprovider', 'packages/runtime/tests']))"
+python -B -m pytest -p no:cacheprovider release/node/tests
+npm run check:imports
+```
+
+For wheel/sdist build verification, copy `packages/runtime` into a fresh
+temporary directory outside the repository, and run `python -m build` there.
+Run `python -m twine check` against the resulting distributions. CI uses that
+same isolated-copy approach so setuptools outputs never contaminate source
+provenance. A verification build is not the previously published wheel, even
+if its version is unchanged. Never substitute it into the product's pinned
+download manifests or republish an existing version.
+
+`python.yml` tests Runtime across Linux Python 3.10–3.13 and Windows 3.12,
+and release-tooling regressions on Linux/Windows. These jobs run independently
+of the Harness candidate. They neither install private Node software nor run
+the full six-target Node release qualification.
+
 ## CI and releases
 
 Begin release work with `npm run release -- plan` or `npm run release -- check`.

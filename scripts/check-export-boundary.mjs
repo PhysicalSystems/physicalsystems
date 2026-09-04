@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkSourceImports } from './check-source-imports.mjs'
+import { readMigrationPlan } from './release-migration.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const expectedRepository = 'git+https://github.com/PhysicalSystems/physicalsystems.git'
@@ -57,7 +59,7 @@ const ignoredDirectories = new Set([
   'release-artifacts',
   'verification-evidence',
 ])
-const forbiddenFile = /(^|\/)(?:\.env(?:\.|$)|\.npmrc$)|\.(?:key|pem|p12|pfx|sqlite|tgz|zip)$/i
+const forbiddenFile = /(^|\/)(?:\.env(?:\.|$)|\.npmrc$)|\.(?:key|pem|p12|pfx|sqlite|tgz|zip|whl|pyc|tar\.gz)$/i
 
 function collectFiles(directory, files = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -80,16 +82,18 @@ for (const entry of readdirSync(root, { withFileTypes: true })) {
   assert.ok(allowedTopLevel.has(entry.name), 'unexpected top-level export entry: ' + entry.name)
 }
 
-assert.deepEqual(readdirSync(path.join(root, 'release')).sort(), ['product.json'],
-  'release configuration must contain only the reviewed product descriptor, never backend source or artifacts')
+assert.deepEqual(readdirSync(path.join(root, 'release')).sort(), ['README.md', 'migration.json', 'node', 'product.json'],
+  'release may contain reviewed descriptors and release-only tooling, never private backend source or artifacts')
+checkSourceImports(root)
+readMigrationPlan(root)
 
 assert.deepEqual(
   readdirSync(path.join(root, 'packages'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort(),
-  ['cli', 'npx', 'pi', 'pi-runtime'],
-  'the clean export must contain only the active package/runtime and two frozen 0.1.3 source directories',
+  ['cli', 'npx', 'pi', 'pi-runtime', 'runtime'],
+  'the clean export contains the Harness, public Python Runtime and frozen compatibility source, never private Node source',
 )
 
 const licensePending = existsSync(path.join(root, 'LICENSE-PENDING.md'))
@@ -297,4 +301,4 @@ for (const governanceFile of [
   assert.ok(existsSync(path.join(root, governanceFile)), 'public repository is missing ' + governanceFile)
 }
 
-console.log('Verified public Physical Systems Harness source boundary')
+console.log('Verified public Physical Systems source boundary and committed source imports')

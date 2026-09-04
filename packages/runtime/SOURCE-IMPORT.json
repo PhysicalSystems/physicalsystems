@@ -1,0 +1,414 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "https://github.com/PhysicalSystems/runtime.git",
+    "commit": "76b1ae3702d8c677940a8da040c80a676c92db17",
+    "tree": "34f499b7926e294ca50545bcc8624c556393381a"
+  },
+  "importedFiles": [
+    {
+      "path": ".gitattributes",
+      "gitBlob": "6313b56c57848efce05faa7aa7e901ccfc2886ea",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c",
+      "bytes": 19
+    },
+    {
+      "path": ".gitignore",
+      "gitBlob": "d0129f551ef708647885b60baf85ac4fac79b8d9",
+      "sha256": "5d006d09b70af9aecc8c0067eeab292611f7f59600fa4ca2a9c3a7675e4a860a",
+      "bytes": 93
+    },
+    {
+      "path": "AGENTS.md",
+      "gitBlob": "ac614e21fc4fd504886328b43b30f2b9f094a01f",
+      "sha256": "1af91b83f114f12d174b724be6155b0a632fd5523da613000846bf1f07850109",
+      "bytes": 1281
+    },
+    {
+      "path": "BOUNDARY.md",
+      "gitBlob": "6d16020afcf30125ac55168ee8c8e80e6d2c370f",
+      "sha256": "3f51fc2fbe6b357bae35156d2d78f825fe3b468afa108c78e57fd2122becfc40",
+      "bytes": 1941
+    },
+    {
+      "path": "CHANGELOG.md",
+      "gitBlob": "47002f4939ac93e71a6bf12d8b4d043edca1c20d",
+      "sha256": "f07493ea1a4991901da2620f66c831a292c31b6f95d453d58ad5b729bf9b1598",
+      "bytes": 1399
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "gitBlob": "2077778782b21860cfcd261c63ffc6d1e7494072",
+      "sha256": "d04062c2921909246937941733f26a0c4c362fd0684c4c51a03dbcda96f03ce8",
+      "bytes": 778
+    },
+    {
+      "path": "LICENSE",
+      "gitBlob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357
+    },
+    {
+      "path": "MANIFEST.in",
+      "gitBlob": "aa21fae3ed6acd809820df37c38913aa53416bd2",
+      "sha256": "0155225bbfea0d7beacc6deaf65901f45fec61b4f2c79692e002171ca6ad9ca0",
+      "bytes": 232
+    },
+    {
+      "path": "NOTICE",
+      "gitBlob": "8085d5e7e265441d9feaaae3115b86b648bcb8b0",
+      "sha256": "08502d2df25da65ae5ff3ee0ad5bce70ae67226dae39360d521e31d5f6ad5a30",
+      "bytes": 96
+    },
+    {
+      "path": "README.md",
+      "gitBlob": "ed67b1cbf28e08417474578dc5b96d8a682c5ea2",
+      "sha256": "346169c796a36ccb3aa8d25a3e18727a6851939006f76731e29ee5f11d0fd9b7",
+      "bytes": 5267
+    },
+    {
+      "path": "SECURITY.md",
+      "gitBlob": "3fc9c5ef2e46ba3a3f8d97e9baa55d5c3a9bcf22",
+      "sha256": "d7e5d4e96c408c7795529d3e53dfd0bba6ead3285e4155d34edb017847010289",
+      "bytes": 645
+    },
+    {
+      "path": "SUPPORT.md",
+      "gitBlob": "62fe68dff75301886fabc2207aebc98c24ed6f7a",
+      "sha256": "f50e3d3965ed819c44d9a8540e69ecdc95626bedc2eebea29bb69579a8e98964",
+      "bytes": 384
+    },
+    {
+      "path": "docs/provenance.md",
+      "gitBlob": "042ddcd5f5e75c873b38b2edee1ffdaaef29808b",
+      "sha256": "de3c7637230818f9571b3fb131a4aad284e04c370cb5b7a87b9450b2484d4033",
+      "bytes": 687
+    },
+    {
+      "path": "docs/release.md",
+      "gitBlob": "b2c998aae9325131aa5a4f2a31ccebd16777b97d",
+      "sha256": "ee112d5a48766cefa3140c610a7e9b4d43e1a06e6b671d77deeb25912976cafc",
+      "bytes": 1430
+    },
+    {
+      "path": "docs/runtime-v1.md",
+      "gitBlob": "3a56f4411f56203208eabc0ec8bb7fddf7431872",
+      "sha256": "fea61bbea8b6398b88e86b4912c8af114d4dbbbb08ef1b1e71b811f271812b6c",
+      "bytes": 13658
+    },
+    {
+      "path": "fixtures/runtime-action-chunk-v1.json",
+      "gitBlob": "029bf8623501b9dc32ac5fb86e941b6f9dd93077",
+      "sha256": "6031a5d47dea6ac32b1ee9fca022d798187f3634947d2b61afce500c42348d4a",
+      "bytes": 701
+    },
+    {
+      "path": "fixtures/runtime-capabilities-v1.json",
+      "gitBlob": "86964c8b0edb3af3a11a24d3f8bc1cfe58bd906e",
+      "sha256": "0df12fe3970d6e53862eaaf9f069b01cee86bfb6fd14d5fd284ae96cd159d8a6",
+      "bytes": 690
+    },
+    {
+      "path": "fixtures/runtime-observation-v1.json",
+      "gitBlob": "20f935f266f615ede4bbae1870501cc84042ccc0",
+      "sha256": "7b9747d989c6d682a97802ec842790b093a8d913ce941670132840309ae95982",
+      "bytes": 342
+    },
+    {
+      "path": "fixtures/runtime-physical-manifest-v1.json",
+      "gitBlob": "7e425b858539a92155ed314e609854cc80541eac",
+      "sha256": "6a4965eca229871d4ee458bcd777e9142a78efea4d8c32f3df1f5b3e753ce6c7",
+      "bytes": 5141
+    },
+    {
+      "path": "fixtures/runtime-physical-protocol-v1.json",
+      "gitBlob": "22ec041c850b0adb37ccccd3ec6a6bc40ad90153",
+      "sha256": "f206fe5a599704ceccd0ee5f83abffa5dfaeea9f160fb0c9a79b86da9d431684",
+      "bytes": 2119
+    },
+    {
+      "path": "fixtures/runtime-physical-run-record-v1.json",
+      "gitBlob": "4c4819245880d371438871973e3ee860d99e259f",
+      "sha256": "3d4ff56b972eefbfa427333f64003c5cb5ca95002861bae4febd9537c934e618",
+      "bytes": 3212
+    },
+    {
+      "path": "fixtures/runtime-physical-skill-catalog-v1.json",
+      "gitBlob": "e546c4d59138ea4d6bf495182695acd5b48e7b60",
+      "sha256": "c201a7a53df5580bb147adb73531703aec6a1b52cfdbf2551d08c6572f2babab",
+      "bytes": 5365
+    },
+    {
+      "path": "fixtures/runtime-physical-skill-route-decision-v1.json",
+      "gitBlob": "4e457809e5396fe6579b2f069c53b9bfb9e070aa",
+      "sha256": "95a173693f05ec71d93f323d3883f82f203239fd790fe5d8db3bd857d6cf59d5",
+      "bytes": 2055
+    },
+    {
+      "path": "fixtures/runtime-physical-skill-route-request-v1.json",
+      "gitBlob": "bb563ed2b97bf13722f1826744b22252ae001285",
+      "sha256": "2ce4ccc7a1b6f45bf8464293862d33e38ee15d4d11e50dfa4e5b08b0f789ac07",
+      "bytes": 4421
+    },
+    {
+      "path": "fixtures/runtime-plan-v1.json",
+      "gitBlob": "9c5ffa8b080155228b70d1f5b61a2007e290cab4",
+      "sha256": "359959e7875dca76fa258ab3d904170dce181ba2351181392ff2894809cf5731",
+      "bytes": 1225
+    },
+    {
+      "path": "fixtures/runtime-qualified-bundle-v1.json",
+      "gitBlob": "5a1c11f8945fd309d8ef3b551a5058ada0930639",
+      "sha256": "880903d2450a73df88a03069d077e358bef93de5aa3b89658c5ce82577fc99ec",
+      "bytes": 1249
+    },
+    {
+      "path": "fixtures/runtime-telemetry-v1.json",
+      "gitBlob": "81c151bbd7c47d92452018c2bcc137ac867b672c",
+      "sha256": "1ede54505b0327a5514c9f1e2afa2d7c3edea62d1309a43c1e810a04deb2517c",
+      "bytes": 479
+    },
+    {
+      "path": "pyproject.toml",
+      "gitBlob": "0cb5ab8e3af6ba8b28edcf945fb2b459be25a1e2",
+      "sha256": "59dc9a40d9da82c37a57def098c8e3fe12cdcb1e3777fee3d79dd25758835c61",
+      "bytes": 1446
+    },
+    {
+      "path": "schemas/runtime-action-chunk-v1.schema.json",
+      "gitBlob": "e8a8dd0b6a09386be62a73769dedb1500c4626c8",
+      "sha256": "7f24e004adf7eba95d5edeb92cf92c3eab1218fb615ae8ca5b73f3fa88fdb774",
+      "bytes": 2939
+    },
+    {
+      "path": "schemas/runtime-capabilities-v1.schema.json",
+      "gitBlob": "f9cfeed36d79b3b1ab34c3716980df7e2524de41",
+      "sha256": "c9906ca9b9dd3ccc74de404ab0d9a2abcc021d070a646e06030aa6e590d21094",
+      "bytes": 2518
+    },
+    {
+      "path": "schemas/runtime-observation-v1.schema.json",
+      "gitBlob": "af39ecf95edc29396cc52c28bd280ddd2e117dfa",
+      "sha256": "a0e564a91266f1328c9a8d68e1bbf85994db6dcd6acf8a01720df5ed46d25d16",
+      "bytes": 1936
+    },
+    {
+      "path": "schemas/runtime-physical-manifest-v1.schema.json",
+      "gitBlob": "eb3bdde00611e8ad5d78d68445dde8bd988c20dc",
+      "sha256": "17e0890f39c460e0624bf45a2e119b26473348b23ad8ec73b794650272aa0125",
+      "bytes": 7177
+    },
+    {
+      "path": "schemas/runtime-physical-protocol-v1.schema.json",
+      "gitBlob": "9ffd17c2d39c25017114f37cdd699d3fdbd046bd",
+      "sha256": "c2b25dcfe7e20f7d940d5fb08f55059942bdb3e194ed4f691f5794aff4a57726",
+      "bytes": 5140
+    },
+    {
+      "path": "schemas/runtime-physical-run-record-v1.schema.json",
+      "gitBlob": "333df8fb10965b73b5d052de3df6a9b72c38c06b",
+      "sha256": "e9d0c76e07c59e1d6f19c9c010621992afd54fce2437abe9d92947a4267ca4a4",
+      "bytes": 7783
+    },
+    {
+      "path": "schemas/runtime-physical-skill-catalog-v1.schema.json",
+      "gitBlob": "4049c8bcb3cb11415237d924e09c912b53efd214",
+      "sha256": "eb1faaaec1c407aaf6360f2a1a0f3bc7185381c8969e6504592c8f3df142c6df",
+      "bytes": 6089
+    },
+    {
+      "path": "schemas/runtime-physical-skill-route-decision-v1.schema.json",
+      "gitBlob": "295bd540b3e389b19747e0e8068d8db7f21daab4",
+      "sha256": "43a5d668e637339b7e1d6676b54e2dde8625f5c1c2107f40eac9c7e6f6c7beb8",
+      "bytes": 4838
+    },
+    {
+      "path": "schemas/runtime-physical-skill-route-request-v1.schema.json",
+      "gitBlob": "dd78d0649eb8e4653e4a6326f1f6631518cf680b",
+      "sha256": "99a805637520089839cd23e77765605c2c330d53f8587649490b4a005752266c",
+      "bytes": 5809
+    },
+    {
+      "path": "schemas/runtime-plan-v1.schema.json",
+      "gitBlob": "88238c1124611c35da5058c385516e58270763dc",
+      "sha256": "4c19bf1d32e1051ebce4cb32b65997634995cb5c27f2eb1d81366cd570236f5c",
+      "bytes": 4598
+    },
+    {
+      "path": "schemas/runtime-qualified-bundle-v1.schema.json",
+      "gitBlob": "03b950f39a658d15335f106e418eac552094bf07",
+      "sha256": "bf11f4fd48c5c0891fc4ee716940ddadb45298fe0fde74b53a3c479d465d7f4f",
+      "bytes": 5965
+    },
+    {
+      "path": "schemas/runtime-telemetry-v1.schema.json",
+      "gitBlob": "6bc935f6ccb15254c28638296c0210f888943b9c",
+      "sha256": "0aee913b97c74e1c9f15a394412454c7f86261d99162d9e662aa420d3d86af20",
+      "bytes": 2825
+    },
+    {
+      "path": "src/tinyedge_runtime/__init__.py",
+      "gitBlob": "a3888816958cf11c2adf3f9340708f5611586d3b",
+      "sha256": "ad40969d1a662cbfe913c311e2806349812eb3f84af27476b2d51ce2bc47d65d",
+      "bytes": 3946
+    },
+    {
+      "path": "src/tinyedge_runtime/conformance.py",
+      "gitBlob": "7e534a647e75e7559dfcf4bc09b2435cb0580e23",
+      "sha256": "7eb78b77d1cf2b83bf2e4c8457c0093f07c3cf87304e166c2b06ce43d10863b1",
+      "bytes": 3284
+    },
+    {
+      "path": "src/tinyedge_runtime/contracts/__init__.py",
+      "gitBlob": "ab272b4786ba1db9bdbdb2199a8252ba6a2108b9",
+      "sha256": "60673bb6a34422c5560442db80fee9913169363df4741c076d1b271bc52d418f",
+      "bytes": 3809
+    },
+    {
+      "path": "src/tinyedge_runtime/contracts/hashing.py",
+      "gitBlob": "a0d5b6cd74158d14517c8503088f946a2117cbbe",
+      "sha256": "8086e9006fbee726538b30b0cc7f5dcdf7550f678e695c5354f26726596af39c",
+      "bytes": 1545
+    },
+    {
+      "path": "src/tinyedge_runtime/contracts/models.py",
+      "gitBlob": "8fa408258c19ed6cd8c9028170b42c758d7a30b7",
+      "sha256": "9a54c1529511b97b481d993b1e261f430123c20f07426e15332d9b4a947f0d76",
+      "bytes": 41311
+    },
+    {
+      "path": "src/tinyedge_runtime/contracts/physical.py",
+      "gitBlob": "590b19434e5bc8714aa5c74c890fd6b5fe91feda",
+      "sha256": "4ca6fa4564e558d0156418bfb20bfb06e4b23f6eff8a98902e3dfa0be095b93e",
+      "bytes": 101590
+    },
+    {
+      "path": "src/tinyedge_runtime/contracts/routing.py",
+      "gitBlob": "d0901589102060a5e7aa7e301ca629989eaeff49",
+      "sha256": "07546b8516dad886b594d523f2b36525354b0bef19fb4d85619a7ff2f5a86522",
+      "bytes": 71363
+    },
+    {
+      "path": "src/tinyedge_runtime/py.typed",
+      "gitBlob": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "bytes": 1
+    },
+    {
+      "path": "src/tinyedge_runtime/registry.py",
+      "gitBlob": "45ec5f104fa6101a4643ff4dbc8cf49915f27abb",
+      "sha256": "886a578988822f0e024934373051bf6bc6535ef24bad8aa2cdc6b87e5b6245fd",
+      "bytes": 20533
+    },
+    {
+      "path": "src/tinyedge_runtime/session.py",
+      "gitBlob": "67d3b291759accf02e6c6811b1308dfe398faed3",
+      "sha256": "9c4e0d7b2a272d8dd42c39ff8096ae4387fe5774facd6a9129b73330a41e9b7c",
+      "bytes": 18205
+    },
+    {
+      "path": "src/tinyedge_runtime/testing/__init__.py",
+      "gitBlob": "49916526f0e0b717484003e5389a677b46180e76",
+      "sha256": "efc4a7a3f7c5ea1cd86033b10a208eac40550102e86944f73b7e13487876f7ca",
+      "bytes": 208
+    },
+    {
+      "path": "src/tinyedge_runtime/testing/fakes.py",
+      "gitBlob": "3440364757cc445d591b311f85aecb1b3ff5e3e0",
+      "sha256": "d435dcfc5c7bb1d15cbc1761a9ab2215f1db9d61be67f9d98a5c422722677888",
+      "bytes": 6699
+    },
+    {
+      "path": "tests/runtime_contract_test_helpers.py",
+      "gitBlob": "50dc5898065ed964b7ecd3ebcc20ae85a9d049e5",
+      "sha256": "c6e38e17e7c76326f56f7982198837f0c14318a78c3144326125c40d7f88e544",
+      "bytes": 8583
+    },
+    {
+      "path": "tests/test_conformance.py",
+      "gitBlob": "c4dfec057eb5266883fdd0cfe97913112533e549",
+      "sha256": "191069815d3f983d7553687c45f2875a55eadf2aaa1d009f7e55bf9825ec00cb",
+      "bytes": 1204
+    },
+    {
+      "path": "tests/test_distribution_boundary.py",
+      "gitBlob": "d4059a3f79a164c6c27381d35ed14d7f72772194",
+      "sha256": "d54cae73da9e482eae22cda47a8b130afe594abf90323cc90f6fde79a2528a05",
+      "bytes": 636
+    },
+    {
+      "path": "tests/test_json_schemas.py",
+      "gitBlob": "d087953c9b6620e37b6fed15a7896604bdd7612b",
+      "sha256": "b614ba92fd8ccce0a9d88a42ba21f697468d1327dce086f13df85e3105b925aa",
+      "bytes": 4895
+    },
+    {
+      "path": "tests/test_physical_contracts.py",
+      "gitBlob": "4dffbbd85142405cb82e99e4bc67ca78ea916f54",
+      "sha256": "efca1a6ce8d3229a0083f6ab20586565465f5020cc65ad5b56a371af2f9e595b",
+      "bytes": 37915
+    },
+    {
+      "path": "tests/test_physical_routing.py",
+      "gitBlob": "99d53130abc91aa21a9a1687f1c3af7e9e4307d3",
+      "sha256": "e15c92b6b6cb25c6ed48b70c3d4848f3d5608c58619ea28d81eaa7870f20428f",
+      "bytes": 23331
+    },
+    {
+      "path": "tests/test_runtime_contracts.py",
+      "gitBlob": "d3821bfa4c5ced76a1e7af4cfe4b9edfbd216fcc",
+      "sha256": "4da827ca82be1f263aaa3ca96f9803b5b727d8e53ef03625e91a8321d0fb8170",
+      "bytes": 10851
+    },
+    {
+      "path": "tests/test_runtime_registry.py",
+      "gitBlob": "10bd10249ce8ab4f71bd26772aa4dac541905315",
+      "sha256": "71ee6426cf9481b9ad829775ab0290ce4fc29723fe314ff96705687e0ce49607",
+      "bytes": 10621
+    },
+    {
+      "path": "tests/test_runtime_safety.py",
+      "gitBlob": "38cf1515c3f4ec8229f9c1505ad2cfbe6b446886",
+      "sha256": "db1ffc58e6716a29d333bcc83387a331fc8be3394d713b204ad431ad90ab1778",
+      "bytes": 12828
+    },
+    {
+      "path": "tests/test_runtime_session.py",
+      "gitBlob": "8de2985b2d56ad547880d2598eb0002121b7827f",
+      "sha256": "d762f8cb02a7ee7f74758e50a83aa972e51d75fdf42089e70cc6911d986adc3b",
+      "bytes": 16801
+    }
+  ],
+  "excludedFiles": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "reason": "Historical standalone-repository CI/publishing workflow; root product workflows now own CI and release coordination."
+    },
+    {
+      "path": ".github/workflows/dependency-review.yml",
+      "reason": "Historical standalone-repository CI/publishing workflow; root product workflows now own CI and release coordination."
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "reason": "Historical standalone-repository CI/publishing workflow; root product workflows now own CI and release coordination."
+    }
+  ],
+  "deliberateChanges": [
+    {
+      "path": "AGENTS.md",
+      "reason": "Identify the canonical Runtime package, preserve published identities and private-host boundary, and direct generated verification artifacts outside source."
+    },
+    {
+      "path": "BOUNDARY.md",
+      "reason": "Clarify that the preserved historical ownership table describes component boundaries after source consolidation."
+    },
+    {
+      "path": "README.md",
+      "reason": "Identify the canonical imported package and existing 0.2.0 release; remove obsolete unpublished claims without changing published identities or runtime behavior."
+    },
+    {
+      "path": "docs/release.md",
+      "reason": "Mark the preserved standalone publishing procedure as historical and direct maintainers to reviewed root release coordination."
+    }
+  ]
+}

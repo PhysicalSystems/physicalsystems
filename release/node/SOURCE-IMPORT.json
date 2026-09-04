@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "https://github.com/PhysicalSystems/node-releases.git",
+    "commit": "06f7fbf0ef9e4e4c26593ab7125b5d3fa507c8fd",
+    "tree": "55c4f54166346ddaf1027695a0d1af050eaf973e"
+  },
+  "importedFiles": [
+    {
+      "path": "LICENSE",
+      "gitBlob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357
+    },
+    {
+      "path": "policy/node-preview-notice.txt",
+      "gitBlob": "8619074dcb7d68e01248be1a043b3b890983ba6f",
+      "sha256": "689e4fb4cb63f8a404db0426926bad5ee102454942cbc0a2216cb58b208e8c8f",
+      "bytes": 1416
+    },
+    {
+      "path": "README.md",
+      "gitBlob": "bef28faf158a2ad12ebfdfd92df252089725e3f9",
+      "sha256": "87d175be02d65402a9f44faddf88acd80fb241f273d8c96a5f8969b6d4d68486",
+      "bytes": 8159
+    },
+    {
+      "path": "scripts/release.py",
+      "gitBlob": "5df13254fcd009c3804e01bbcf7936395173288c",
+      "sha256": "d37efc980b43899d138464fe83dc8929c2824b4838e0d00550be77e355700cbc",
+      "bytes": 36542
+    },
+    {
+      "path": "tests/test_release.py",
+      "gitBlob": "1d9b0c3407831df55d0d77ef1912955a3a5b69d4",
+      "sha256": "61d5148b4b26a40d8e3848bf5d78ca50268c8e5ea9bf2d73680cd0519ddc64dc",
+      "bytes": 34489
+    },
+    {
+      "path": "tests/test_workflows.py",
+      "gitBlob": "b0f7412b9de5a6cd8f23b2bca60f9ba011a9cba7",
+      "sha256": "5bb8f5dbaac4c19f9e05d295b6bee4710e05ee84306a517f80fe7b09c8c35a19",
+      "bytes": 5218
+    },
+    {
+      "path": "workflows/node-release.yml.template",
+      "sourcePath": ".github/workflows/publish.yml",
+      "gitBlob": "a0d1386880c55652e60a103ac79d67cae4a64a3c",
+      "sha256": "bd06ee47890d2896627cf34989aecf97028c8a3db11fd714a003a62258fd8496",
+      "bytes": 9605
+    }
+  ],
+  "excludedFiles": [
+    {
+      "path": ".gitattributes",
+      "reason": "The destination repository owns its text attributes; no source payload is omitted."
+    },
+    {
+      "path": ".gitignore",
+      "reason": "The destination repository owns ignore rules; generated evidence remains outside source control."
+    },
+    {
+      "path": ".github/workflows/check.yml",
+      "reason": "Replaced by consolidated root Python source CI; no old standalone workflow copied into active Actions."
+    }
+  ],
+  "deliberateChanges": [
+    {
+      "path": "scripts/release.py",
+      "reason": "Prominent TIN-417 modification notice; bind future workflow evidence to PhysicalSystems/physicalsystems and .github/workflows/node-release.yml; adjust repository wording. Wheel/dependency pins, 26-module scope and release protocol remain unchanged."
+    },
+    {
+      "path": "tests/test_release.py",
+      "reason": "Import the relocated verifier by exact local path without root scripts namespace collision; update repository/workflow fixtures and assert legacy publisher identity rejection."
+    },
+    {
+      "path": "tests/test_workflows.py",
+      "reason": "Check the relocated non-active template, literal fail-closed guards, future repository/workflow binding and preserved six-target evidence protocol. Root Python source CI is tested separately."
+    },
+    {
+      "path": "workflows/node-release.yml.template",
+      "reason": "Relocate publish.yml outside active GitHub workflows; add prominent migration notice and literal false guards for verify/publish; adapt future repository binding and local script/test paths; disable pytest source caches. Preserve six clean-install jobs, manual main-only protected OIDC and exact readback."
+    },
+    {
+      "path": "README.md",
+      "reason": "Document import provenance, directory boundaries, inactive migration state and required owner-verified publisher cutover; adapt future workflow and local test paths without altering historical releases or licensing."
+    }
+  ],
+  "addedFiles": []
+}
