@@ -20,6 +20,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { stageNodeBundle } from './node-bundle-stage.js'
 import { verifyNodeBundle } from '../src/physical/node-bundle.js'
+import { checkDownloadableNodePackage } from '../../../scripts/check-downloaded-node.mjs'
+import { assertProductArchiveSize } from './product-size-policy.js'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
@@ -785,6 +787,10 @@ function packRelease(outputDirectory, bundledPackageDirectory) {
     assert.equal(result.version, artifactVersion)
     assertSafePackList(metadata.name, result.files)
     if (key === 'physicalsystems') {
+      if (!bundledPackageDirectory) {
+        assert.equal(result.files.some(({ path: file }) => /\.whl$/i.test(file)), false, 'The normal npm product must not contain Python wheels')
+        assert.equal(Object.hasOwn(metadata, 'physicalsystemsNodeBundle'), false, 'An embedded backend requires explicit offline packing')
+      }
       const bundledNames = [...result.bundled || []].sort()
       for (const dependency of Object.keys(metadata.dependencies || {})) {
         assert.ok(
@@ -826,6 +832,7 @@ function packRelease(outputDirectory, bundledPackageDirectory) {
     }
     const file = path.join(outputDirectory, result.filename)
     assert.ok(existsSync(file), `npm pack did not create ${file}`)
+    if (key === 'physicalsystems' && !bundledPackageDirectory) assertProductArchiveSize(statSync(file).size)
     assertPackedLegalBundle(file, result.files, directory, metadata)
     const integrity = sha512Integrity(file)
     if (key === 'pi-runtime') {
@@ -859,7 +866,8 @@ function packRelease(outputDirectory, bundledPackageDirectory) {
   console.log(`Packed Physical Systems ${version} release artifacts in ${outputDirectory}`)
 }
 
-async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = {}) {
+async function verifyRelease(artifactDirectory, { requireNodeBundle = false, requireDownloadableNode = false } = {}) {
+  assert.equal(requireNodeBundle && requireDownloadableNode, false, 'Choose either downloadable or offline backend verification')
   assert.match(process.platform, /^(?:win32|linux)$/, 'release packages must be verified on Windows or Linux')
   if (process.platform === 'linux') {
     assert.equal(process.arch, 'x64', 'the qualified Linux package route is Ubuntu desktop x64')
@@ -879,6 +887,7 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = 
     assert.equal(artifact.version, expectedVersion)
     const file = path.join(artifactDirectory, artifact.filename)
     assert.ok(existsSync(file), `missing release artifact ${artifact.filename}`)
+    if (requireDownloadableNode && artifact.key === 'physicalsystems') assertProductArchiveSize(statSync(file).size)
     assert.equal(sha256(file), artifact.sha256, `checksum mismatch for ${artifact.filename}`)
     assert.equal(sha512Integrity(file), artifact.integrity, `integrity mismatch for ${artifact.filename}`)
     return { ...artifact, file }
@@ -917,6 +926,21 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = 
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
     const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')
+    const pythonArguments = process.env.pythonLocation
+      ? [path.join(process.env.pythonLocation, process.platform === 'win32' ? 'python.exe' : 'bin/python')]
+      : []
+    if (requireDownloadableNode) {
+      const { index } = await checkDownloadableNodePackage(installedPhysicalSystemsDirectory)
+      console.log(`Installed downloadable backend metadata verified: ${index.entries} exact selectors`)
+      if (process.arch === 'x64') {
+        console.log(run(process.execPath, [path.join(REPOSITORY_ROOT, 'scripts/check-downloaded-node.mjs'), installedPhysicalSystemsDirectory, ...pythonArguments], {
+          phase: 'matching backend downloads, private installation and verified reuse',
+          timeout: 10 * 60_000,
+        }))
+      } else {
+        console.log('Backend installation not qualified on this architecture; Harness and all exact downloadable selectors are verified, not native backend execution')
+      }
+    }
     if (requireNodeBundle) {
       assert.equal(installed.physicalsystemsNodeBundle, 'node-bundle', 'Product verification requires the included Python backend')
     }
@@ -925,9 +949,6 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = 
       await verifyNodeBundle(path.join(installedPhysicalSystemsDirectory, 'node-bundle'))
       assert.ok(existsSync(path.join(installedPhysicalSystemsDirectory, 'BACKEND-NOTICE.txt')))
       if (process.arch === 'x64') {
-        const pythonArguments = process.env.pythonLocation
-          ? [path.join(process.env.pythonLocation, process.platform === 'win32' ? 'python.exe' : 'bin/python')]
-          : []
         const evidence = run(process.execPath, [path.join(REPOSITORY_ROOT, 'scripts/check-bundled-node.mjs'), installedPhysicalSystemsDirectory, ...pythonArguments], {
           phase: 'offline bundled backend installation and verified reuse',
           timeout: 10 * 60_000,
@@ -1173,18 +1194,19 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false } = 
   }
 
   console.log(
-    `Verified Physical Systems ${manifest.version} as one offline-installable package with bundled @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, normal-lifecycle local/global/npm-exec commands, embedded client and Pi extension, bare Harness dispatch, and ${process.platform === 'win32' ? 'native console helper' : 'interactive pseudo-terminal smoke'} on ${process.platform} ${process.arch}`,
+    `Verified Physical Systems ${manifest.version} as one offline-installable JavaScript package with bundled @tinyedge/pi-runtime@${PI_RUNTIME_VERSION}, ${requireDownloadableNode ? 'pinned matching backend downloads (not an offline backend)' : requireNodeBundle ? 'an included offline backend bundle' : 'backend mode as declared'}, normal-lifecycle local/global/npm-exec commands, embedded client and Pi extension, bare Harness dispatch, and ${process.platform === 'win32' ? 'native console helper' : 'interactive pseudo-terminal smoke'} on ${process.platform} ${process.arch}`,
   )
 }
 
 function usage() {
-  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory] [--node-bundle ABSOLUTE_DIRECTORY | --require-node-bundle]')
+  throw new Error('Usage: check-release-packages.js <pack|verify|check> [artifact-directory] [--node-bundle ABSOLUTE_DIRECTORY | --require-node-bundle | --require-downloadable-node]')
 }
 
 const [mode, directoryArgument, bundleFlag, bundleArgument, ...extra] = process.argv.slice(2)
 if (!['pack', 'verify', 'check'].includes(mode)) usage()
 const requireNodeBundle = mode === 'verify' && bundleFlag === '--require-node-bundle' && !bundleArgument
-if (extra.length || (bundleFlag && !requireNodeBundle && (mode !== 'pack' || bundleFlag !== '--node-bundle' || !bundleArgument || !path.isAbsolute(bundleArgument))) || (!bundleFlag && bundleArgument)) usage()
+const requireDownloadableNode = mode === 'verify' && bundleFlag === '--require-downloadable-node' && !bundleArgument
+if (extra.length || (bundleFlag && !requireNodeBundle && !requireDownloadableNode && (mode !== 'pack' || bundleFlag !== '--node-bundle' || !bundleArgument || !path.isAbsolute(bundleArgument))) || (!bundleFlag && bundleArgument)) usage()
 const npmVersion = runNpm(['--version'])
 if (mode === 'verify') {
   assert.ok(
@@ -1213,5 +1235,5 @@ if (mode === 'check') {
   if (mode === 'pack') {
     const stage = bundleArgument ? await stageNodeBundle(path.join(REPOSITORY_ROOT, 'packages/cli'), bundleArgument) : null
     try { packRelease(artifactDirectory, stage?.directory) } finally { stage?.dispose() }
-  } else await verifyRelease(artifactDirectory, { requireNodeBundle })
+  } else await verifyRelease(artifactDirectory, { requireNodeBundle, requireDownloadableNode })
 }

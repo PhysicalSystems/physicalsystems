@@ -13,7 +13,7 @@ import sys
 import time
 
 
-STARTUP_TIMEOUT_SECONDS = 600  # Includes fresh private venv installation.
+STARTUP_TIMEOUT_SECONDS = 600  # Includes matching pinned downloads and fresh private venv installation.
 EXIT_TIMEOUT_SECONDS = 30
 MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024
 EXPECTED_HEADER = b"PHYSICAL SYSTEMS"
@@ -100,7 +100,7 @@ class AcceptanceTranscript:
             raise RuntimeError("Acceptance must not approve repeated installation prompts")
         if prompts and not self.consent_sent:
             if not self.expected or self.expected["kind"] != "managed":
-                raise RuntimeError("Software consent requires an expected bundled managed release")
+                raise RuntimeError("Software consent requires an expected pinned managed release")
             self.consent_sent = True
             return True
         return False

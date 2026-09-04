@@ -257,9 +257,10 @@ tinyedge-agent serve-physical-node --node-name ubuntu-workstation --port 8876
 ```
 
 The npm package never installs system Python or robot drivers. The product
-candidate includes the separately licensed, approved Node wheel set and its
-dependencies; the managed first-run path installs them into a private Python
-environment without fetching Python packages. This is one installation with
+candidate includes pinned manifests for the separately licensed, approved Node
+and dependencies; the managed first-run path downloads only the exact wheel set
+matching this computer and installs it into a private Python environment.
+First setup needs internet; verified later launches reuse the environment. This is one installation with
 modular internals, not a merger of the private Node source into this repository.
 `TINYEDGE_PHYSICAL_NODE_URL` can override the origin for development, but
 non-loopback or plaintext LAN connections are rejected. The environment
@@ -276,10 +277,12 @@ modules; managed cloud code and benchmark/model-build runners stay private.
 Python wheels contain readable source, irrespective of their licensing terms.
 
 When this npm release contains an approved Node manifest for the current
-platform/Python version, first launch offers to install its exact wheel set.
+platform/Python version, first launch offers to download and install its exact wheel set.
 The operator sees the release and wheel size. Setup creates an isolated,
-versioned user environment, verifies every wheel's SHA-256 and size, installs
-offline with hash checking, checks dependencies, native-library imports and the installed API version,
+versioned user environment, downloads from fixed manifest URLs without redirects,
+verifies every wheel's SHA-256 and size, then invokes pip with no index,
+no dependency resolution and hash checking on those verified local files. It
+checks dependencies, native-library imports and the installed API version,
 then records the successful selection. No `postinstall` or other npm lifecycle
 script downloads software. System Python must already include `venv`/`ensurepip`;
 missing prerequisites produce one actionable error rather than invoking sudo.
@@ -306,7 +309,9 @@ physicalsystems
 
 The new Node starts in discovery-only mode with no fabricated devices or
 execution configurations. A saved, verified environment is reused on subsequent
-launches. A 0.2.0 selection is checked before offering the bundled 0.2.1 update;
+launches without downloading the wheels again. This reuses a complete installed
+environment; it is not a cross-version dependency cache. A 0.2.0 selection is
+checked before offering the pinned 0.2.1 update;
 approval is required even if that newer environment is already installed.
 Declining or failing the update blocks managed startup and retains the previous
 installation and selection. Same-version custom selections are not replaced,

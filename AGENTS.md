@@ -25,8 +25,12 @@ This is the canonical public source workspace for the Physical Systems Harness.
 - Preserve the manual, main-only, protected-environment OIDC release path in
   `packages/cli/RELEASE.md`, including explicit founder authorization for a
   solo release and required x64/ARM64 checks under both pinned npm 11 and npm
-  12. Keep the complete reviewed dependency closure bundled in the prebuilt
-  `physicalsystems` tarball. CI may direct-publish only that tarball to `preview`;
+  12. Keep the complete reviewed JavaScript dependency closure bundled in the
+  prebuilt `physicalsystems` tarball. Per the approved TIN-411 revision, include
+  pinned Python manifests, not all-platform wheel binaries: managed setup
+  downloads only the matching verified backend after software consent. Preserve
+  explicit offline preparation as a separate, non-published review artifact.
+  CI may direct-publish only the size-checked product tarball to `preview`;
   never add a lifecycle publish script, long-lived npm write token, CI
   `latest` promotion, runtime republish, or undocumented release route.
 - Do not stage, publish, promote, or create an installer from an ordinary code

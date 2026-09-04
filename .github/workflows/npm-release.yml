@@ -61,7 +61,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Verify the public/private source boundary
         run: node scripts/check-export-boundary.mjs
-      - name: Require reviewed bundled Node manifests before npm release packaging
+      - name: Require all reviewed pinned Node manifests before npm release packaging
         run: node scripts/check-node-release-index.mjs
 
   build:
@@ -144,7 +144,7 @@ jobs:
           )
           '@ | node --input-type=module
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Prepare one complete product with exact backend wheels and a SHA-256 manifest
+      - name: Prepare one small product with pinned backend manifests and a SHA-256 manifest
         shell: pwsh
         run: |
           $productDirectory = Join-Path $env:RUNNER_TEMP 'physicalsystems-product'
@@ -255,7 +255,7 @@ jobs:
           if ($actualManifestSha256 -ne $env:EXPECTED_MANIFEST_SHA256) {
             throw "Downloaded release manifest digest $actualManifestSha256 does not match trusted build output $env:EXPECTED_MANIFEST_SHA256"
           }
-          npm --prefix packages/cli run release:verify -- $artifactDirectory --require-node-bundle
+          npm --prefix packages/cli run release:verify -- $artifactDirectory --require-downloadable-node
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Record architecture verification evidence
         shell: pwsh
@@ -369,7 +369,7 @@ jobs:
           trap 'rm -rf "$runtime_directory"' EXIT
           dbus-run-session -- bash -euo pipefail -c '
             eval "$(printf "%s" "tinyedge-ephemeral-keyring" | gnome-keyring-daemon --unlock --components=secrets)"
-            npm --prefix packages/cli run release:verify -- "$GITHUB_WORKSPACE/$RELEASE_ARTIFACT_DIRECTORY" --require-node-bundle
+            npm --prefix packages/cli run release:verify -- "$GITHUB_WORKSPACE/$RELEASE_ARTIFACT_DIRECTORY" --require-downloadable-node
           '
       - name: Record Linux verification evidence
         shell: bash
@@ -627,6 +627,7 @@ jobs:
           import { createHash } from 'node:crypto'
           import { readFileSync } from 'node:fs'
           import path from 'node:path'
+          import { assertProductArchiveSize } from './packages/cli/scripts/product-size-policy.js'
 
           const directory = path.resolve(process.env.RELEASE_ARTIFACT_DIRECTORY)
           const manifestBytes = readFileSync(path.join(directory, 'release-manifest.json'))
@@ -654,12 +655,15 @@ jobs:
             assert.equal(artifact.name, name)
             assert.equal(artifact.version, version)
             assert.equal(artifact.filename, filename)
+            const bytes = readFileSync(path.join(directory, filename))
+            if (key === 'physicalsystems') assertProductArchiveSize(bytes.length)
+            assert.equal(bytes.length, artifact.size, 'archive byte count must match the approved manifest')
             const digest = createHash('sha256')
-              .update(readFileSync(path.join(directory, filename)))
+              .update(bytes)
               .digest('hex')
             assert.equal(digest, artifact.sha256)
             const integrity = `sha512-${createHash('sha512')
-              .update(readFileSync(path.join(directory, filename)))
+              .update(bytes)
               .digest('base64')}`
             assert.equal(integrity, artifact.integrity)
           }

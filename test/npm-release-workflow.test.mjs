@@ -33,28 +33,89 @@ test('PR checks build once and verify the same candidate on every platform witho
   assert.match(cliWorkflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
 })
 
-test('both candidate routes require included backend bytes and native offline installation evidence', () => {
+test('both candidate routes require pinned platform downloads while the offline bundle remains explicit', () => {
   const prepare = readFileSync(path.join(root, 'scripts/prepare-product-candidate.mjs'), 'utf8')
-  const canary = readFileSync(path.join(root, 'scripts/check-bundled-node.mjs'), 'utf8')
+  const canary = readFileSync(path.join(root, 'scripts/check-downloaded-node.mjs'), 'utf8')
+  const offlineCanary = readFileSync(path.join(root, 'scripts/check-bundled-node.mjs'), 'utf8')
   const checker = readFileSync(path.join(root, 'packages/cli/scripts/check-release-packages.js'), 'utf8')
-  assert.match(prepare, /assembleNodeBundle/)
+  assert.match(prepare, /if \(values\.offline\)\s*\{\s*const bundle = await assembleNodeBundle/)
   assert.match(prepare, /'--node-bundle', bundle\.output/)
   for (const candidateWorkflow of [cliWorkflow, workflow]) {
     assert.equal((candidateWorkflow.match(/run release:prepare --/g) || []).length, 1)
+    assert.doesNotMatch(candidateWorkflow, /--offline|--require-node-bundle/)
     const verifiers = candidateWorkflow.match(/npm --prefix packages\/cli run release:verify --[^\n]+/g) || []
     assert.equal(verifiers.length, 2)
-    for (const verifier of verifiers) assert.match(verifier, /--require-node-bundle/)
+    for (const verifier of verifiers) assert.match(verifier, /--require-downloadable-node/)
     assert.match(candidateWorkflow, /actions\/setup-python@[a-f0-9]{40}/)
     assert.match(candidateWorkflow, /if: matrix\.architecture == 'x64'/)
   }
+  assert.match(checker, /if \(requireDownloadableNode\)\s*\{\s*const \{ index \} = await checkDownloadableNodePackage/)
+  assert.match(checker, /scripts\/check-downloaded-node\.mjs/)
   assert.match(checker, /if \(requireNodeBundle\)[\s\S]{0,150}installed\.physicalsystemsNodeBundle, 'node-bundle'/)
   assert.match(checker, /if \(process\.arch === 'x64'\)[\s\S]{0,450}scripts\/check-bundled-node\.mjs/)
   assert.match(canary, /import\(pathToFileURL\(path\.join\(packageDirectory, 'src\/physical\/node-installation\.js'\)\)\)/)
-  assert.match(canary, /fetchImpl\(\) \{ assert\.fail\('Bundled Node installation attempted a network download'\)/)
+  assert.match(canary, /Installer requested a URL outside the selected manifest/)
+  assert.match(canary, /Selected wheel download has the wrong SHA-256/)
+  assert.match(canary, /Selected wheel download has the wrong byte count/)
+  assert.match(canary, /Verified reuse must not download any wheel/)
+  assert.match(canary, /Verified reuse must not ask for installation consent/)
   assert.match(canary, /assert\.equal\(reused\.reused, true\)/)
+  assert.match(canary, /offlineBackend: false/)
   assert.match(canary, /hardwareAccess: false/)
+  assert.match(offlineCanary, /fetchImpl\(\) \{ assert\.fail\('Bundled Node installation attempted a network download'\)/)
   const releaseIndex = readFileSync(path.join(root, 'scripts/check-node-release-index.mjs'), 'utf8')
   assert.match(releaseIndex, /checkBundledNodeReleaseIndex\(sourceDirectory, \{ expectedRelease: '0\.2\.1' \}\)/)
+})
+
+test('the real pre-publish checksum gate refuses oversized archives and falsified sizes', () => {
+  const step = workflow.slice(workflow.indexOf('      - name: Recheck the exact manifest and every tarball checksum'),
+    workflow.indexOf('      - name: Refuse unresolved package licenses before publishing'))
+  const match = step.match(/node --input-type=module <<'NODE'\r?\n([\s\S]*?)\r?\n          NODE/)
+  assert.ok(match, 'Execute the exact checksum/size gate from the protected publisher')
+  const fixture = realpathSync.native(mkdtempSync(path.join(tmpdir(), 'ps-publish-size-')))
+  const policy = 'packages/cli/scripts/product-size-policy.js'
+  try {
+    writeFixtureFile(fixture, 'package.json', '{"type":"module"}\n')
+    writeFixtureFile(fixture, policy, readFileSync(path.join(root, policy)))
+    mkdirSync(path.join(fixture, 'candidate'))
+    const commit = 'a'.repeat(40)
+    const artifacts = [
+      { key: 'pi-runtime', name: '@tinyedge/pi-runtime', version: '0.84.2-tinyedge.1', filename: 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz' },
+      { key: 'physicalsystems', name: 'physicalsystems', version: '0.2.1', filename: 'physicalsystems-0.2.1.tgz' },
+    ]
+    const setPayload = (index, bytes) => {
+      const artifact = artifacts[index]
+      writeFixtureFile(fixture, `candidate/${artifact.filename}`, bytes)
+      Object.assign(artifact, { size: bytes.length,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}` })
+    }
+    const check = () => {
+      const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, version: '0.2.1', commit, artifacts }))
+      writeFixtureFile(fixture, 'candidate/release-manifest.json', bytes)
+      return spawnSync(process.execPath, ['--input-type=module'], { cwd: fixture,
+        input: match[1].replace(/^          /gm, ''), encoding: 'utf8', timeout: 15_000,
+        env: { ...process.env, GITHUB_SHA: commit, RELEASE_VERSION: '0.2.1',
+          PI_RUNTIME_VERSION: '0.84.2-tinyedge.1', RELEASE_ARTIFACT_DIRECTORY: 'candidate',
+          EXPECTED_MANIFEST_SHA256: createHash('sha256').update(bytes).digest('hex') } })
+    }
+    setPayload(0, Buffer.from('reviewed runtime fixture'))
+    setPayload(1, Buffer.from('small reviewed product fixture'))
+    const valid = check()
+    assert.equal(valid.status, 0, valid.stderr || valid.stdout)
+    artifacts[1].size += 1
+    const falsified = check()
+    assert.notEqual(falsified.status, 0)
+    assert.match(falsified.stderr, /archive byte count must match the approved manifest/)
+    setPayload(1, Buffer.alloc(50 * 1024 * 1024 + 1))
+    const oversized = check()
+    assert.notEqual(oversized.status, 0)
+    assert.match(oversized.stderr, /npm product archive must be at most/)
+  } finally {
+    assert.equal(path.dirname(fixture), realpathSync.native(tmpdir()))
+    assert.ok(path.basename(fixture).startsWith('ps-publish-size-'))
+    rmSync(fixture, { recursive: true, force: true })
+  }
 })
 
 test('CI dependency hydration checks source SHA and artifact hash before extraction and refuses overwrite', () => {
@@ -127,7 +188,7 @@ test('CI dependency hydration refuses traversal and links before extracting any 
   }
 })
 
-test('protected npm publication requires bundled Node manifests before build, not source candidates', () => {
+test('protected npm publication requires all pinned Node manifests before build, not source candidates', () => {
   const requireMain = workflow.slice(workflow.indexOf('  require-main:'), workflow.indexOf('\n  build:'))
   assert.match(requireMain, /run: node scripts\/check-node-release-index\.mjs/)
   assert.match(workflow, /\n  build:[\s\S]{0,120}needs: require-main/)
@@ -544,6 +605,7 @@ test('direct preview publishing fails closed on environment, provenance, and lic
     sourceCheckout,
   )
   const licenseGuard = workflow.indexOf('Refuse unresolved package licenses before publishing', publishJob)
+  const archiveSizeGuard = workflow.indexOf("if (key === 'physicalsystems') assertProductArchiveSize(bytes.length)", publishJob)
   const bootstrapGuard = workflow.indexOf(
     'Require the published runtime and an unpublished Physical Systems candidate',
     publishJob,
@@ -555,7 +617,8 @@ test('direct preview publishing fails closed on environment, provenance, and lic
   assert.ok(publicRepositoryGuard > policyGuard)
   assert.ok(sourceCheckout > publicRepositoryGuard)
   assert.ok(environmentGuard > sourceCheckout)
-  assert.ok(licenseGuard > environmentGuard)
+  assert.ok(archiveSizeGuard > environmentGuard)
+  assert.ok(licenseGuard > archiveSizeGuard)
   assert.ok(bootstrapGuard > licenseGuard)
   assert.ok(firstPublish > bootstrapGuard)
   assert.match(workflow, /"\$NPM_RELEASE_POLICY_VERSION" != "v3-physicalsystems-preview"/)
@@ -900,7 +963,7 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.doesNotMatch(packageChecker, /'install',\s*'--ignore-scripts'/)
   assert.doesNotMatch(workflow, /npm ci --prefix packages\/cli/)
   const prepare = readFileSync(path.join(root, 'scripts/prepare-product-candidate.mjs'), 'utf8')
-  assert.match(workflow, /Prepare one complete product with exact backend wheels/)
+  assert.match(workflow, /Prepare one small product with pinned backend manifests/)
   assert.ok(
     prepare.indexOf("runNpm(['run', 'bootstrap:pi-runtime'")
       < prepare.indexOf("runNpm(['run', 'release:pack'"),
@@ -1216,7 +1279,7 @@ test('pull-request CI covers release-workflow changes and its regression test', 
   assert.match(cliWorkflow, /TINYEDGE_LINUX_SECRET_SERVICE_CANARY=1/)
   assert.match(cliWorkflow, /gnome-keyring-daemon --unlock --components=secrets/)
   assert.match(cliWorkflow, /libsecret-tools xdg-utils/)
-  assert.match(cliWorkflow, /Prepare the complete npm product once/)
+  assert.match(cliWorkflow, /Prepare the small npm product with pinned backend manifests once/)
   assert.match(cliWorkflow, /physicalsystems-0\.2\.1-ubuntu-canary-\$\{\{ github\.sha \}\}/)
   assert.deepEqual(cliPackage.os, ['win32', 'linux'])
   assert.match(cliWorkflow, /node --test test\/npm-release-workflow\.test\.mjs/)
