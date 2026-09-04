@@ -15,6 +15,9 @@ this repository.
   default.
 - Tests, packaging checks, security expectations and reproducible release CI
   needed to audit what runs on an operator's computer.
+- `release/product.json` and its local preparation/check coordinator: reviewed
+  public component metadata only, not private source, build assets or another
+  publishing authority. New backend exports retain their separate review gate.
 
 ## Systems outside this repository
 

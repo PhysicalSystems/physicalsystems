@@ -43,6 +43,13 @@ component/repository boundaries and the separate offline preparation option.
 
 The workflow:
 
+First checks `release/product.json` against the package locks, reviewed backend
+identities and its own explicit release/toolchain constants using
+`node scripts/release.mjs check`. A mismatch fails before the expensive build.
+Maintainers can run the same check locally with `npm run release -- check`.
+The local plan is not registry or installation evidence and does not replace
+any protected publishing check below.
+
 Before building, checks the bundled managed-Node release index and raw manifest
 hashes. An empty index, placeholder artifact URLs, or missing any of the six
 approved Windows/Linux x64 Python 3.10–3.12 manifests blocks publication. This

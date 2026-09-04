@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { execFileSync, spawn } from 'node:child_process'
 import { assembleNodeBundle } from './assemble-node-bundle.mjs'
 import { checkBundledNodeReleaseIndex } from './check-node-release-index.mjs'
+import { createReleasePlan, readProductRelease } from './release-plan.mjs'
+import { createHash } from 'node:crypto'
 
 // One local preparation command, not an alternative publisher. The existing
 // protected workflow remains the only authority to publish product bytes.
@@ -24,12 +26,14 @@ export function parsePreparationArguments(args) {
 }
 
 export async function prepareProductCandidate(values) {
-  if (!values.output || !process.env.npm_execpath) throw new Error('Run release:prepare through pinned npm 11.19.0 with --output')
-  if (execFileSync(process.execPath, [process.env.npm_execpath, '--version'], { encoding: 'utf8' }).trim() !== '11.19.0') throw new Error('Candidate preparation requires pinned npm 11.19.0')
   const sourceRoot = fileURLToPath(new URL('../', import.meta.url))
+  const release = await readProductRelease(sourceRoot)
+  if (!values.output || !process.env.npm_execpath) throw new Error(`Run release:prepare through pinned npm ${release.toolchain.npm} with --output`)
+  if (execFileSync(process.execPath, [process.env.npm_execpath, '--version'], { encoding: 'utf8' }).trim() !== release.toolchain.npm) throw new Error(`Candidate preparation requires pinned npm ${release.toolchain.npm}`)
+  const plan = values.offline ? null : await createReleasePlan(sourceRoot)
   // The default product carries the reviewed selection metadata, not wheels
   // for every supported machine. No backend downloads happen while packing it.
-  await checkBundledNodeReleaseIndex(values.directory, values.offline ? {} : { expectedRelease: '0.2.1' })
+  await checkBundledNodeReleaseIndex(values.directory, values.offline ? {} : { expectedRelease: release.components.node.version })
   const parent = await fs.realpath(path.dirname(values.output))
   const relative = path.relative(sourceRoot, parent)
   if (!path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..') throw new Error('Product artifacts must stay outside the source repository')
@@ -50,6 +54,18 @@ export async function prepareProductCandidate(values) {
     console.log(`Offline review candidate ready at ${path.join(output, 'candidate')}; backend wheels ${bundle.bytes} bytes. Not eligible for the small npm publication route.`)
   } else {
     await runNpm(['run', 'release:pack', '--', path.join(output, 'candidate')])
+    const manifestBytes = await fs.readFile(path.join(output, 'candidate', 'release-manifest.json'))
+    const manifest = JSON.parse(manifestBytes)
+    if (manifest.version !== plan.product.version) throw new Error('Prepared candidate version differs from the release plan')
+    if (JSON.stringify(await createReleasePlan(sourceRoot)) !== JSON.stringify(plan)) throw new Error('Release inputs changed during preparation; discard this unqualified candidate')
+    await fs.writeFile(path.join(output, 'preparation-receipt.json'), `${JSON.stringify({
+      contractVersion: 'physicalsystems-preparation-receipt-v1',
+      plan,
+      candidateManifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
+      candidateManifest: manifest,
+      publicationAuthorized: false,
+      installationQualified: false,
+    }, null, 2)}\n`, { flag: 'wx' })
     console.log(`Product candidate ready at ${path.join(output, 'candidate')}; pinned backend metadata included, matching wheels downloaded on first setup. Not published or platform-qualified.`)
   }
 }

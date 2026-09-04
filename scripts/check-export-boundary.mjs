@@ -47,6 +47,7 @@ const allowedTopLevel = new Set([
   'TRADEMARKS.md',
   'package.json',
   'packages',
+  'release',
   'scripts',
   'test',
 ])
@@ -78,6 +79,9 @@ function isHashVerifiedUpstreamRuntimePayload(relative) {
 for (const entry of readdirSync(root, { withFileTypes: true })) {
   assert.ok(allowedTopLevel.has(entry.name), 'unexpected top-level export entry: ' + entry.name)
 }
+
+assert.deepEqual(readdirSync(path.join(root, 'release')).sort(), ['product.json'],
+  'release configuration must contain only the reviewed product descriptor, never backend source or artifacts')
 
 assert.deepEqual(
   readdirSync(path.join(root, 'packages'), { withFileTypes: true })

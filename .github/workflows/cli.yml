@@ -24,6 +24,8 @@ jobs:
           node-version: 22.19.0
           package-manager-cache: false
       - run: node scripts/check-export-boundary.mjs
+      - name: Check coordinated product pins before dependency preparation
+        run: node scripts/release.mjs check
       - name: Pin the reviewed npm release runtime
         shell: pwsh
         run: |
@@ -137,7 +139,7 @@ jobs:
       - run: npm --prefix packages/cli run check:pi-sdk
       - run: npm --prefix packages/cli run check
       - run: npm --prefix packages/cli test
-      - run: node --test test/npm-release-workflow.test.mjs
+      - run: node --test test/npm-release-workflow.test.mjs test/release-plan.test.mjs test/release-coordinator.test.mjs
       - name: Check scoped Harness consent and readiness transcript regressions
         if: matrix.architecture == 'x64'
         run: python -B -m unittest discover -s packages/cli/test -p test_packaged_harness_transcript.py -v
