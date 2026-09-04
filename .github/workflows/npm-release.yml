@@ -63,6 +63,8 @@ jobs:
         run: node scripts/check-export-boundary.mjs
       - name: Require all reviewed pinned Node manifests before npm release packaging
         run: node scripts/check-node-release-index.mjs
+      - name: Check coordinated product pins before release packaging
+        run: node scripts/release.mjs check
 
   build:
     name: Pack the Windows x64 candidate once

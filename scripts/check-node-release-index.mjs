@@ -45,7 +45,7 @@ function rejectPlaceholderHost(url) {
   }
 }
 
-export async function checkBundledNodeReleaseIndex(directory = sourceDirectory, { expectedRelease } = {}) {
+export async function checkBundledNodeReleaseIndex(directory = sourceDirectory, { expectedRelease, expectedSelectors = productSelectors } = {}) {
   directory = path.resolve(directory)
   if (normalized(await fs.realpath(directory)) !== normalized(directory)) throw new Error('Bundled Node metadata directory must not use links')
   const index = await boundedIndex(path.join(directory, 'node-releases.json'))
@@ -83,8 +83,8 @@ export async function checkBundledNodeReleaseIndex(directory = sourceDirectory, 
     }
     for (const artifact of manifest.artifacts) rejectPlaceholderHost(artifact.url)
   }
-  if (expectedRelease === '0.2.1' && JSON.stringify([...selectors].sort()) !== JSON.stringify(productSelectors)) {
-    throw new Error('Node 0.2.1 publication requires exactly all six approved Windows/Linux x64 Python 3.10–3.12 selectors')
+  if (expectedRelease && JSON.stringify([...selectors].sort()) !== JSON.stringify([...expectedSelectors].sort())) {
+    throw new Error(`Node ${expectedRelease} publication requires exactly all six approved Windows/Linux x64 Python 3.10–3.12 selectors`)
   }
   return { entries: index.releases.length, selectors: [...selectors].sort() }
 }
@@ -92,7 +92,19 @@ export async function checkBundledNodeReleaseIndex(directory = sourceDirectory, 
 if (process.argv[1] && normalized(process.argv[1]) === normalized(fileURLToPath(import.meta.url))) {
   try {
     if (process.argv.length !== 2) throw new Error('The publication gate accepts no index override')
-    const result = await checkBundledNodeReleaseIndex(sourceDirectory, { expectedRelease: '0.2.1' })
+    // Keep this entry point independent of release-plan.mjs: that module uses
+    // this checker, so importing it during top-level CLI evaluation deadlocks.
+    // The following coordinated check performs full descriptor validation.
+    const release = await boundedIndex(fileURLToPath(new URL('../release/product.json', import.meta.url)))
+    if (release.contractVersion !== 'physicalsystems-product-release-v1'
+      || typeof release.components?.node?.version !== 'string'
+      || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(release.components.node.version)
+      || JSON.stringify(release.selectors) !== JSON.stringify(productSelectors)) {
+      throw new Error('Product descriptor must identify an exact Node version and the approved selectors')
+    }
+    const result = await checkBundledNodeReleaseIndex(sourceDirectory, {
+      expectedRelease: release.components.node.version, expectedSelectors: release.selectors,
+    })
     console.log(`Bundled Node release metadata verified: ${result.entries} entries; no artifacts downloaded`)
   } catch (error) {
     console.error(`Node publication gate failed: ${error.message}`)

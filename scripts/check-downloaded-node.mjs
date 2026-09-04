@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { checkBundledNodeReleaseIndex } from './check-node-release-index.mjs'
+import { readProductRelease } from './release-plan.mjs'
 
 async function assertNoEmbeddedWheels(directory) {
   for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
@@ -25,7 +26,11 @@ export async function checkDownloadableNodePackage(packageDirectory) {
   assert.equal(Object.hasOwn(metadata, 'physicalsystemsNodeBundle'), false, 'Downloadable mode must not declare an embedded backend bundle')
   await assert.rejects(fs.lstat(path.join(packageDirectory, 'node-bundle')), { code: 'ENOENT' }, 'Downloadable mode must not contain an embedded backend bundle')
   await assertNoEmbeddedWheels(packageDirectory)
-  const index = await checkBundledNodeReleaseIndex(path.join(packageDirectory, 'src/physical'), { expectedRelease: '0.2.1' })
+  const product = await readProductRelease()
+  assert.equal(metadata.version, product.product.version)
+  const index = await checkBundledNodeReleaseIndex(path.join(packageDirectory, 'src/physical'), {
+    expectedRelease: product.components.node.version, expectedSelectors: product.selectors,
+  })
   return { metadata, index }
 }
 
@@ -69,8 +74,9 @@ export async function checkDownloadedNode(packageDirectory, { python, onProgress
   const release = await implementation.bundledNodeRelease({ packageDirectory, python })
   assert.ok(release, 'Installed product must select an approved downloadable backend')
   assert.equal(release.wheelhouse, undefined, 'Downloadable canary must not use an offline wheelhouse')
-  assert.equal(release.manifest.release, '0.2.1')
-  assert.equal(release.manifest.runtimeVersion, '0.2.0')
+  const product = await readProductRelease()
+  assert.equal(release.manifest.release, product.components.node.version)
+  assert.equal(release.manifest.runtimeVersion, product.components.runtime.version)
   assert.equal(release.manifest.platform, `${process.platform}-${process.arch}`)
   const recorder = createDownloadRecorder(release.manifest.artifacts)
   const expectedBytes = release.manifest.artifacts.reduce((sum, item) => sum + item.bytes, 0)
@@ -79,7 +85,7 @@ export async function checkDownloadedNode(packageDirectory, { python, onProgress
   try {
     const options = { ...release, configDir, python, fetchImpl: recorder.fetchImpl, onProgress,
       authorize: async (details) => {
-        assert.deepEqual(details, { release: '0.2.1', bytes: expectedBytes })
+        assert.deepEqual(details, { release: product.components.node.version, bytes: expectedBytes })
         assert.equal(++consents, 1, 'First installation must ask for software consent exactly once')
         return true
       } }

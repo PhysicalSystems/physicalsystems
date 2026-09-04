@@ -1,0 +1,43 @@
+{
+  "contractVersion": "physicalsystems-product-release-v1",
+  "product": {
+    "name": "physicalsystems",
+    "version": "0.2.1"
+  },
+  "components": {
+    "node": {
+      "distribution": "physicalsystems-node",
+      "version": "0.2.1",
+      "wheelSha256": "6d0d41e5bb371cf8d135edf3a85019653f2da58e173d637dedebe6a9171c8b5f"
+    },
+    "runtime": {
+      "distribution": "tinyedge-runtime",
+      "version": "0.2.0",
+      "wheelSha256": "4d25fcfa055bf54faf69591e4a14bec89dc7f8d086b2bed6bf19912041403937"
+    },
+    "piRuntime": {
+      "name": "@tinyedge/pi-runtime",
+      "version": "0.84.2-tinyedge.1"
+    }
+  },
+  "backendIndexSha256": "1e175611421a2fb9c977af6442c5486e1e03732196a6b2d0489569e8648a6678",
+  "selectors": [
+    "linux-x64:3.10",
+    "linux-x64:3.11",
+    "linux-x64:3.12",
+    "win32-x64:3.10",
+    "win32-x64:3.11",
+    "win32-x64:3.12"
+  ],
+  "toolchain": {
+    "node": "22.19.0",
+    "npm": "11.19.0",
+    "consumerNode": "24.15.0",
+    "consumerNpm": "12.0.2"
+  },
+  "previousTags": {
+    "bootstrap": "0.0.0",
+    "latest": "0.0.0",
+    "preview": "0.2.0"
+  }
+}

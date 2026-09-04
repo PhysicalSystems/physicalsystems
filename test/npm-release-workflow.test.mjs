@@ -78,7 +78,11 @@ test('both routes prepare pinned metadata but only protected releases require na
   assert.match(canary, /hardwareAccess: false/)
   assert.match(offlineCanary, /fetchImpl\(\) \{ assert\.fail\('Bundled Node installation attempted a network download'\)/)
   const releaseIndex = readFileSync(path.join(root, 'scripts/check-node-release-index.mjs'), 'utf8')
-  assert.match(releaseIndex, /checkBundledNodeReleaseIndex\(sourceDirectory, \{ expectedRelease: '0\.2\.1' \}\)/)
+  assert.match(releaseIndex, /expectedRelease: release\.components\.node\.version/)
+  assert.match(releaseIndex, /expectedSelectors: release\.selectors/)
+  for (const candidateWorkflow of [cliWorkflow, workflow]) {
+    assert.match(candidateWorkflow, /run: node scripts\/release\.mjs check/)
+  }
 })
 
 test('the real pre-publish checksum gate refuses oversized archives and falsified sizes', () => {
@@ -518,6 +522,7 @@ test('the export boundary accepts the guarded source-license transition without 
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.pi-runtime.txt', runtimeNoticeTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/THIRD_PARTY_NOTICES.md', thirdPartyNoticesTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/TRADEMARKS.md', trademarksTemplate)
+    writeFixtureFile(fixtureRoot, 'release/product.json', readFileSync(path.join(root, 'release/product.json')))
     for (const governanceFile of [
       '.github/CODEOWNERS',
       'SECURITY.md',

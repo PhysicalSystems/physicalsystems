@@ -121,6 +121,12 @@ clean-machine package and physical-device evidence separately.
 
 ## CI and releases
 
+Begin release work with `npm run release -- plan` or `npm run release -- check`.
+The local coordinator checks `release/product.json` against the package locks,
+backend hashes and protected workflow before preparing dependencies. To pack,
+use `npm run release -- prepare --output ABSOLUTE_NEW_ARTIFACT_DIRECTORY` with
+the pinned npm CLI. No subcommand publishes or changes registry permissions.
+
 PR and main-branch CI share one source-review candidate across four native
 platform jobs. They check source, licenses, dependencies, platform credentials,
 SDK compatibility and workflow regressions without repeating the full fresh
