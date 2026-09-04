@@ -25,19 +25,21 @@ OIDC, and is protected by the `npm-release` environment.
 The workflow:
 
 Before building, checks the bundled managed-Node release index and raw manifest
-hashes. An empty index, placeholder artifact URLs, or missing Ubuntu x64 Python
-3.10/3.12 manifests blocks publication. This metadata gate does not replace
-clean installation tests of the actual included bytes. Source tests and
-review-candidate packing remain available before those artifacts are published.
+hashes. An empty index, placeholder artifact URLs, or missing any of the six
+approved Windows/Linux x64 Python 3.10–3.12 manifests blocks publication. This
+metadata gate does not replace clean installation tests of the downloaded bytes.
+The same hashes are rechecked from the actual installed npm artifact.
 
 1. Uses `npm run release:prepare` to build `physicalsystems@0.2.1` once on
-   Windows x64 with the approved backend wheel closure, separate backend notice
-   and SBOM, and exact tarball checksums. No wheel binaries enter source control.
+   Windows x64 with the reviewed JS dependency closure, exact backend manifests
+   and tarball checksums. Wheel binaries are not included. The normal product
+   archive must be at most 50 MiB (a project policy, not a claimed registry limit).
 2. Verifies those same bytes on Windows x64, native Windows ARM64, Ubuntu
    22.04, and Ubuntu 24.04 with the pinned npm 11 release client and npm 12
    consumer behavior.
-3. Requires the Python bundle (a plain source package cannot pass), tests native
-   x64 backend installation with network downloads prohibited and verified reuse,
+3. Requires downloadable Node metadata (an empty-index or offline-bundle package
+   cannot pass), tests native x64 backend installation using real exact-URL
+   downloads and verified reuse with no additional downloads,
    and exercises normal local, global, and isolated npm-exec installation,
    command shims, the bare Harness, the embedded client and Pi extension, and
    Ubuntu Secret Service integration.
@@ -77,9 +79,9 @@ executor, simulation and Python override settings from the test child. A private
 `XDG_CONFIG_HOME` also isolates the Node's default discovery registry; the test
 does not read the operator's existing workcell configuration.
 
-For a bundled Node release, this isolated test answers the exact software-only
+For an approved Node release, this isolated test answers the exact software-only
 first-run consent prompt once, permits up to ten minutes for installation, and
-requires the selected manifest digest to match the bundled release. It then
+requires the selected manifest digest to match the packaged metadata. It then
 checks authenticated discovery status (`mode: null`, no configurations or runs),
 separate camera credentials and idle camera status, renders the Harness, sends
 Ctrl+D and confirms that the owned Node listener closed. Pi currently calls
@@ -96,6 +98,37 @@ logic without downloading wheels or opening hardware and are not release-byte
 evidence. The consolidated release requires the corrected Node 0.2.1 descriptor
 set with Runtime 0.2.0; fresh packaged managed-Node acceptance must pass before
 this npm release can be published.
+
+## Candidate preparation
+
+Use pinned npm 11.19.0. Keep generated artifacts outside the source repository:
+
+```bash
+npm run release:prepare -- --output /absolute/new/product-output
+npm --prefix packages/cli run release:verify -- /absolute/new/product-output/candidate --require-downloadable-node
+```
+
+The default preparation command never downloads Python wheels. It packs the
+reviewed JavaScript closure and pinned backend manifests. The installed product
+selects one OS/architecture/Python combination and downloads those exact artifacts
+on first setup, after consent. Successful installation is reused on later launches;
+an update may download a new complete selected wheel set. Python with
+`venv`/`ensurepip` remains a prerequisite. Network failures or corrupted downloads
+do not activate a partial installation or fall back to unreviewed packages.
+
+An explicitly prepared offline artifact remains available for review or an
+offline deployment, separately from the small npm publishing route:
+
+```bash
+npm run release:prepare -- --output /absolute/new/offline-output --offline --wheelhouse /absolute/reviewed/wheels
+npm --prefix packages/cli run release:verify -- /absolute/new/offline-output/candidate --require-node-bundle
+```
+
+Omit `--wheelhouse` to let the offline-artifact builder fetch the complete pinned
+wheel closure. `--metadata` and `--wheelhouse` are rejected unless `--offline` is
+explicit. Offline candidates include backend notices/SBOM and are not eligible
+for the normal npm publisher. None of these local commands publishes anything,
+moves source between repositories or enables physical execution.
 
 ## One-time namespace bootstrap
 

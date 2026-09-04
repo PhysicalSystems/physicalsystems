@@ -34,12 +34,21 @@ reproduce private orchestration or optimization implementation. Public
 extension points may host separately licensed providers without moving their
 implementation across this boundary.
 
-The TIN-407 review path may assemble the previously reviewed Node/Runtime
+The TIN-411 product carries exact reviewed Node/Runtime download manifests.
+Managed setup selects only the matching OS/architecture/Python wheel set,
+verifies its hashes and sizes, and installs it into a private environment after
+software consent. This changes distribution, not source ownership or hardware
+authority. Large model weights and all-platform wheel bundles stay outside the
+default npm archive. A 50 MiB product archive policy is checked before publishing;
+it is a project limit, not a claimed npm registry limit.
+
+The explicit `release:prepare -- --offline` review path may assemble the previously reviewed Node/Runtime
 wheel closure into an npm candidate outside this source tree. It may copy only
 the exact manifest-identified distribution files, including their licenses;
 it must not copy private source directories or relabel Node as Apache-2.0.
-The product candidate carries a backend notice and a hash-addressed backend
-SBOM. This does not by itself authorize publication or change the protected workflow,
+That offline candidate carries a backend notice and a hash-addressed backend
+SBOM; it is not eligible for the small npm publication route. This does not by
+itself authorize publication or change the protected workflow,
 or remove the private-source export review for new backend distributions.
 
 Publishing source does not publish an npm package and does not relicense

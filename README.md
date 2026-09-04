@@ -63,12 +63,18 @@ npx --yes physicalsystems@preview
 ```
 
 `physicalsystems@0.2.0` was the first application release. The `0.2.1` candidate
-adds a fail-fast prerequisite check for older Node.js versions and includes the
-reviewed Python backend in the npm artifact. First launch asks for software
-setup consent and installs it in an isolated user environment, without a Git
+adds a fail-fast prerequisite check for older Node.js versions and includes
+pinned, reviewed backend manifests in a small npm artifact. First launch asks
+for software setup consent, downloads only the wheel set matching the computer's
+OS, architecture and Python version, checks its exact hashes and sizes, and
+installs it in an isolated user environment, without a Git
 clone, manual pip command or second terminal. Supported system Python with
 `venv`/`ensurepip` is still required; arbitrary hardware drivers are not included.
 The existing managed 0.2.0 backend requires consent to update to 0.2.1.
+First setup needs internet access; later launches reuse the verified environment
+without downloading those wheels again. This is not an arbitrary dependency
+search or an automatic device-driver installer. Explicit offline preparation is
+documented in [the release guide](packages/cli/RELEASE.md#candidate-preparation).
 Its protected release
 publishes to `preview` and then independently verifies the public registry;
 require the `npm view` check above to succeed before launch. Do not use the old

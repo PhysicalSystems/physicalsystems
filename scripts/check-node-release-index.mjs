@@ -13,6 +13,8 @@ import { readNodeInstallManifest } from '../packages/cli/src/physical/node-insta
 const sourceDirectory = fileURLToPath(new URL('../packages/cli/src/physical/', import.meta.url))
 const maximumIndexBytes = 128 * 1024
 const requiredSelectors = ['linux-x64:3.10', 'linux-x64:3.12']
+const productSelectors = ['linux-x64:3.10', 'linux-x64:3.11', 'linux-x64:3.12',
+  'win32-x64:3.10', 'win32-x64:3.11', 'win32-x64:3.12']
 const exact = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
   && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort())
 const normalized = (value) => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value)
@@ -80,6 +82,9 @@ export async function checkBundledNodeReleaseIndex(directory = sourceDirectory, 
       throw new Error(`npm publication requires Node ${expectedRelease} for every bundled selector`)
     }
     for (const artifact of manifest.artifacts) rejectPlaceholderHost(artifact.url)
+  }
+  if (expectedRelease === '0.2.1' && JSON.stringify([...selectors].sort()) !== JSON.stringify(productSelectors)) {
+    throw new Error('Node 0.2.1 publication requires exactly all six approved Windows/Linux x64 Python 3.10–3.12 selectors')
   }
   return { entries: index.releases.length, selectors: [...selectors].sort() }
 }

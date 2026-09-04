@@ -103,7 +103,7 @@ process.stdout.write(JSON.stringify(question));
     def test_source_candidate_cannot_approve_installation(self):
         transcript = acceptance.AcceptanceTranscript()
         transcript.feed(marker("EXPECTED", "source-only"))
-        with self.assertRaisesRegex(RuntimeError, "expected bundled"):
+        with self.assertRaisesRegex(RuntimeError, "expected pinned"):
             transcript.feed(PROMPT)
 
     def test_mismatched_manifest_is_rejected(self):

@@ -115,6 +115,63 @@ test('offline install uses exact hashed wheels, isolated Python, successful prob
   assert.equal(item.commands.filter(({ args }) => args.includes('venv')).length, 1)
 })
 
+test('downloaded setup fetches only selected fixed URLs after consent and reuse fetches nothing', async (t) => {
+  const item = await fakeInstaller(t, { release: '0.2.1' }), requested = []
+  let approved = false
+  const options = { ...item.options, wheelhouse: undefined,
+    authorize: async () => { approved = true; return true },
+    fetchImpl: async (url, request) => {
+      assert.equal(approved, true)
+      assert.equal(request.redirect, 'error')
+      assert.equal(request.credentials, 'omit')
+      assert.ok(request.signal instanceof AbortSignal)
+      assert.deepEqual(request.headers, { Accept: 'application/octet-stream' })
+      const artifact = item.options.manifest.artifacts.find((entry) => entry.url === url)
+      assert.ok(artifact, 'cannot search a registry or fetch another platform')
+      requested.push(url)
+      return new Response(artifact.name, { headers: { 'content-length': String(artifact.bytes) } })
+    },
+  }
+  const first = await installManagedNode(options)
+  assert.equal(first.reused, false)
+  assert.deepEqual(requested, options.manifest.artifacts.map(({ url }) => url))
+  const install = item.commands.find(({ args }) => args.includes('install'))
+  assert.ok(install.args.includes('--no-index') && install.args.includes('--no-deps') && install.args.includes('--require-hashes'))
+  const reuse = await installManagedNode({ ...options,
+    authorize() { assert.fail('verified reuse cannot ask for installation again') },
+    fetchImpl() { assert.fail('verified reuse cannot download') } })
+  assert.equal(reuse.reused, true)
+  assert.equal(reuse.executable, first.executable)
+})
+
+test('network, redirect, length, integrity and interrupted-stream failures cannot activate an update', async (t) => {
+  for (const failure of ['network', 'redirect', 'length', 'truncated', 'corrupt', 'oversized', 'stream']) {
+    const item = await fakeInstaller(t)
+    const previous = await installManagedNode(item.options)
+    await selectManagedNode(item.options.configDir, previous.digest)
+    const next = fixture('0.2.1')
+    const fetchImpl = async (url, request) => {
+      assert.equal(request.redirect, 'error')
+      const artifact = next.manifest.artifacts.find((entry) => entry.url === url)
+      assert.ok(artifact)
+      if (failure === 'network') throw new Error('synthetic offline connection')
+      let bytes = Buffer.from(artifact.name)
+      if (failure === 'corrupt') bytes.fill(120)
+      if (failure === 'truncated') bytes = bytes.subarray(1)
+      if (failure === 'oversized') bytes = Buffer.concat([bytes, Buffer.from('extra')])
+      return { ok: true, url: failure === 'redirect' ? 'https://other.example.test/wheel.whl' : url,
+        headers: new Headers(failure === 'length' ? { 'content-length': '1' } : {}),
+        body: (async function* () { yield bytes; if (failure === 'stream') throw new Error('synthetic interrupted stream') })(),
+      }
+    }
+    await assert.rejects(installManagedNode({ ...item.options, ...next, wheelhouse: undefined, fetchImpl }))
+    assert.equal((await selectedNodeRelease(item.options.configDir)).digest, previous.digest, failure)
+    await assert.rejects(fs.stat(path.join(item.options.configDir, 'node-installations', `${next.digest}.json`)), { code: 'ENOENT' })
+    assert.equal(item.commands.filter(({ args }) => args.includes('venv')).length, 1, 'failed download must not invoke pip or create another environment')
+    assert.equal((await fs.readdir(path.join(item.options.configDir, 'node-installations'))).includes('setup.lock'), false)
+  }
+})
+
 test('wheel tamper, failed installation, bad probe, missing native library or launcher never activate a receipt', async (t) => {
   for (const failure of ['tamper', 'failInstall', 'wrongProbe', 'failNative', 'missingLauncher']) {
     const item = await fakeInstaller(t, { [failure]: true })

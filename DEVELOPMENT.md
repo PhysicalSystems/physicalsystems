@@ -82,10 +82,13 @@ Port `8876` is a loopback JSON API, not another user interface. Non-loopback
 plaintext node origins are rejected. This is the manual/external-node path.
 
 The source candidate also implements managed first-run installation and owned
-Node supervision. Its downloadable release index intentionally remains empty
-until separately distributed, exact Node/Runtime wheels pass release review.
-Maintainers can exercise this path using an explicitly reviewed local manifest,
-SHA-256 and wheelhouse via `setup-node`; see the
+Node supervision. Its release index pins reviewed Node 0.2.1 / Runtime 0.2.0
+wheels for Windows/Linux x64 with CPython 3.10–3.12. First launch asks for software
+consent, downloads only the matching verified wheel set, and installs into a
+private environment. Later launches reuse it without those downloads. No manual
+pip installation or second terminal is needed on this managed path. Maintainers
+can also use an explicitly reviewed local manifest, SHA-256 and wheelhouse via
+`setup-node` for offline setup; see the
 [managed setup contract](packages/cli/README.md#managed-first-run-setup-release-candidate).
 Managed launch selects an ephemeral loopback port and starts discovery only.
 It never opens a camera or configures an executor automatically.

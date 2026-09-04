@@ -90,8 +90,20 @@ test('the consolidated publication gate rejects historical backend bytes for any
     node.url = node.url.replace('0.2.0', '0.2.1')
   }
   await item.write()
-  assert.equal((await checkBundledNodeReleaseIndex(item.directory, { expectedRelease: '0.2.1' })).entries, 2)
+  await assert.rejects(checkBundledNodeReleaseIndex(item.directory, { expectedRelease: '0.2.1' }), /all six approved/)
   assert.equal([...item.manifests.values()].every((manifest) => manifest.runtimeVersion === '0.2.0'), true)
+})
+
+test('removing Windows or Python 3.11 support cannot make the downloadable product pass', async (t) => {
+  const source = path.resolve(import.meta.dirname, '../src/physical')
+  for (const removed of ['win32-x64:3.12', 'linux-x64:3.11']) {
+    const item = await fixture(t)
+    const index = JSON.parse(await fs.readFile(path.join(source, 'node-releases.json'), 'utf8'))
+    index.releases = index.releases.filter((entry) => `${entry.platform}:${entry.python}` !== removed)
+    for (const entry of index.releases) await fs.copyFile(path.join(source, 'node-releases', entry.manifest), path.join(item.directory, 'node-releases', entry.manifest))
+    await fs.writeFile(path.join(item.directory, 'node-releases.json'), JSON.stringify(index))
+    await assert.rejects(checkBundledNodeReleaseIndex(item.directory, { expectedRelease: '0.2.1' }), /all six approved/)
+  }
 })
 
 test('empty source-candidate index is intentionally not publishable', async (t) => {
