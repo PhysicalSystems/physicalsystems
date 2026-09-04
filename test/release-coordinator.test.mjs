@@ -45,7 +45,7 @@ test('workflow drift fails before creating outputs or invoking preparation', asy
   await withFixture(async (fixture) => {
     const filename = path.join(fixture, '.github/workflows/npm-release.yml')
     const workflow = await fs.readFile(filename, 'utf8')
-    await fs.writeFile(filename, workflow.replace('  RELEASE_VERSION: 0.2.1', '  RELEASE_VERSION: 9.9.9'))
+    await fs.writeFile(filename, workflow.replace('  RELEASE_VERSION: 0.2.2', '  RELEASE_VERSION: 9.9.9'))
     let prepared = false
     const output = path.join(fixture, 'never-created')
     await assert.rejects(runReleaseCommand(['prepare', '--output', output], {
@@ -60,7 +60,7 @@ test('workflow drift fails before creating outputs or invoking preparation', asy
 test('consumer toolchain and previous-tag drift are rejected too', async () => {
   for (const mutate of [
     (release) => { release.toolchain.consumerNode = '24.16.0' },
-    (release) => { release.previousTags.preview = '0.2.1' },
+    (release) => { release.previousTags.preview = '0.2.0' },
   ]) await withFixture(async (fixture) => {
     const filename = path.join(fixture, 'release/product.json')
     const release = JSON.parse(await fs.readFile(filename, 'utf8'))

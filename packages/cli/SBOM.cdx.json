@@ -5,9 +5,9 @@
   "metadata": {
     "component": {
       "type": "library",
-      "bom-ref": "pkg:npm/physicalsystems@0.2.1",
+      "bom-ref": "pkg:npm/physicalsystems@0.2.2",
       "name": "physicalsystems",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "licenses": [
         {
           "license": {
@@ -15,7 +15,7 @@
           }
         }
       ],
-      "purl": "pkg:npm/physicalsystems@0.2.1",
+      "purl": "pkg:npm/physicalsystems@0.2.2",
       "properties": [
         {
           "name": "tinyedge:release:root-integrity-override",
@@ -31,7 +31,7 @@
         },
         {
           "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "7a0eb2fdebe812818d4ed76534e17ee881da79f2c43de202766f18a3c3024e3f"
+          "value": "d252b89d4b35a1f291a676414b17400ec2f88984391e4acc36fda4eb272b4a28"
         }
       ]
     },
@@ -8249,7 +8249,7 @@
       ]
     },
     {
-      "ref": "pkg:npm/physicalsystems@0.2.1",
+      "ref": "pkg:npm/physicalsystems@0.2.2",
       "dependsOn": [
         "pkg:npm/%40earendil-works/pi-tui@0.84.2",
         "pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1",

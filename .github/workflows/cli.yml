@@ -43,7 +43,7 @@ jobs:
       - run: npm run check:legal
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: physicalsystems-0.2.1-source-review-${{ github.sha }}
+          name: physicalsystems-0.2.2-source-review-${{ github.sha }}
           path: candidate-artifacts
           if-no-files-found: error
           compression-level: 0
@@ -116,7 +116,7 @@ jobs:
           if ((npm --version) -ne '11.19.0') { throw 'Expected npm 11.19.0' }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: physicalsystems-0.2.1-source-review-${{ github.sha }}
+          name: physicalsystems-0.2.2-source-review-${{ github.sha }}
           path: candidate-artifacts
       - name: Reuse the candidate dependency closure for platform source tests
         run: node scripts/hydrate-review-dependencies.mjs candidate-artifacts ${{ github.sha }}
@@ -150,7 +150,7 @@ jobs:
           ## Source-only checks passed (${{ matrix.check_name }})
 
           - Source commit: `${{ github.sha }}`.
-          - Shared dependency artifact: `physicalsystems-0.2.1-source-review-${{ github.sha }}`; source commit and archive hash checked before hydration.
+          - Shared dependency artifact: `physicalsystems-0.2.2-source-review-${{ github.sha }}`; source commit and archive hash checked before hydration.
           - Native boundary, legal, SDK and source regressions passed; Linux additionally checks Secret Service, and x64 checks the synthetic Harness transcripts.
           - NOT install-qualified: these checks do not run npm local/global/npx acceptance, real managed backend installation or the interactive Harness PTY canary.
           - Full exact-artifact npm 11/12 installation qualification remains in the manually dispatched, protected `npm-release.yml` workflow.

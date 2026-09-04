@@ -33,7 +33,7 @@ test('PR and main source checks share one candidate without running release qual
   assert.match(cliWorkflow, /actions\/download-artifact@[a-f0-9]{40}/)
   assert.doesNotMatch(cliWorkflow, /release:verify|--require-downloadable-node|--require-node-bundle|check-(?:downloaded|bundled)-node\.mjs|check-linux-harness-pty\.py/)
   assert.doesNotMatch(cliWorkflow, /ubuntu-canary/)
-  assert.equal((cliWorkflow.match(/name: physicalsystems-0\.2\.1-source-review-\$\{\{ github.sha \}\}/g) || []).length, 2)
+  assert.equal((cliWorkflow.match(/name: physicalsystems-0\.2\.2-source-review-\$\{\{ github.sha \}\}/g) || []).length, 2)
   assert.match(cliWorkflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
   assert.match(cliWorkflow, /pull_request:\r?\n\s+push:\r?\n\s+branches:\r?\n\s+- main/)
   assert.match(cliWorkflow, /name: test \(\$\{\{ matrix.check_name \}\}\)/)
@@ -100,7 +100,7 @@ test('the real pre-publish checksum gate refuses oversized archives and falsifie
     const commit = 'a'.repeat(40)
     const artifacts = [
       { key: 'pi-runtime', name: '@tinyedge/pi-runtime', version: '0.84.2-tinyedge.1', filename: 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz' },
-      { key: 'physicalsystems', name: 'physicalsystems', version: '0.2.1', filename: 'physicalsystems-0.2.1.tgz' },
+      { key: 'physicalsystems', name: 'physicalsystems', version: '0.2.2', filename: 'physicalsystems-0.2.2.tgz' },
     ]
     const setPayload = (index, bytes) => {
       const artifact = artifacts[index]
@@ -110,11 +110,11 @@ test('the real pre-publish checksum gate refuses oversized archives and falsifie
         integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}` })
     }
     const check = () => {
-      const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, version: '0.2.1', commit, artifacts }))
+      const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, version: '0.2.2', commit, artifacts }))
       writeFixtureFile(fixture, 'candidate/release-manifest.json', bytes)
       return spawnSync(process.execPath, ['--input-type=module'], { cwd: fixture,
         input: match[1].replace(/^          /gm, ''), encoding: 'utf8', timeout: 15_000,
-        env: { ...process.env, GITHUB_SHA: commit, RELEASE_VERSION: '0.2.1',
+        env: { ...process.env, GITHUB_SHA: commit, RELEASE_VERSION: '0.2.2',
           PI_RUNTIME_VERSION: '0.84.2-tinyedge.1', RELEASE_ARTIFACT_DIRECTORY: 'candidate',
           EXPECTED_MANIFEST_SHA256: createHash('sha256').update(bytes).digest('hex') } })
     }
@@ -186,7 +186,7 @@ test('CI dependency hydration refuses traversal and links before extracting any 
     writeFixtureFile(fixture, 'scripts/hydrate-review-dependencies.mjs', readFileSync(path.join(root, 'scripts/hydrate-review-dependencies.mjs')))
     mkdirSync(path.join(fixture, 'candidate'))
     mkdirSync(path.join(fixture, 'packages/cli'), { recursive: true })
-    const filename = 'physicalsystems-0.2.1.tgz', commit = 'a'.repeat(40)
+    const filename = 'physicalsystems-0.2.2.tgz', commit = 'a'.repeat(40)
     for (const unsafe of [tarEntry('package/node_modules/../../escape.txt'),
       tarEntry('package/node_modules/demo/link', '2', '../../../../escape.txt')]) {
       // tar recognizes this deliberately tiny uncompressed ustar fixture by
@@ -359,7 +359,7 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
     const frozen = packageName !== 'cli'
     const legalFiles = ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'SBOM.cdx.json']
     writeFixtureFile(fixtureRoot, `packages/${packageName}/package.json`, JSON.stringify({
-      version: frozen ? '0.1.3' : '0.2.1',
+      version: frozen ? '0.1.3' : '0.2.2',
       private: frozen || npmReleaseIsPending,
       license: licenseIsPending ? 'UNLICENSED' : 'Apache-2.0',
       repository: frozen ? frozenRepository : repository,
@@ -479,7 +479,7 @@ test('source licensing and npm publication approval are operative while workflow
     'Refuse every repository, event, or ref except Physical Systems main',
   )
   const buildJob = workflow.indexOf('\n  build:')
-  const firstPublish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.1.tgz"')
+  const firstPublish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.2.tgz"')
 
   assert.ok(npmPendingGuard >= 0)
   assert.ok(licensePendingGuard > npmPendingGuard)
@@ -637,7 +637,7 @@ test('direct preview publishing fails closed on environment, provenance, and lic
     'Require the published runtime and an unpublished Physical Systems candidate',
     publishJob,
   )
-  const firstPublish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.1.tgz"', publishJob)
+  const firstPublish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.2.tgz"', publishJob)
 
   assert.ok(publishJob >= 0)
   assert.ok(policyGuard > publishJob)
@@ -681,7 +681,7 @@ test('direct preview publishing fails closed on environment, provenance, and lic
   assert.match(workflow, /maxBuffer: 64 \* 1024 \* 1024/)
   for (const filename of [
     'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz',
-    'physicalsystems-0.2.1.tgz',
+    'physicalsystems-0.2.2.tgz',
   ]) {
     assert.match(workflow.slice(licenseGuard, firstPublish), new RegExp(filename.replaceAll('.', '\\.')))
   }
@@ -713,12 +713,12 @@ test('preview update preflight accepts the existing release and rejects unexpect
     encoding: 'utf8',
     env: { ...process.env, PHYSICALSYSTEMS_TAGS_JSON: JSON.stringify(tags) },
   })
-  const prior = { bootstrap: '0.0.0', latest: '0.0.0', preview: '0.2.0' }
+  const prior = { bootstrap: '0.0.0', latest: '0.0.0', preview: '0.2.1' }
   const accepted = check(prior)
   assert.equal(accepted.status, 0, accepted.stderr)
   for (const rejected of [
     { bootstrap: '0.0.0', latest: '0.0.0' },
-    { ...prior, preview: '0.2.1' },
+    { ...prior, preview: '0.2.0' },
     { ...prior, preview: '0.2.2' },
     { ...prior, latest: '0.2.0' },
     { ...prior, bootstrap: '0.2.0' },
@@ -760,7 +760,7 @@ test('namespace bootstraps are inert, the runtime is reused, and only physicalsy
     'npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"',
   )
   const physicalsystemsPublish = workflow.indexOf(
-    'npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.1.tgz"',
+    'npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.2.tgz"',
     candidateE404,
   )
 
@@ -794,7 +794,7 @@ test('namespace bootstraps are inert, the runtime is reused, and only physicalsy
   assert.match(workflow, /bootstrap must not declare \$\{field\}/)
   assert.match(workflow, /namespace bootstrap must contain only its license/)
   assert.match(workflow, /this workflow[\s\S]{0,100}never republishes it/i)
-  assert.match(workflow, /Automatic provenance applies to physicalsystems@0\.2\.1/)
+  assert.match(workflow, /Automatic provenance applies to physicalsystems@0\.2\.2/)
 
   assert.match(releaseGuide, /scripts\/npm-bootstrap\/physicalsystems-0\.0\.0/)
   assert.match(releaseGuide, /no command, code, dependencies,\s+bundles, or lifecycle scripts/)
@@ -908,14 +908,14 @@ test('one candidate is reused for Windows, Ubuntu, npm 11/12, and direct preview
     assert.match(native, /--require-downloadable-node/)
     assert.doesNotMatch(native, /continue-on-error/)
   }
-  assert.match(workflow, /RELEASE_VERSION: 0\.2\.1/)
+  assert.match(workflow, /RELEASE_VERSION: 0\.2\.2/)
   assert.match(workflow, /PI_RUNTIME_VERSION: 0\.84\.2-tinyedge\.1/)
   assert.match(workflow, /endsWith\([\s\S]{0,120}physicalsystems@\$\{process\.env\.RELEASE_VERSION\}/)
   assert.match(workflow, /node -p 'process\.arch'/)
   assert.match(workflow, /processArchitecture = \(node -p 'process\.arch'\)\.Trim\(\)/)
   assert.match(workflow, /publish:\n[\s\S]{0,260}needs:\n\s+- build\n\s+- verify\n\s+- verify-linux\n\s+- verify-unsupported-node/)
 
-  const publish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.1.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
+  const publish = workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview')
   assert.ok(publish >= 0)
   assert.equal(
     workflow.indexOf('npm publish "./$RELEASE_ARTIFACT_DIRECTORY/tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz"'),
@@ -947,7 +947,7 @@ test('one candidate is reused for Windows, Ubuntu, npm 11/12, and direct preview
   assert.match(workflow, /verification_succeeded=false/)
   assert.match(workflow, /Registry convergence failed/)
   assert.match(workflow, /publishing preview must not move the inert initial latest tag/)
-  assert.match(workflow, /preview must resolve to 0\.2\.1/)
+  assert.match(workflow, /preview must resolve to 0\.2\.2/)
   assert.match(workflow, /SLSA v1 provenance predicate/)
   assert.match(workflow, /manifest-sha256: \$\{\{ steps\.candidate\.outputs\.manifest-sha256 \}\}/)
   assert.match(workflow, /EXPECTED_MANIFEST_SHA256: \$\{\{ needs\.build\.outputs\.manifest-sha256 \}\}/)
@@ -1286,7 +1286,7 @@ test('released documentation is truthful and the export boundary is executable',
   assert.match(releaseGuide, /Package transition/)
   assert.match(releaseGuide, /rollback/)
   assert.match(releaseGuide, /npm audit signatures/)
-  assert.match(releaseGuide, /npm install --ignore-scripts --no-audit --no-fund physicalsystems@0\.2\.1/)
+  assert.match(releaseGuide, /npm install --ignore-scripts --no-audit --no-fund physicalsystems@0\.2\.2/)
   assert.match(releaseGuide, /Configure the npm trusted publisher/)
   assert.match(dependencyGuide, /npm 12 ignores a dependency[\s\S]{0,30}package's shrinkwrap/)
   assert.match(dependencyGuide, /empty caches under npm 11\.19\.0 and npm 12\.0\.2/)
@@ -1305,16 +1305,16 @@ test('released documentation is truthful and the export boundary is executable',
   assert.match(cliWorkflow, /node scripts\/check-export-boundary\.mjs/)
 })
 
-test('the packed README describes the one-package physicalsystems 0.2.1 release', () => {
+test('the packed README describes the one-package physicalsystems 0.2.2 release', () => {
   assert.match(packedReadme, /tinyedge@0\.1\.3|`0\.1\.3` release/)
   assert.match(packedReadme, /0\.1\.5/)
   assert.doesNotMatch(
     packedReadme,
-    /0\.2\.1[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+    /0\.2\.2[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
   )
-  assert.match(packedReadme, /npx physicalsystems@0\.2\.1/)
-  assert.match(packedReadme, /npm view physicalsystems@0\.2\.1 version --json/)
-  assert.match(packedReadme, /npm install --global physicalsystems@0\.2\.1/)
+  assert.match(packedReadme, /npx physicalsystems@0\.2\.2/)
+  assert.match(packedReadme, /npm view physicalsystems@0\.2\.2 version --json/)
+  assert.match(packedReadme, /npm install --global physicalsystems@0\.2\.2/)
   assert.match(packedReadme, /command opens the local-first operator Harness/i)
 })
 
@@ -1331,7 +1331,7 @@ test('pull-request CI covers release-workflow changes and its regression test', 
   assert.match(cliWorkflow, /gnome-keyring-daemon --unlock --components=secrets/)
   assert.match(cliWorkflow, /libsecret-tools xdg-utils/)
   assert.match(cliWorkflow, /Prepare the small npm product with pinned backend manifests once/)
-  assert.match(cliWorkflow, /physicalsystems-0\.2\.1-source-review-\$\{\{ github\.sha \}\}/)
+  assert.match(cliWorkflow, /physicalsystems-0\.2\.2-source-review-\$\{\{ github\.sha \}\}/)
   assert.deepEqual(cliPackage.os, ['win32', 'linux'])
   assert.match(cliWorkflow, /node --test test\/npm-release-workflow\.test\.mjs/)
   assert.match(cliWorkflow, /npm install --global "npm@11\.19\.0"/)

@@ -112,7 +112,7 @@ test('workspace SBOM composes tinyedge and its runtime without duplicate identit
   assert.equal(new Set(dependencyRefs).size, dependencyRefs.length)
 
   const expectedRoots = [
-    'pkg:npm/physicalsystems@0.2.1',
+    'pkg:npm/physicalsystems@0.2.2',
     'pkg:npm/%40tinyedge/pi-runtime@0.84.2-tinyedge.1',
   ].sort()
   const workspaceEdges = bom.dependencies.find(({ ref }) => ref === bom.metadata.component['bom-ref']).dependsOn

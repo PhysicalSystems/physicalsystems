@@ -18,7 +18,7 @@ test('Pi runtime bootstrap gives cold hosted-runner installs ten bounded minutes
 function fixtures() {
   const manifest = {
     name: 'physicalsystems',
-    version: '0.2.1',
+    version: '0.2.2',
     license: 'Apache-2.0',
     dependencies: {
       [runtimeName]: runtimeVersion,

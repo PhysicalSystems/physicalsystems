@@ -20,7 +20,7 @@ async function installedMetadata(t) {
     await fs.rm(directory, { recursive: true, force: true })
   })
   await fs.mkdir(path.join(directory, 'src/physical'), { recursive: true })
-  await fs.writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'physicalsystems', version: '0.2.1' }))
+  await fs.writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'physicalsystems', version: '0.2.2' }))
   await fs.copyFile(path.join(source, 'node-releases.json'), path.join(directory, 'src/physical/node-releases.json'))
   await fs.cp(path.join(source, 'node-releases'), path.join(directory, 'src/physical/node-releases'), { recursive: true })
   return directory
@@ -30,7 +30,7 @@ test('downloadable verification reads all six pinned selectors from the installe
   t.mock.method(globalThis, 'fetch', () => assert.fail('metadata checks must not fetch'))
   const directory = await installedMetadata(t)
   const { metadata, index } = await checkDownloadableNodePackage(directory)
-  assert.equal(metadata.version, '0.2.1')
+  assert.equal(metadata.version, '0.2.2')
   assert.deepEqual(index, { entries: 6, selectors: ['linux-x64:3.10', 'linux-x64:3.11', 'linux-x64:3.12',
     'win32-x64:3.10', 'win32-x64:3.11', 'win32-x64:3.12'] })
   const indexPath = path.join(directory, 'src/physical/node-releases.json')

@@ -56,7 +56,7 @@ approved Windows/Linux x64 Python 3.10–3.12 manifests blocks publication. This
 metadata gate does not replace clean installation tests of the downloaded bytes.
 The same hashes are rechecked from the actual installed npm artifact.
 
-1. Uses `npm run release:prepare` to build `physicalsystems@0.2.1` once on
+1. Uses `npm run release:prepare` to build `physicalsystems@0.2.2` once on
    Windows x64 with the reviewed JS dependency closure, exact backend manifests
    and tarball checksums. Wheel binaries are not included. The normal product
    archive must be at most 50 MiB (a project policy, not a claimed registry limit).
@@ -75,18 +75,18 @@ The same hashes are rechecked from the actual installed npm artifact.
 5. Enters the protected environment only after all platform checks pass and
    requires `NPM_RELEASE_POLICY_VERSION=v3-physicalsystems-preview`.
 6. Verifies the inert namespace bootstrap, the already-published runtime, and
-   that `physicalsystems@0.2.1` is not already public. This update requires the
-   exact existing tags `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.0`;
+   that `physicalsystems@0.2.2` is not already public. This update requires the
+   exact existing tags `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.1`;
    unexpected tag changes block publication rather than being overwritten.
 7. Publishes exactly one tarball:
 
    ```bash
-   npm publish "./release-artifacts/physicalsystems-0.2.1.tgz" \
+   npm publish "./release-artifacts/physicalsystems-0.2.2.tgz" \
      --registry="https://registry.npmjs.org/" \
      --provenance --tag preview --access public
    ```
 
-8. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.1`; compares
+8. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.2`; compares
    registry integrity and shasum with the approved tarball; requires SLSA v1
    provenance; and runs `npm audit signatures`.
 
@@ -208,22 +208,22 @@ After publishing to `preview`, verify from clean Windows and Ubuntu desktop
 environments:
 
 ```bash
-npm view physicalsystems@0.2.1 version dist.integrity dist.shasum dist.attestations --json
+npm view physicalsystems@0.2.2 version dist.integrity dist.shasum dist.attestations --json
 npm view physicalsystems dist-tags --json
-npx --yes physicalsystems@0.2.1 --version
-npm install --global physicalsystems@0.2.1
+npx --yes physicalsystems@0.2.2 --version
+npm install --global physicalsystems@0.2.2
 physicalsystems
 ```
 
 Also create an empty audit directory, install with
-`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.1`, and
+`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.2`, and
 run `npm audit signatures`. Use a disposable account for optional cloud OAuth
 or MCP canaries; package checks are not production-service evidence.
 
 Only after the canary is accepted may a maintainer promote the exact bytes:
 
 ```bash
-npm dist-tag add physicalsystems@0.2.1 latest
+npm dist-tag add physicalsystems@0.2.2 latest
 ```
 
 Promotion requires maintainer presence and npm 2FA. If the preview fails, do
