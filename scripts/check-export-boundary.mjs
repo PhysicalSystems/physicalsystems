@@ -82,7 +82,7 @@ for (const entry of readdirSync(root, { withFileTypes: true })) {
   assert.ok(allowedTopLevel.has(entry.name), 'unexpected top-level export entry: ' + entry.name)
 }
 
-assert.deepEqual(readdirSync(path.join(root, 'release')).sort(), ['README.md', 'migration.json', 'node', 'product.json'],
+assert.deepEqual(readdirSync(path.join(root, 'release')).sort(), ['README.md', 'migration.json', 'node', 'product.json', 'publisher-verification.py', 'runtime'],
   'release may contain reviewed descriptors and release-only tooling, never private backend source or artifacts')
 checkSourceImports(root)
 readMigrationPlan(root)

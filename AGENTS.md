@@ -41,9 +41,11 @@ public Python Runtime and reviewed Node release tooling (TIN-417).
   CI may direct-publish only the size-checked product tarball to `preview`;
   never add a lifecycle publish script, long-lived npm write token, CI
   `latest` promotion, runtime republish through npm, or undocumented release route.
-- The Node publisher template is not an active workflow. Source consolidation
-  does not complete PyPI Trusted Publisher cutover. Follow `release/README.md`;
-  preserve historical publishers and assets until the replacement is verified.
+- Runtime and reviewed Node artifacts use component-scoped protected workflows
+  in this repository. Follow `release/README.md`; workflow code alone does not
+  prove PyPI registration or cutover. Verify current-attempt installs, the real
+  token exchange and public readback before disabling a historical publisher.
+  Preserve existing assets. Never republish unchanged versions to test migration.
 - Do not stage, publish, promote, or create an installer from an ordinary code
   change. Do not advertise macOS, Linux, a public installer, or a clean-user
   npm route until exact end-to-end evidence exists.

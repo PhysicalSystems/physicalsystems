@@ -1,7 +1,7 @@
 // Read-only source/cutover report. Configuration is not proof of live registry
 // permissions. Never upload, enable a workflow, or archive a repository here.
 import assert from 'node:assert/strict'
-import { existsSync, lstatSync, readFileSync } from 'node:fs'
+import { lstatSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkSourceImports } from './check-source-imports.mjs'
@@ -15,7 +15,7 @@ export function readMigrationPlan(sourceRoot = root) {
   assert.equal(migration.contractVersion, 'physicalsystems-source-migration-v1')
   assert.equal(migration.publicSourceRepository, 'PhysicalSystems/physicalsystems')
   assert.equal(migration.privateNodeRepository, 'PhysicalSystems/node')
-  assert.equal(migration.publisherCutover, 'pending-verification', 'publisher cutover requires separate reviewed verification, not a status toggle')
+  assert.equal(migration.publisherCutover, 'workflows-ready', 'live cutover completion is evidence, not a configuration toggle')
   assert.equal(migration.preserveHistoricalAssets, true)
   assert.deepEqual(migration.publishers, {
     runtime: {
@@ -30,7 +30,10 @@ export function readMigrationPlan(sourceRoot = root) {
     },
   }, 'publisher identities require a deliberate, reviewed cutover')
   for (const publisher of Object.values(migration.publishers)) {
-    assert.ok(!existsSync(path.join(sourceRoot, '.github/workflows', publisher.target.workflow)), 'replacement publisher must not be active before cutover verification')
+    const workflow = readFileSync(path.join(sourceRoot, '.github/workflows', publisher.target.workflow), 'utf8')
+    assert.match(workflow, /workflow_dispatch:/, 'component publisher must be manually dispatched')
+    assert.match(workflow, new RegExp(`environment:\\s*\\n\\s+name: ${publisher.target.environment}\\s*\\n`), 'component publisher must use its exact protected environment')
+    assert.ok(workflow.includes('verify-published'), 'cutover must support verification without republishing')
   }
   return migration
 }
@@ -47,7 +50,7 @@ export function createMigrationReport(sourceRoot = root) {
     changedComponentOrder: ['runtime-if-changed', 'node-if-changed', 'npm-product'],
     nextSteps: [
       'Verify new GitHub environment protections and the exact PyPI Trusted Publisher repository/workflow/environment identities.',
-      'Qualify the replacement component publisher with explicitly authorized new artifacts; keep existing package versions and downloads immutable.',
+      'Run verify-publishers against existing exact artifacts: fresh installations, human gate, real OIDC exchange and anonymous readback; do not republish unchanged versions.',
       'Record exact public readback and rollback references before disabling legacy publishers; retain historical assets.',
     ],
   }

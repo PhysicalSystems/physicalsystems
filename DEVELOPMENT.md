@@ -154,7 +154,11 @@ Begin release work with `npm run release -- plan` or `npm run release -- check`.
 The local coordinator checks `release/product.json` against the package locks,
 backend hashes and protected workflow before preparing dependencies. To pack,
 use `npm run release -- prepare --output ABSOLUTE_NEW_ARTIFACT_DIRECTORY` with
-the pinned npm CLI. No subcommand publishes or changes registry permissions.
+the pinned npm CLI. Planning/preparation never publish. Explicit `publish` or
+`publish-component` commands dispatch protected workflows, and `resume` recovers
+their saved progress without a second dispatch. See [release/README.md](release/README.md)
+for changed-component sequencing, human gates and the verification-only cutover.
+No coordinator command changes registry permissions or approves a deployment.
 
 PR and main-branch CI share one source-review candidate across four native
 platform jobs. They check source, licenses, dependencies, platform credentials,

@@ -1,7 +1,17 @@
 name: Publish Physical Systems npm preview
+run-name: npm preview ${{ inputs.coordinator_id || github.run_id }}
 
 on:
   workflow_dispatch:
+    inputs:
+      coordinator_id:
+        description: Optional maintainer coordinator correlation ID (not authorization)
+        required: false
+        type: string
+      expected_head_sha:
+        description: Optional exact reviewed main commit required by the coordinator
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -50,6 +60,8 @@ jobs:
             exit 1
           fi
       - name: Refuse every repository, event, or ref except Physical Systems main
+        env:
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -59,6 +71,10 @@ jobs:
           test "$GITHUB_REF" = "refs/heads/main"
           test "$GITHUB_REF_NAME" = "main"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [[ -n "$EXPECTED_HEAD_SHA" ]]; then
+            [[ "$EXPECTED_HEAD_SHA" =~ ^[a-f0-9]{40}$ ]]
+            test "$EXPECTED_HEAD_SHA" = "$GITHUB_SHA"
+          fi
       - name: Verify the public/private source boundary
         run: node scripts/check-export-boundary.mjs
       - name: Require all reviewed pinned Node manifests before npm release packaging

@@ -25,7 +25,7 @@ async function withFixture(body) {
   } finally { await fs.rm(fixture, { recursive: true, force: true }) }
 }
 
-test('one release entry point has no publishing, shell, ref or manifest override', () => {
+test('publishing needs explicit receipt arguments and accepts no shell, ref or manifest override', () => {
   assert.deepEqual(parseReleaseArguments([]), { action: 'plan' })
   assert.deepEqual(parseReleaseArguments(['check']), { action: 'check' })
   for (const args of [['publish'], ['plan', '--publish'], ['check', '--ref', 'other'], ['check', '--metadata', 'other']]) {

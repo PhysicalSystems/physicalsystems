@@ -139,7 +139,7 @@ jobs:
       - run: npm --prefix packages/cli run check:pi-sdk
       - run: npm --prefix packages/cli run check
       - run: npm --prefix packages/cli test
-      - run: node --test test/npm-release-workflow.test.mjs test/release-plan.test.mjs test/release-coordinator.test.mjs
+      - run: node --test test/npm-release-workflow.test.mjs test/release-plan.test.mjs test/release-coordinator.test.mjs test/publish-coordinator.test.mjs
       - name: Check scoped Harness consent and readiness transcript regressions
         if: matrix.architecture == 'x64'
         run: python -B -m unittest discover -s packages/cli/test -p test_packaged_harness_transcript.py -v
