@@ -29,6 +29,7 @@ import {
   createPhysicalWorkflowState,
   createPhysicalWorkflowWidget,
   observedPhysicalDevices,
+  renderPhysicalWorkflow,
   PHYSICAL_TOOL_ALLOWLIST,
   updatePhysicalWorkflow,
 } from './physical/workflow.js'
@@ -183,6 +184,7 @@ export function createTinyEdgePiExtension({
       ctx.ui.setWidget(
         'tinyedge-physical-workflow',
         createPhysicalWorkflowWidget(() => physicalState),
+        { placement: 'belowEditor' },
       )
     }
 
@@ -400,6 +402,21 @@ export function createTinyEdgePiExtension({
             }
           })().finally(() => { workcellOpening = null })
           return workcellOpening
+        },
+      })
+      pi.registerCommand('physical-details', {
+        description: 'Show the cached workflow inventory, plan and gaps without opening hardware',
+        handler: async (args, ctx) => {
+          if (String(args || '').trim()) {
+            ctx.ui.notify('Usage: /physical-details', 'warning')
+            return
+          }
+          // A normal transcript notification, not a sticky panel or model turn.
+          // Do not refresh: inspection would invalidate the current plan/route.
+          ctx.ui.notify([
+            'Cached workflow details · run /physical to refresh discovery.',
+            ...renderPhysicalWorkflow(physicalState, Number.MAX_SAFE_INTEGER),
+          ].join('\n'), 'info')
         },
       })
       pi.registerCommand('physical', {

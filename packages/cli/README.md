@@ -76,6 +76,23 @@ draft does not authorize teaching, exploration or robot movement. `Run` and
 `Verify` remain locked until a separate commissioned executor supplies the
 versioned lifecycle, explicit limits and result evidence described below.
 
+### Unreleased terminal and discovery improvements
+
+Source builds keep the persistent workflow summary compact below the input,
+so the conversation and editor remain together. `/physical-details` shows the
+complete current device inventory, planning/commissioning details and route
+evidence in the conversation. It reads the retained snapshot without opening
+hardware or refreshing discovery; use `/physical` when a fresh check is needed.
+
+Candidate discovery names devices using their reported labels while retaining
+exact IDs for operations. An available adapter or advertised `capture-frame`
+operation is not proof of a successful camera capture or healthy driver.
+Commissioning alone does not prove calibration validity: those assessments
+remain unassessed in candidate-only discovery, and calibration requirements
+come from the selected capability/implementation. Node-reported readiness is
+not execution permission. These source improvements are not in the immutable
+published `0.2.1` package; a separately qualified release is required.
+
 ### Agent Skills and capability route previews
 
 These names describe different layers:

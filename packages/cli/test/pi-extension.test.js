@@ -120,7 +120,7 @@ test('standalone Harness is local-only and blocks shell and unreviewed tools', a
     defineToolImpl: (value) => value,
   })(pi)
 
-  assert.deepEqual([...pi.commands.keys()], ['workcell', 'physical'])
+  assert.deepEqual([...pi.commands.keys()], ['workcell', 'physical-details', 'physical'])
   assert.deepEqual([...pi.tools.keys()], [
     'ask_choice', 'inspect_physical_system', 'inspect_physical_capabilities',
     'preview_physical_capability', 'plan_physical_workflow',
@@ -189,9 +189,9 @@ test('ordinary new user intent clears an earlier route preview before the agent 
   const { contractVersion: _version, ...params } = fixture.request
   await pi.tools.get('preview_physical_capability').execute('old', params)
   const render = () => widgets.get('tinyedge-physical-workflow')(null, { fg: (_name, text) => text }).render(500).join('\n')
-  assert.match(render(), /implementation selected/)
+  assert.match(render(), /Implementation proposed/)
   await pi.handlers.get('before_agent_start')({ prompt: 'Now move a different container to the other station.' }, ctx)
-  assert.doesNotMatch(render(), /implementation selected|Route receipt ·/)
+  assert.doesNotMatch(render(), /Implementation proposed|Route receipt ·/)
   assert.match(render(), /— Run/)
   assert.match(render(), /— Verify/)
 })
@@ -615,8 +615,8 @@ test('standalone Harness renders and drives the local physical workflow inside P
 
   const theme = { fg: (_name, value) => value }
   let widget = widgets.get('tinyedge-physical-workflow')(null, theme).render(120).join('\n')
-  assert.match(widget, /2\/2 devices ready/)
-  assert.match(widget, /✓ overhead-camera/)
+  assert.match(widget, /2 observed/)
+  assert.doesNotMatch(widget, /overhead-camera/)
   assert.doesNotMatch(widget, /yellow cup|taught motion/i)
 
   await pi.commands.get('physical').handler(
@@ -633,12 +633,75 @@ test('standalone Harness renders and drives the local physical workflow inside P
   assert.match(widget, /! Plan/)
   assert.match(widget, /◇ Commission/)
   assert.match(widget, /— Run/)
-  assert.match(widget, /Resolve reported commissioning gap/)
-  assert.match(widget, /local node must supply an eligible method and safe bounds/)
+  assert.match(widget, /Commissioning draft ready/)
+  assert.match(widget, /method and bounds remain unresolved/)
   assert.equal(selections.length, 1)
   assert.match(selections[0].question, /Commissioning gap reported/)
   assert.match(selections[0].options[0], /gap-bound commissioning draft/)
   assert.match(messages.at(-1).message, /No method, bounds, or motion was selected/)
+  const previousCalls = structuredClone(calls)
+  await pi.commands.get('physical-details').handler('', ctx)
+  assert.deepEqual(calls, previousCalls)
+  assert.match(messages.at(-1).message, /✓ overhead-camera/)
+  assert.match(messages.at(-1).message, /Resolve reported commissioning gap/)
+  assert.match(messages.at(-1).message, /local node must supply an eligible method and safe bounds/)
+})
+
+test('compact workflow stays below the editor and details are an explicit cached transcript report', async () => {
+  const pi = fakePi()
+  const messages = []
+  const widgets = new Map()
+  const calls = []
+  const route = JSON.parse(readFileSync(new URL('./fixtures/physical-route-v1.json', import.meta.url), 'utf8'))
+  const snapshot = {
+    nodeName: 'synthetic',
+    discovery: { devices: Array.from({ length: 15 }, (_, index) => ({
+      deviceId: `camera-${index}`, displayName: `Camera ${index}`, kind: 'camera',
+      detected: true, ready: false, driverReady: false, calibrationReady: false,
+    })) },
+    physicalExecutionAuthorized: false,
+  }
+  const ctx = {
+    ...fakeContext(messages),
+    ui: {
+      ...fakeContext(messages).ui,
+      setWidget(name, factory, options) { widgets.set(name, { factory, options }) },
+      setEditorText() { assert.fail('Status must not replace the editor or typed input') },
+      async input() { assert.fail('Viewing details must not prompt for an intent') },
+    },
+  }
+  pi.sendMessage = () => assert.fail('Viewing details must not send a model message or trigger a turn')
+  createTinyEdgePiExtension({
+    standalone: true,
+    showHeader: true,
+    createPhysicalNodeClientImpl: () => ({
+      origin: 'http://127.0.0.1:8876',
+      async inspect() { calls.push('inspect'); return snapshot },
+      async previewCapability() { calls.push('preview'); return route.selected },
+    }),
+  })(pi)
+  await pi.handlers.get('session_start')({}, ctx)
+  const entry = () => widgets.get('tinyedge-physical-workflow')
+  assert.deepEqual(entry().options, { placement: 'belowEditor' })
+  const { contractVersion: _version, ...params } = route.request
+  await pi.tools.get('preview_physical_capability').execute('route', params)
+  const notifications = messages.length
+  for (const width of [20, 120, 48, 120]) {
+    assert.equal(entry().factory(null, { fg: (_name, value) => value }).render(width).length, 5)
+    assert.deepEqual(entry().options, { placement: 'belowEditor' })
+  }
+  assert.equal(messages.length, notifications, 'render/resize never repeats the detailed inventory')
+  await pi.commands.get('physical-details').handler('', ctx)
+  assert.deepEqual(calls, ['inspect', 'preview'])
+  assert.equal(messages.length, notifications + 1)
+  assert.match(messages.at(-1).message, /Cached workflow details/)
+  assert.match(messages.at(-1).message, /Camera 14/)
+  assert.match(messages.at(-1).message, /Route receipt · sha256:/)
+  assert.match(messages.at(-1).message, /not approved for execution/)
+  assert.match(entry().factory(null, { fg: (_name, value) => value }).render(120).join('\n'), /Implementation proposed/)
+  await pi.commands.get('physical-details').handler('unexpected arguments', ctx)
+  assert.deepEqual(messages.at(-1), { message: 'Usage: /physical-details', level: 'warning' })
+  assert.deepEqual(calls, ['inspect', 'preview'])
 })
 
 test('cloud Pi extension gives a fresh benchmark request a deterministic question-first tool boundary', async () => {
