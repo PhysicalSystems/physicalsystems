@@ -273,6 +273,8 @@ function normalizeCandidate(value, index) {
     providerId,
     configured: commissioned,
     detected: true,
+    // Legacy compatibility projections only. Candidate discovery does not test
+    // driver health, capture or calibration; model/UI adapters must not infer it.
     driverReady: adapterStatus === 'available',
     calibrationReady: commissioned,
     ready,

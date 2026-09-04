@@ -1,3 +1,5 @@
+import { stripTerminalSequences, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui'
+
 import { READ_AGENT_SKILL_TOOL } from '../harness/agent-skills.js'
 import { PHYSICAL_ROUTE_REQUEST_VERSION, normalizePhysicalRouteRequest, physicalRouteReceiptPath } from './route-contracts.js'
 
@@ -170,9 +172,13 @@ const STATUS_MARK = Object.freeze({
 })
 
 function fit(value, width) {
-  const text = String(value)
-  if (width <= 1) return text.slice(0, Math.max(0, width))
-  return text.length <= width ? text : `${text.slice(0, width - 1)}…`
+  // Device labels are data, never terminal control sequences or extra rows.
+  const text = String(value).replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, ' ')
+  return stripTerminalSequences(truncateToWidth(text, width, '…'))
+}
+
+function terminalWidth(width) {
+  return Number.isInteger(width) ? Math.max(0, width) : 100
 }
 
 function deviceDetail(device) {
@@ -251,11 +257,11 @@ function nextLine(state) {
     ? 'Implementation proposed · preview only · Run and Verify remain locked.'
     : 'No eligible capability implementation · resolve the reported gaps before requesting another preview.'
   if (state.status === 'unavailable') return `Physical Systems node unavailable · ${state.error} · run /physical to retry`
+  if (state.error) return `Planning blocked · ${state.error}`
   if (!state.snapshot) return 'Run /physical, or describe a physical outcome in the editor.'
   if (!observedPhysicalDevices(state.snapshot).length) {
     return 'No hardware observed · connect a device and run /physical to refresh.'
   }
-  if (state.error) return `Planning blocked · ${state.error}`
   if (!state.response) return 'Describe the physical outcome in the editor, or run /physical.'
   const interpretation = state.response.interpretation
   if (state.exploration?.status === 'draft') {
@@ -273,11 +279,11 @@ function nextLine(state) {
 }
 
 export function renderPhysicalWorkflow(state, width = 100) {
-  const safeWidth = Number.isInteger(width) && width > 20 ? width : 100
+  const safeWidth = terminalWidth(width)
   const marks = stepStates(state)
   const progress = STEPS.map((step, index) => `${STATUS_MARK[marks[index]]} ${step}`).join('  ')
   const lines = [
-    'PHYSICAL WORKFLOW',
+    fit('PHYSICAL WORKFLOW', safeWidth),
     fit(progress, safeWidth),
   ]
   if (state.snapshot) {
@@ -290,7 +296,8 @@ export function renderPhysicalWorkflow(state, width = 100) {
     ))
     for (const device of devices) {
       const label = device.displayName || device.deviceId
-      lines.push(fit(`${device.ready ? '✓' : '!'} ${label} · ${device.kind} · ${deviceDetail(device)}`, safeWidth))
+      const identity = label === device.deviceId ? label : `${label} [${device.deviceId}]`
+      lines.push(fit(`${device.ready ? '✓' : '!'} ${identity} · ${device.kind} · ${deviceDetail(device)}`, safeWidth))
     }
     const providerErrors = snapshot.discovery.providerErrors || []
     if (providerErrors.length) {
@@ -312,6 +319,25 @@ export function renderPhysicalWorkflow(state, width = 100) {
   for (const line of physicalRouteLines(state.routeReceipt)) lines.push(fit(line, safeWidth))
   lines.push(fit(nextLine(state), safeWidth))
   return lines
+}
+
+/** Persistent status only. The complete cached report is available on demand. */
+export function renderPhysicalWorkflowSummary(state, width = 100) {
+  const safeWidth = terminalWidth(width)
+  const marks = stepStates(state)
+  const progress = STEPS.slice(0, 4).map((step, index) => `${STATUS_MARK[marks[index]]} ${step}`).join('  ')
+  const current = marks[3] === 'draft' ? 3 : marks[2] !== 'waiting' ? 2 : marks[1] !== 'waiting' ? 1 : 0
+  const devices = observedPhysicalDevices(state.snapshot)
+  const providerErrors = state.snapshot?.discovery?.providerErrors?.length || 0
+  const status = state.snapshot ? `${devices.length} observed` : state.status
+  const next = providerErrors ? `Discovery partial (${providerErrors}) · ${nextLine(state)}` : nextLine(state)
+  return [
+    `Physical · ${status}`,
+    visibleWidth(progress) <= safeWidth ? progress : `${STATUS_MARK[marks[current]]} ${STEPS[current]}`,
+    safeWidth >= 24 ? '— Run · — Verify · locked' : 'Run/Verify locked',
+    next,
+    '/physical-details · inventory, plan and gaps',
+  ].map((line) => fit(line, safeWidth))
 }
 
 const ROUTE_REASON_LABELS = Object.freeze({
@@ -365,12 +391,28 @@ export function physicalRouteLines(receipt) {
 
 export function compactPhysicalSnapshotForModel(snapshot) {
   const devices = observedPhysicalDevices(snapshot)
+  const candidateMode = snapshot.discovery.mode === 'candidates'
+  const providerIssues = (Array.isArray(snapshot.discovery.providerErrors) ? snapshot.discovery.providerErrors : [])
+    .slice(0, 64)
+    .map((issue) => ({ status: ['degraded', 'unavailable', 'error'].includes(issue?.status) ? issue.status : 'unknown' }))
   return {
     discovery: {
+      ...(candidateMode ? {
+        mode: 'candidates',
+        partial: providerIssues.length > 0,
+        providerIssues,
+      } : {}),
       observedAt: snapshot.discovery.observedAt,
       snapshotDigest: snapshot.discovery.snapshotDigest,
       bindingDigest: snapshot.discoveryBindingDigest,
-      summary: {
+      summary: candidateMode ? {
+        observed: devices.length,
+        adapterAvailable: devices.filter((device) => device.adapterStatus === 'available').length,
+        adapterSetupRequired: devices.filter((device) => device.adapterStatus === 'setup-required').length,
+        commissioned: devices.filter((device) => device.commissioningStatus === 'commissioned').length,
+        reportedReady: devices.filter((device) => device.ready).length,
+        allReportedReady: devices.length > 0 && devices.every((device) => device.ready),
+      } : {
         observed: devices.length,
         adapterReady: devices.filter((device) => device.driverReady).length,
         commissioned: devices.filter((device) => device.calibrationReady).length,
@@ -379,6 +421,7 @@ export function compactPhysicalSnapshotForModel(snapshot) {
       },
       devices: devices.map((device) => ({
         deviceId: device.deviceId,
+        ...(device.displayName ? { displayName: cleanMessage(device.displayName) } : {}),
         kind: device.kind,
         transport: device.transport ?? null,
         roles: device.roles,
@@ -386,10 +429,24 @@ export function compactPhysicalSnapshotForModel(snapshot) {
         detected: device.detected,
         adapterStatus: device.adapterStatus ?? null,
         commissioningStatus: device.commissioningStatus ?? null,
-        readiness: device.readiness ?? (device.ready ? 'ready' : 'setup-required'),
-        driverReady: device.driverReady,
-        calibrationReady: device.calibrationReady,
-        ready: device.ready,
+        ...(candidateMode ? {
+          presence: 'observed',
+          reportedReadiness: device.readiness ?? null,
+          reportedReady: device.ready,
+          // Candidate v1 reports metadata, not driver/capture/calibration evidence.
+          // Compatibility booleans must not become fabricated health test results.
+          assessments: {
+            driverHealth: 'unassessed',
+            capture: 'unassessed',
+            calibration: 'unassessed',
+            calibrationRequirements: 'unassessed',
+          },
+        } : {
+          readiness: device.readiness ?? (device.ready ? 'ready' : 'setup-required'),
+          driverReady: device.driverReady,
+          calibrationReady: device.calibrationReady,
+          ready: device.ready,
+        }),
       })),
     },
     physicalExecutionAuthorized: false,
@@ -557,11 +614,10 @@ export function createPhysicalWorkflowWidget(getState) {
   return (_tui, theme) => ({
     invalidate() {},
     render(width) {
-      return renderPhysicalWorkflow(getState(), width).map((line, index) => {
+      return renderPhysicalWorkflowSummary(getState(), width).map((line, index) => {
         if (index === 0) return theme.fg('accent', line)
-        if (line.startsWith('✓')) return theme.fg('success', line)
-        if (line.startsWith('!') || line.includes('unavailable')) return theme.fg('warning', line)
-        return index === 1 ? theme.fg('muted', line) : line
+        if (line.startsWith('!') || /unavailable|blocked|partial/i.test(line)) return theme.fg('warning', line)
+        return index === 1 || index === 2 || index === 4 ? theme.fg('muted', line) : line
       })
     },
   })
