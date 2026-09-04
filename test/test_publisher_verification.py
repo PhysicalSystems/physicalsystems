@@ -7,11 +7,12 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import ssl
 import tempfile
 import time
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request
 
@@ -136,6 +137,56 @@ class FakeClient:
 
 
 class VerificationTests(unittest.TestCase):
+    def test_service_failures_identify_exact_phase_and_endpoint_without_changing_client_contract(self):
+        class FailingClient(FakeClient):
+            def __init__(self, fail_at, component):
+                super().__init__(component)
+                self.fail_at = fail_at
+
+            def request_json(self, url, **options):
+                if len(self.calls) == self.fail_at:
+                    self.calls.append((url, deepcopy(options)))
+                    raise probe.VerificationError("service-request-failed", service=options["kind"],
+                                                  status=403, reason="http-error")
+                return super().request_json(url, **options)
+
+        phases = [
+            (0, "pre-exchange", "main", "github"),
+            (1, "pre-exchange", "run", "github"),
+            (2, "pre-exchange", "environment", "github"),
+            (3, "pre-exchange", "branch-policy", "github"),
+            (4, "oidc-token", "request", "oidc"),
+            (5, "pypi-exchange", "request", "pypi"),
+            (6, "post-exchange", "main", "github"),
+            (7, "post-exchange", "run", "github"),
+            (8, "post-exchange", "environment", "github"),
+            (9, "post-exchange", "branch-policy", "github"),
+        ]
+        for component in probe.COMPONENTS:
+            for fail_at, phase, endpoint, service in phases:
+                with self.subTest(component=component, phase=phase, endpoint=endpoint):
+                    client = FailingClient(fail_at, component)
+                    with self.assertRaises(probe.VerificationError) as raised:
+                        probe.verify_publisher(component, environment(component), client)
+                    diagnostic = probe.format_diagnostic(raised.exception)
+                    for token in (f"phase={phase}", f"endpoint={endpoint}", f"service={service}",
+                                  "status=403", "reason=http-error"):
+                        self.assertIn(token, diagnostic)
+                    self.assertEqual(len(client.calls), fail_at + 1)
+                    for _, options in client.calls:
+                        self.assertNotIn("phase", options)
+                        self.assertNotIn("endpoint", options)
+
+            for fail_at, _, endpoint, _ in phases[:4]:
+                with self.subTest(component=component, phase="audit-only", endpoint=endpoint):
+                    client = FailingClient(fail_at, component)
+                    with self.assertRaises(probe.VerificationError) as raised:
+                        probe.verify_publisher(component, environment(component), client, audit_only=True)
+                    diagnostic = probe.format_diagnostic(raised.exception)
+                    self.assertIn("phase=audit-only", diagnostic)
+                    self.assertIn(f"endpoint={endpoint}", diagnostic)
+                    self.assertTrue(all(options["kind"] == "github" for _, options in client.calls))
+
     def test_legacy_and_current_github_oidc_routes_complete_both_component_flows(self):
         urls = [
             environment()["ACTIONS_ID_TOKEN_REQUEST_URL"],
@@ -296,6 +347,154 @@ class VerificationTests(unittest.TestCase):
 
 
 class HTTPTests(unittest.TestCase):
+    def test_transport_failures_expose_only_service_status_and_fixed_reason(self):
+        cases = [
+            (lambda url: TimeoutError(MINTED_SECRET), None, "timeout"),
+            (lambda url: URLError(TimeoutError(MINTED_SECRET)), None, "timeout"),
+            (lambda url: ssl.SSLError(MINTED_SECRET), None, "tls-error"),
+            (lambda url: URLError(ssl.SSLError(MINTED_SECRET)), None, "tls-error"),
+            (lambda url: URLError(MINTED_SECRET), None, "transport-error"),
+            (lambda url: RuntimeError(MINTED_SECRET), None, "request-failed"),
+            (lambda url: HTTPError(url, 403, MINTED_SECRET, {}, io.BytesIO(b"{}")), 403, "http-error"),
+        ]
+        for service, url in [
+            ("github", f"{probe.API}/repos/{probe.REPOSITORY}/git/ref/heads/main"),
+            ("oidc", environment()["ACTIONS_ID_TOKEN_REQUEST_URL"]),
+            ("pypi", probe.MINT),
+        ]:
+            options = {"payload": {"token": MINTED_SECRET}} if service == "pypi" else {"bearer": REQUEST_SECRET}
+            for make_error, status, reason in cases:
+                with self.subTest(service=service, reason=reason):
+                    client = probe.HTTPClient()
+                    with patch.object(client.opener, "open", side_effect=make_error(url)):
+                        with self.assertRaises(probe.VerificationError) as raised:
+                            client.request_json(url, kind=service, **options)
+                    error = raised.exception
+                    self.assertEqual(str(error), "service-request-failed")
+                    diagnostic = probe.format_diagnostic(error)
+                    self.assertIn(f"service={service}", diagnostic)
+                    self.assertIn(f"reason={reason}", diagnostic)
+                    if status is None:
+                        self.assertNotIn("status=", diagnostic)
+                    else:
+                        self.assertIn(f"status={status}", diagnostic)
+                    self.assertNotIn(MINTED_SECRET, diagnostic)
+                    self.assertNotIn(REQUEST_SECRET, diagnostic)
+                    self.assertNotIn(url, diagnostic)
+
+    def test_response_failures_have_distinguishable_safe_diagnostics(self):
+        cases = [
+            (b"{}", 302, probe.MINT, "unexpected-http-response"),
+            (b"{}", 200, "https://evil.example/" + MINTED_SECRET, "response-url-mismatch"),
+            (b"x" * (probe.MAX_RESPONSE + 1), 200, probe.MINT, "response-too-large"),
+            (MINTED_SECRET.encode(), 200, probe.MINT, "invalid-json-response"),
+            (b'{"token":"a","token":"b"}', 200, probe.MINT, "invalid-json-response"),
+        ]
+        for raw, status, url, reason in cases:
+            with self.subTest(reason=reason):
+                client = probe.HTTPClient()
+                response = unittest.mock.MagicMock()
+                response.__enter__.return_value = response
+                response.status = status
+                response.geturl.return_value = url
+                response.read.return_value = raw
+                with patch.object(client.opener, "open", return_value=response):
+                    with self.assertRaises(probe.VerificationError) as raised:
+                        client.request_json(probe.MINT, kind="pypi", payload={"token": MINTED_SECRET})
+                diagnostic = probe.format_diagnostic(raised.exception)
+                self.assertIn("service=pypi", diagnostic)
+                self.assertIn(f"reason={reason}", diagnostic)
+                self.assertNotIn(MINTED_SECRET, diagnostic)
+                self.assertNotIn("https://", diagnostic)
+
+    def test_redirect_reason_survives_without_destination_or_response_headers(self):
+        client = probe.HTTPClient()
+
+        def redirect(*args, **kwargs):
+            probe.NoRedirect().redirect_request(
+                Request(probe.MINT), None, 302, MINTED_SECRET,
+                {"Authorization": REQUEST_SECRET}, "https://evil.example/" + MINTED_SECRET)
+
+        with patch.object(client.opener, "open", side_effect=redirect):
+            with self.assertRaises(probe.VerificationError) as raised:
+                client.request_json(probe.MINT, kind="pypi", payload={"token": REQUEST_SECRET})
+        diagnostic = probe.format_diagnostic(raised.exception)
+        self.assertIn("service=pypi", diagnostic)
+        self.assertIn("reason=redirect-forbidden", diagnostic)
+        self.assertNotIn(MINTED_SECRET, diagnostic)
+        self.assertNotIn(REQUEST_SECRET, diagnostic)
+        self.assertNotIn("https://", diagnostic)
+
+    def test_pypi_error_code_is_exact_allowlisted_and_bounded(self):
+        class BoundedBody(io.BytesIO):
+            def __init__(self, raw):
+                super().__init__(raw)
+                self.read_limits = []
+
+            def read(self, limit=-1):
+                self.read_limits.append(limit)
+                return super().read(limit)
+
+        known = ("not-enabled", "invalid-payload", "invalid-token", "invalid-pending-publisher",
+                 "invalid-publisher", "invalid-reuse-token")
+        cases = [(json.dumps({"errors": [{"code": code, "description": MINTED_SECRET}]}).encode(), code)
+                 for code in known]
+        cases += [
+            (json.dumps({"errors": [{"code": "invalid-publisher", "description": MINTED_SECRET},
+                                     {"code": "invalid-publisher"}]}).encode(), "invalid-publisher"),
+            (json.dumps({"errors": [{"code": "invalid-publisher"}, {"code": "invalid-token"}]}).encode(), None),
+            (json.dumps({"errors": [{"code": "invalid-publisher" + MINTED_SECRET}]}).encode(), None),
+            (json.dumps({"errors": [{"code": {"invalid-publisher": MINTED_SECRET}}]}).encode(), None),
+            (json.dumps({"errors": [{"code": "invalid-publisher"}] * 17}).encode(), None),
+            (json.dumps({"errors": {"code": "invalid-publisher"}}).encode(), None),
+            (json.dumps({"errors": [{"code": "invalid-publisher", "description": MINTED_SECRET * 2000}]}).encode(), None),
+            (b'{"errors":[{"code":"invalid-publisher","code":"invalid-token"}]}', None),
+            (MINTED_SECRET.encode(), None),
+        ]
+        for raw, expected in cases:
+            with self.subTest(expected=expected, byte_count=len(raw)):
+                client = probe.HTTPClient()
+                response_body = BoundedBody(raw)
+                error = HTTPError(probe.MINT, 422, MINTED_SECRET, {"X-Secret": MINTED_SECRET}, response_body)
+                with patch.object(client.opener, "open", side_effect=error):
+                    with self.assertRaises(probe.VerificationError) as raised:
+                        client.request_json(probe.MINT, kind="pypi", payload={"token": REQUEST_SECRET})
+                self.assertTrue(response_body.read_limits)
+                self.assertTrue(all(0 < limit <= 16385 for limit in response_body.read_limits))
+                self.assertLessEqual(sum(response_body.read_limits), 16385)
+                diagnostic = probe.format_diagnostic(raised.exception)
+                self.assertIn("service=pypi", diagnostic)
+                self.assertIn("status=422", diagnostic)
+                self.assertIn("reason=http-error", diagnostic)
+                if expected:
+                    self.assertIn(f"pypi_code={expected}", diagnostic)
+                else:
+                    self.assertNotIn("pypi_code=", diagnostic)
+                for forbidden in (MINTED_SECRET, REQUEST_SECRET, "X-Secret", "https://", "description"):
+                    self.assertNotIn(forbidden, diagnostic)
+
+    def test_non_pypi_and_lookalike_http_error_bodies_are_not_read_or_reported(self):
+        for service, request_url, error_url in [
+            ("github", f"{probe.API}/repos/{probe.REPOSITORY}/git/ref/heads/main", probe.MINT),
+            ("oidc", environment()["ACTIONS_ID_TOKEN_REQUEST_URL"], probe.MINT),
+            ("pypi", probe.MINT, probe.MINT + ".evil.example/" + MINTED_SECRET),
+            ("pypi", probe.MINT, "https://pypi.org.evil.example/_/oidc/mint-token"),
+        ]:
+            with self.subTest(service=service, error_url=error_url):
+                client = probe.HTTPClient()
+                body = unittest.mock.MagicMock()
+                body.read.side_effect = AssertionError("Untrusted response body must not be read")
+                error = HTTPError(error_url, 403, MINTED_SECRET, {}, body)
+                options = {"payload": {"token": REQUEST_SECRET}} if service == "pypi" else {"bearer": REQUEST_SECRET}
+                with patch.object(client.opener, "open", side_effect=error):
+                    with self.assertRaises(probe.VerificationError) as raised:
+                        client.request_json(request_url, kind=service, **options)
+                body.read.assert_not_called()
+                diagnostic = probe.format_diagnostic(raised.exception)
+                self.assertNotIn("pypi_code=", diagnostic)
+                self.assertNotIn(MINTED_SECRET, diagnostic)
+                self.assertNotIn(error_url, diagnostic)
+
     def test_invalid_oidc_routes_never_construct_an_authenticated_request(self):
         for url in INVALID_OIDC_URLS:
             with self.subTest(url=url):
@@ -359,6 +558,86 @@ class HTTPTests(unittest.TestCase):
 
 
 class CLITests(unittest.TestCase):
+    def test_safe_diagnostic_metadata_is_printed_without_a_receipt_or_secrets(self):
+        error = probe.VerificationError("service-request-failed", service="pypi", status=403,
+                                        reason="http-error", phase="pypi-exchange", endpoint="request",
+                                        pypi_code="invalid-publisher")
+        self.assertEqual(str(error), "service-request-failed")
+        with tempfile.TemporaryDirectory(prefix="publisher-proof-test-") as directory:
+            output = Path(directory) / "proof.json"
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with patch.object(probe, "verify_publisher", side_effect=error), redirect_stdout(stdout), redirect_stderr(stderr):
+                self.assertEqual(probe.main(["--component", "runtime", "--output", str(output)]), 1)
+            self.assertFalse(output.exists())
+            self.assertEqual(stdout.getvalue(), "")
+            for token in ("service-request-failed", "service=pypi", "status=403", "reason=http-error",
+                          "phase=pypi-exchange", "endpoint=request", "pypi_code=invalid-publisher"):
+                self.assertIn(token, stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_metadata_must_be_exact_allowlisted_scalars_not_arbitrary_strings_or_objects(self):
+        class UnsafeObject:
+            def __str__(self):
+                raise AssertionError("Never stringify arbitrary diagnostic objects")
+
+            def __repr__(self):
+                raise AssertionError("Never repr arbitrary diagnostic objects")
+
+            def __eq__(self, other):
+                raise RuntimeError(MINTED_SECRET)
+
+        for value in (MINTED_SECRET, "pypi\n" + MINTED_SECRET, "github: " + MINTED_SECRET,
+                      {"secret": MINTED_SECRET}, [MINTED_SECRET], UnsafeObject(), True, False, None):
+            with self.subTest(value_type=type(value).__name__):
+                error = probe.VerificationError("service-request-failed", service=value, reason=value,
+                                                phase=value, endpoint=value, pypi_code=value)
+                diagnostic = probe.format_diagnostic(error)
+                self.assertEqual(diagnostic, "service-request-failed")
+                self.assertNotIn(MINTED_SECRET, diagnostic)
+        for status in (True, False, 99, 600, -1, "403", 403.0, MINTED_SECRET, {}, [], UnsafeObject()):
+            with self.subTest(status_type=type(status).__name__):
+                error = probe.VerificationError("service-request-failed", service="pypi", status=status)
+                diagnostic = probe.format_diagnostic(error)
+                self.assertIn("service=pypi", diagnostic)
+                self.assertNotIn("status=", diagnostic)
+        for service in ("github", "oidc", None, MINTED_SECRET):
+            with self.subTest(service=service):
+                error = probe.VerificationError("service-request-failed", service=service, pypi_code="invalid-publisher")
+                self.assertNotIn("pypi_code=", probe.format_diagnostic(error))
+        with tempfile.TemporaryDirectory(prefix="publisher-proof-test-") as directory:
+            output = Path(directory) / "proof.json"
+            error = probe.VerificationError("service-request-failed", service=UnsafeObject(),
+                                            pypi_code="invalid-publisher")
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with patch.object(probe, "verify_publisher", side_effect=error), redirect_stdout(stdout), redirect_stderr(stderr):
+                self.assertEqual(probe.main(["--component", "node", "--output", str(output)]), 1)
+            self.assertFalse(output.exists())
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("service-request-failed", stderr.getvalue())
+            for forbidden in (MINTED_SECRET, "pypi_code=", "service=", "Traceback"):
+                self.assertNotIn(forbidden, stderr.getvalue())
+
+    def test_untrusted_http_error_description_never_reaches_cli_output(self):
+        client = probe.HTTPClient()
+        body = json.dumps({"errors": [{"code": "invalid-publisher", "description": MINTED_SECRET}],
+                           "token": REQUEST_SECRET}).encode()
+        error = HTTPError(probe.MINT, 422, MINTED_SECRET, {"Authorization": GITHUB_SECRET}, io.BytesIO(body))
+
+        def verify(*args, **kwargs):
+            return client.request_json(probe.MINT, kind="pypi", payload={"token": REQUEST_SECRET})
+
+        with tempfile.TemporaryDirectory(prefix="publisher-proof-test-") as directory:
+            output = Path(directory) / "proof.json"
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with patch.object(client.opener, "open", side_effect=error), \
+                 patch.object(probe, "verify_publisher", side_effect=verify), \
+                 redirect_stdout(stdout), redirect_stderr(stderr):
+                self.assertEqual(probe.main(["--component", "node", "--output", str(output)]), 1)
+            self.assertFalse(output.exists())
+            self.assertIn("pypi_code=invalid-publisher", stderr.getvalue())
+            for forbidden in (MINTED_SECRET, REQUEST_SECRET, GITHUB_SECRET, "Authorization", "https://", "Traceback"):
+                self.assertNotIn(forbidden, stdout.getvalue() + stderr.getvalue())
+
     def test_only_allowlisted_diagnostic_codes_are_printed(self):
         for reason, expected in [("current-main-mismatch", "current-main-mismatch"), (MINTED_SECRET, "verification-refused")]:
             with tempfile.TemporaryDirectory(prefix="publisher-proof-test-") as directory:

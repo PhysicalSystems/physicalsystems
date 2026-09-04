@@ -21,8 +21,10 @@ import json
 import os
 from pathlib import Path
 import re
+import ssl
 import sys
 import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
@@ -38,10 +40,51 @@ MAX_RESPONSE = 512 * 1024
 TIMEOUT_SECONDS = 20
 SCHEMA = "physicalsystems.publisher-verification.v1"
 OIDC_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+MAX_ERROR_RESPONSE = 16 * 1024
+PYPI_ERROR_CODES = frozenset({"not-enabled", "invalid-payload", "invalid-token",
+    "invalid-pending-publisher", "invalid-reuse-token", "invalid-publisher"})
+SERVICE_REASONS = frozenset({"http-error", "timeout", "transport-error", "tls-error",
+    "redirect-forbidden", "response-url-mismatch", "response-too-large",
+    "invalid-json-response", "unexpected-http-response", "request-failed"})
+DIAGNOSTIC_CODES = frozenset({"current-main-mismatch", "run-attempt-mismatch", "invalid-local-workflow-identity",
+    "environment-not-protected", "named-human-reviewer-required", "exact-main-branch-policy-required",
+    "oidc-context-mismatch", "oidc-token-not-current", "pypi-exchange-not-accepted",
+    "identity-changed-during-exchange", "service-request-failed", "missing-or-invalid-credential",
+    "invalid-oidc-origin", "output-must-be-new-absolute-file"})
+DIAGNOSTIC_FIELDS = {
+    "service": frozenset({"github", "oidc", "pypi"}),
+    "phase": frozenset({"audit-only", "pre-exchange", "oidc-token", "pypi-exchange", "post-exchange"}),
+    "endpoint": frozenset({"main", "run", "environment", "branch-policy", "request"}),
+    "reason": SERVICE_REASONS,
+}
 
 
 class VerificationError(Exception):
     """Messages are fixed diagnostic codes, never remote bodies or credentials."""
+
+    def __init__(self, code, *, service=None, status=None, reason=None, phase=None, endpoint=None, pypi_code=None):
+        super().__init__(code)
+        self.service, self.status, self.reason = service, status, reason
+        self.phase, self.endpoint, self.pypi_code = phase, endpoint, pypi_code
+
+
+def format_diagnostic(error):
+    """Revalidate every log field; never stringify remote exceptions or bodies."""
+    candidate = error.args[0] if len(error.args) == 1 else None
+    code = candidate if type(candidate) is str and candidate in DIAGNOSTIC_CODES else "verification-refused"
+    fields = []
+    for name, allowed in DIAGNOSTIC_FIELDS.items():
+        value = getattr(error, name, None)
+        if type(value) is str and value in allowed:
+            fields.append(f"{name}={value}")
+    status = getattr(error, "status", None)
+    if type(status) is int and 100 <= status <= 599:
+        fields.append(f"status={status}")
+    value = getattr(error, "pypi_code", None)
+    service = getattr(error, "service", None)
+    if type(service) is str and service == "pypi" and type(value) is str and value in PYPI_ERROR_CODES:
+        fields.append(f"pypi_code={value}")
+    return code + (" [" + " ".join(fields) + "]" if fields else "")
 
 
 def require(condition, code):
@@ -117,6 +160,29 @@ class NoRedirect(HTTPRedirectHandler):
         raise VerificationError("redirect-forbidden")
 
 
+def pypi_error_code(response):
+    """Read a bounded PyPI error body; return only one known enum, never text.
+
+    Schema: warehouse/oidc/views.py _invalid(). Messages/descriptions may include
+    token claims and are intentionally ignored. Unknown/mixed codes stay opaque.
+    """
+    try:
+        raw = response.read(MAX_ERROR_RESPONSE + 1)
+        if len(raw) > MAX_ERROR_RESPONSE:
+            return None
+        errors = json_object(raw).get("errors")
+        if type(errors) is not list or not 1 <= len(errors) <= 16:
+            return None
+        codes = set()
+        for entry in errors:
+            if type(entry) is not dict or type(entry.get("code")) is not str or entry["code"] not in PYPI_ERROR_CODES:
+                return None
+            codes.add(entry["code"])
+        return next(iter(codes)) if len(codes) == 1 else None
+    except Exception:
+        return None
+
+
 class HTTPClient:
     def __init__(self):
         # Ignore ambient proxies; HTTPS certificate verification stays enabled.
@@ -134,20 +200,57 @@ class HTTPClient:
         if payload is not None:
             headers["Content-Type"] = "application/json"
         data = None if payload is None else json.dumps(payload).encode("utf-8")
+        status = None
         try:
             request = Request(url, data=data, headers=headers, method="GET" if data is None else "POST")
             with self.opener.open(request, timeout=TIMEOUT_SECONDS) as response:
-                require(response.status == 200 and response.geturl() == url, "unexpected-http-response")
+                status = response.status
+                require(status == 200, "unexpected-http-response")
+                require(response.geturl() == url, "response-url-mismatch")
                 raw = response.read(MAX_RESPONSE + 1)
                 require(len(raw) <= MAX_RESPONSE, "response-too-large")
                 return json_object(raw)
+        except HTTPError as error:
+            # Only the fixed PyPI mint endpoint may supply an allowlisted code.
+            # Never render error strings, response bodies, headers or URLs.
+            status = error.code
+            same_url = error.geturl() == url
+            pypi_code = pypi_error_code(error) if kind == "pypi" and same_url else None
+            try:
+                error.close()
+            except Exception:
+                pass
+            raise VerificationError("service-request-failed", service=kind, status=status,
+                                    reason="http-error" if same_url else "response-url-mismatch",
+                                    pypi_code=pypi_code) from None
+        except VerificationError as error:
+            reason = error.args[0] if len(error.args) == 1 else None
+            reason = reason if type(reason) is str and reason in SERVICE_REASONS else "request-failed"
+            raise VerificationError("service-request-failed", service=kind, status=status, reason=reason) from None
+        except TimeoutError:
+            raise VerificationError("service-request-failed", service=kind, reason="timeout") from None
+        except ssl.SSLError:
+            raise VerificationError("service-request-failed", service=kind, reason="tls-error") from None
+        except URLError as error:
+            reason = ("timeout" if isinstance(error.reason, TimeoutError) else
+                      "tls-error" if isinstance(error.reason, ssl.SSLError) else "transport-error")
+            raise VerificationError("service-request-failed", service=kind, reason=reason) from None
+        except OSError:
+            raise VerificationError("service-request-failed", service=kind, reason="transport-error") from None
         except Exception:
-            # HTTP errors can contain request credentials, token echoes, or URLs.
-            # Do not expose the exception, its chain, headers, or response body.
-            raise VerificationError("service-request-failed") from None
+            raise VerificationError("service-request-failed", service=kind, reason="request-failed") from None
 
 
-def audit_current_run(component, environ=None, client=None):
+def request_with_context(client, url, *, phase, endpoint, **options):
+    """Label request sites independently of secret-bearing URLs and payloads."""
+    try:
+        return client.request_json(url, **options)
+    except VerificationError as error:
+        error.phase, error.endpoint = phase, endpoint
+        raise
+
+
+def audit_current_run(component, environ=None, client=None, *, phase="audit-only"):
     """Read-only preflight, also callable before any candidate execution/OIDC.
 
 Returns only bounded public identity fields. It does not claim an environment
@@ -169,13 +272,14 @@ approval occurred; the protected job and the exchanged JWT establish that later.
     attempt = positive_id(environ.get("GITHUB_RUN_ATTEMPT"))
     token = secret(environ.get("GITHUB_TOKEN"))
 
-    def github(path):
-        return client.request_json(f"{API}/repos/{REPOSITORY}/{path}", kind="github", bearer=token)
+    def github(path, endpoint):
+        return request_with_context(client, f"{API}/repos/{REPOSITORY}/{path}",
+                                    phase=phase, endpoint=endpoint, kind="github", bearer=token)
 
-    main = github("git/ref/heads/main")
+    main = github("git/ref/heads/main", "main")
     require(main.get("ref") == "refs/heads/main" and main.get("object", {}).get("sha") == sha
             and main.get("object", {}).get("type") == "commit", "current-main-mismatch")
-    run = github(f"actions/runs/{run_id}")
+    run = github(f"actions/runs/{run_id}", "run")
     require(type(run.get("id")) is int and run["id"] == int(run_id)
             and type(run.get("run_attempt")) is int and run["run_attempt"] == int(attempt)
             and run.get("event") == "workflow_dispatch" and run.get("head_sha") == sha
@@ -186,7 +290,7 @@ approval occurred; the protected job and the exchanged JWT establish that later.
     owner_id = run.get("repository", {}).get("owner", {}).get("id")
     require(type(repository_id) is int and repository_id > 0 and type(owner_id) is int
             and owner_id > 0, "repository-id-missing")
-    protection = github(f"environments/{environment}")
+    protection = github(f"environments/{environment}", "environment")
     require(protection.get("name") == environment and protection.get("can_admins_bypass") is False
             and protection.get("deployment_branch_policy") == {
                 "protected_branches": False, "custom_branch_policies": True,
@@ -203,7 +307,7 @@ approval occurred; the protected job and the exchanged JWT establish that later.
                 and type(user.get("id")) is int and user["id"] > 0
                 and type(user.get("login")) is str and re.fullmatch(r"[A-Za-z0-9-]{1,39}", user["login"]),
                 "named-human-reviewer-required")
-    policies = github(f"environments/{environment}/deployment-branch-policies?per_page=100")
+    policies = github(f"environments/{environment}/deployment-branch-policies?per_page=100", "branch-policy")
     branches = policies.get("branch_policies")
     require(type(policies.get("total_count")) is int and policies["total_count"] == 1
             and type(branches) is list and len(branches) == 1 and type(branches[0]) is dict
@@ -247,17 +351,19 @@ No decoded field is copied into the receipt (which uses the GitHub API audit).
 def verify_publisher(component, environ=None, client=None, *, audit_only=False):
     environ = os.environ if environ is None else environ
     client = HTTPClient() if client is None else client
-    identity = audit_current_run(component, environ, client)
+    identity = audit_current_run(component, environ, client, phase="audit-only" if audit_only else "pre-exchange")
     if not audit_only:
         parts = checked_url(environ.get("ACTIONS_ID_TOKEN_REQUEST_URL"), "oidc")
         query = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True)
         require(not any(key.lower() == "audience" for key, _ in query), "preselected-oidc-audience")
         url = urlunsplit(parts._replace(query=urlencode(query + [("audience", "pypi")])))
-        response = client.request_json(url, kind="oidc", bearer=secret(environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")))
+        response = request_with_context(client, url, phase="oidc-token", endpoint="request",
+                                        kind="oidc", bearer=secret(environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")))
         oidc_token = secret(response.pop("value", None))
         response.clear()
         check_oidc_context(oidc_token, identity)
-        response = client.request_json(MINT, kind="pypi", payload={"token": oidc_token})
+        response = request_with_context(client, MINT, phase="pypi-exchange", endpoint="request",
+                                        kind="pypi", payload={"token": oidc_token})
         del oidc_token
         # Never return this response, put the token in GITHUB_OUTPUT, or mask/log it.
         minted = response.pop("token", None)
@@ -265,7 +371,8 @@ def verify_publisher(component, environ=None, client=None, *, audit_only=False):
         del minted
         response.clear()
         require(accepted, "pypi-exchange-not-accepted")
-        require(audit_current_run(component, environ, client) == identity, "identity-changed-during-exchange")
+        require(audit_current_run(component, environ, client, phase="post-exchange") == identity,
+                "identity-changed-during-exchange")
     return {"schema": SCHEMA, **identity, "verifiedAt": datetime.now(timezone.utc).isoformat(),
             "tokenExchangeVerified": not audit_only, "publicationPerformed": False,
             "distributionAuthorizationVerified": False, "pypiEnvironmentBindingVerified": False}
@@ -289,13 +396,8 @@ def main(argv=None):
     except VerificationError as error:
         # Only fixed reviewed diagnostics may reach a log. Never render arbitrary
         # exception strings, response bodies, URLs, JWTs or minted credentials.
-        safe_codes = {"current-main-mismatch", "run-attempt-mismatch", "invalid-local-workflow-identity",
-            "environment-not-protected", "named-human-reviewer-required", "exact-main-branch-policy-required",
-            "oidc-context-mismatch", "oidc-token-not-current", "pypi-exchange-not-accepted",
-            "identity-changed-during-exchange", "service-request-failed", "missing-or-invalid-credential",
-            "invalid-oidc-origin", "output-must-be-new-absolute-file"}
-        code = str(error) if str(error) in safe_codes else "verification-refused"
-        print("Publisher verification failed: " + code + "; no successful receipt was produced.", file=sys.stderr)
+        print("Publisher verification failed: " + format_diagnostic(error)
+              + "; no successful receipt was produced.", file=sys.stderr)
         return 1
     except Exception:
         # Even unexpected library errors must not render credentials or a traceback.
