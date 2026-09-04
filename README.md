@@ -62,9 +62,12 @@ The one-shot preview command is:
 npx --yes physicalsystems@preview
 ```
 
-`physicalsystems@0.2.0` was the first application release. The `0.2.1` candidate
-adds a fail-fast prerequisite check for older Node.js versions and includes
-pinned, reviewed backend manifests in a small npm artifact. First launch asks
+`physicalsystems@0.2.0` was the first application release. Version `0.2.1`
+added a fail-fast prerequisite check for older Node.js versions and pinned,
+reviewed backend manifests in a small npm artifact. Version `0.2.2` retains
+those exact backend pins while keeping the workflow status compact below the
+editor and separating observed discovery metadata from unassessed driver,
+capture and calibration evidence. First launch asks
 for software setup consent, downloads only the wheel set matching the computer's
 OS, architecture and Python version, checks its exact hashes and sizes, and
 installs it in an isolated user environment, without a Git

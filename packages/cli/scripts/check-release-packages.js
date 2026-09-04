@@ -28,7 +28,7 @@ const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
 const NPM_CLI = process.env.npm_execpath
 const RELEASE_NPM_VERSION = '11.19.0'
 const CONSUMER_NPM_VERSIONS = new Set([RELEASE_NPM_VERSION, '12.0.2'])
-const PHYSICAL_SYSTEMS_VERSION = '0.2.1'
+const PHYSICAL_SYSTEMS_VERSION = '0.2.2'
 const PI_RUNTIME_VERSION = '0.84.2-tinyedge.1'
 const PACKAGES = [
   {
@@ -652,18 +652,18 @@ function validateReleaseReadmes(packages) {
     const readme = readFileSync(path.join(directory, 'README.md'), 'utf8')
     assert.match(
       readme,
-      /npm view physicalsystems@0\.2\.1 version --json/,
+      /npm view physicalsystems@0\.2\.2 version --json/,
       `${metadata.name} README must make exact registry availability independently verifiable`,
     )
     assert.doesNotMatch(
       readme,
-      /0\.2\.1[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
-      `${metadata.name} README must not describe its own 0.2.1 artifact as pre-publication`,
+      /0\.2\.2[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+      `${metadata.name} README must not describe its own 0.2.2 artifact as pre-publication`,
     )
     assert.doesNotMatch(
       readme,
-      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.2\.1/i,
-      `${metadata.name} README must not describe its own 0.2.1 artifact as pre-publication`,
+      /\b(?:candidate|unavailable|unpublished|not published)\b[\s\S]{0,100}0\.2\.2/i,
+      `${metadata.name} README must not describe its own 0.2.2 artifact as pre-publication`,
     )
     assert.match(readme, /0\.1\.3/, `${metadata.name} README must retain the package-migration distinction`)
     assert.match(
@@ -671,8 +671,8 @@ function validateReleaseReadmes(packages) {
       /(?:did not|do not|does not)[\s\S]{0,160}(?:validate|exercise)[\s\S]{0,80}(?:OAuth|login|live|production)/i,
       `${metadata.name} README must preserve the live-validation boundary`,
     )
-    assert.match(readme, /npx physicalsystems@0\.2\.1/)
-    assert.match(readme, /npm install --global physicalsystems@0\.2\.1/)
+    assert.match(readme, /npx physicalsystems@0\.2\.2/)
+    assert.match(readme, /npm install --global physicalsystems@0\.2\.2/)
     assert.match(
       readme,
       /npx[\s\S]{0,100}does not[\s\S]{0,80}(?:global|persistent)/i,

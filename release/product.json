@@ -2,7 +2,7 @@
   "contractVersion": "physicalsystems-product-release-v1",
   "product": {
     "name": "physicalsystems",
-    "version": "0.2.1"
+    "version": "0.2.2"
   },
   "components": {
     "node": {
@@ -38,6 +38,6 @@
   "previousTags": {
     "bootstrap": "0.0.0",
     "latest": "0.0.0",
-    "preview": "0.2.0"
+    "preview": "0.2.1"
   }
 }
