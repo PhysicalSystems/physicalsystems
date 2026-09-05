@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 import { createWorkcellServer } from '../src/harness/workcell-server.js'
+import { createWorkcellController } from '../src/harness/workcell-controller.js'
 
 const DIGEST = `sha256:${'a'.repeat(64)}`
 const FRAME_ID = 'b'.repeat(64)
@@ -212,6 +213,68 @@ test('controller errors are sanitized and never leak stacks, secret messages or 
   assert.equal(result.text.includes(token), false)
   assert.equal(result.text.includes('private-path'), false)
   assert.deepEqual(JSON.parse(result.text), { error: 'Workcell action could not be completed', code: 'workcell_action_failed' })
+})
+
+test('known busy, expired-question and unavailable-model failures give safe actionable HTTP responses', async (t) => {
+  const controller = createWorkcellController({ workflow: {}, refreshWorkflow: async () => {}, sendIntent: async () => {} })
+  t.after(() => controller.dispose())
+  const { server, auth } = await setup(t, controller)
+  controller.agentStart('Existing request')
+  for (const [path, body] of [['/api/intent', { text: 'Another request' }], ['/api/refresh', {}]]) {
+    const result = await raw(server.origin, path, { method: 'POST', headers: auth, body })
+    assert.equal(result.status, 409)
+    assert.equal(JSON.parse(result.text).code, 'agent_busy')
+    assert.match(JSON.parse(result.text).error, /current.*request/)
+  }
+  const obsolete = await raw(server.origin, '/api/choice', { method: 'POST', headers: auth, body: { choiceId: 'obsolete', answer: 'Late answer' } })
+  assert.equal(obsolete.status, 409)
+  assert.equal(JSON.parse(obsolete.text).code, 'question_expired')
+  assert.match(JSON.parse(obsolete.text).error, /no longer current/)
+  const noModel = createWorkcellController({ workflow: {}, refreshWorkflow: async () => {}, sendIntent: async () => {}, canPrompt: () => false })
+  t.after(() => noModel.dispose())
+  const other = await setup(t, noModel)
+  const missing = await raw(other.server.origin, '/api/intent', { method: 'POST', headers: other.auth, body: { text: 'Inspect the workcell' } })
+  assert.equal(missing.status, 503)
+  assert.equal(JSON.parse(missing.text).code, 'model_unavailable')
+  assert.match(JSON.parse(missing.text).error, /select a model/i)
+})
+
+test('an arbitrary exception cannot spoof allowlisted error messages or codes', async (t) => {
+  const { server, host, auth } = await setup(t)
+  host.submitIntent = async () => { throw Object.assign(new Error('private path and secret'), { code: 'agent_busy', status: 409 }) }
+  const result = await raw(server.origin, '/api/intent', { method: 'POST', headers: auth, body: { text: 'Inspect' } })
+  assert.equal(result.status, 409)
+  assert.deepEqual(JSON.parse(result.text), { error: 'Workcell state changed; refresh before retrying', code: 'workcell_conflict' })
+})
+
+test('authenticated null Stop cancels only this controller pending Start and never passes null to the camera client', async (t) => {
+  let finishStart
+  const pending = new Promise((resolve) => { finishStart = resolve })
+  const stopped = []
+  const controller = createWorkcellController({ workflow: {}, refreshWorkflow: async () => {}, sendIntent: async () => {}, cameraClient: {
+    async frame() { return { status: { phase: 'idle', captureSessionId: null }, frame: null } },
+    async start() { return pending },
+    async stop(body) { stopped.push(body); return { phase: 'stopped', captureSessionId: body.expectedCaptureSessionId } },
+  } })
+  const { server, auth } = await setup(t, controller)
+  t.after(async () => { finishStart({ phase: 'live', captureSessionId: 'late-capture' }); await controller.dispose() })
+  const body = { expectedCaptureSessionId: null }
+  const absent = await raw(server.origin, '/api/camera/stop', { method: 'POST', headers: auth, body })
+  assert.equal(absent.status, 409)
+  assert.equal(JSON.parse(absent.text).code, 'camera_changed')
+  const start = raw(server.origin, '/api/camera/start', { method: 'POST', headers: auth, body: { candidateId: 'camera-one', expectedCandidateDigest: DIGEST } })
+  await tickUntil(() => controller.snapshot().camera.pending === 'start')
+  assert.equal((await raw(server.origin, '/api/camera/stop', { method: 'POST', body })).status, 401)
+  const cancellation = await raw(server.origin, '/api/camera/stop', { method: 'POST', headers: auth, body })
+  const before = stopped.length
+  finishStart({ phase: 'live', captureSessionId: 'late-capture' })
+  const completed = await start
+  assert.equal(cancellation.status, 200)
+  assert.equal(JSON.parse(cancellation.text).camera.stopPending, true)
+  assert.equal(before, 0)
+  assert.equal(completed.status, 200)
+  assert.deepEqual(stopped, [{ expectedCaptureSessionId: 'late-capture' }])
+  assert.equal(controller.snapshot().camera.status.phase, 'stopped')
 })
 
 test('authenticated streamed-fetch SSE publishes bounded state updates and unsubscribes on disconnect', async (t) => {

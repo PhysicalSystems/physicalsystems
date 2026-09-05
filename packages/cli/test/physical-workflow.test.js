@@ -395,6 +395,46 @@ test('workflow shows the first real question or commissioning gap', () => {
   assert.match(rendered, /Needs input · Which destination/)
 })
 
+test('explicit workflow details include every reported question and gap without expanding the compact summary', () => {
+  const questions = ['Which destination station should receive the container?', 'Which observed container should be transferred?']
+  const gaps = [
+    { gapId: 'robot-qualification', kind: 'commissioning-required', detail: 'The selected robot pick operation needs qualification.' },
+    { gapId: 'observation-producer', kind: 'configuration-required', detail: 'The camera observation producer needs configuration.' },
+    { gapId: 'unsupported-operation', kind: 'capability', detail: 'The requested weighing operation is not registered.' },
+  ]
+  let state = updatePhysicalWorkflow(createPhysicalWorkflowState('local'), { type: 'snapshot', snapshot: snapshotFixture() })
+  state = updatePhysicalWorkflow(state, {
+    type: 'intent', response: intentFixture({ status: 'needs-clarification', gaps, questions }), requestedIntent: 'Transfer the container',
+  })
+  const details = renderPhysicalWorkflow(state, Number.MAX_SAFE_INTEGER).join('\n')
+  for (const question of questions) assert.ok(details.includes(question), `Missing question: ${question}`)
+  for (const gap of gaps) assert.ok(details.includes(gap.detail), `Missing gap: ${gap.gapId}`)
+  assert.ok(details.indexOf(questions[0]) < details.indexOf(questions[1]))
+  assert.ok(details.indexOf(gaps[0].detail) < details.indexOf(gaps[1].detail))
+  const summary = renderPhysicalWorkflowSummary(state, 120)
+  assert.equal(summary.length, 5)
+  assert.equal(summary[3], `Needs input · ${questions[0]}`)
+  assert.ok(!summary.join('\n').includes(questions[1]))
+  for (const gap of gaps) assert.ok(!summary.join('\n').includes(gap.detail))
+  assert.match(summary.join('\n'), /— Run · — Verify · locked/)
+})
+
+test('a commissioning draft preserves all concrete gap explanations in explicit details', () => {
+  const response = commissioningResponseFixture()
+  response.interpretation.gaps.push({
+    gapId: 'observation-producer', kind: 'commissioning-required', deviceId: 'camera-one',
+    operationIds: ['observe-state'], detail: 'The camera requires a qualified observation producer.',
+  })
+  let state = updatePhysicalWorkflow(createPhysicalWorkflowState('local'), { type: 'snapshot', snapshot: snapshotFixture() })
+  state = updatePhysicalWorkflow(state, { type: 'intent', response, requestedIntent: 'Transfer the container' })
+  state = updatePhysicalWorkflow(state, { type: 'exploration', exploration: createPhysicalCommissioningDraft(response) })
+  const details = renderPhysicalWorkflow(state, Number.MAX_SAFE_INTEGER).join('\n')
+  for (const gap of response.interpretation.gaps) assert.ok(details.includes(gap.detail), `Missing draft gap: ${gap.gapId}`)
+  assert.match(details, /local node must supply an eligible method and safe bounds/)
+  assert.equal(renderPhysicalWorkflowSummary(state, 120).length, 5)
+  assert.match(renderPhysicalWorkflowSummary(state, 120)[3], /method and bounds remain unresolved/)
+})
+
 test('a rejected plan preserves fresh discovery without calling the node unavailable', () => {
   let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
   state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })

@@ -176,6 +176,25 @@ alone does not stop it. Reopen the authorized view with `/workcell` after a page
 reload or session change; its ephemeral browser token is intentionally not
 stored. Keep the local session link private.
 
+Stop preview remains available while the assistant or an ordinary view request
+is busy, and can use the last known capture identity during a stream outage.
+Stopping a pending Start cancels that request; if capture has already begun,
+the Harness stops the exact session returned by Node. A cleared image does not
+prove the camera was released. If Stop is unconfirmed, retry Stop preview or
+reopen `/workcell` to inspect its status. The Harness retains captures it owns
+for cleanup until Node confirms they stopped; another Start remains blocked
+while a Stop outcome is unresolved.
+
+The view retries brief connection failures automatically. After four consecutive
+attempts without a valid streamed state, it shows **Reconnect** and instructions
+to reopen with `/workcell`. A recovered stream clears its connection warning;
+unrelated action errors remain visible. Reconnecting reuses the authorization
+held only in the current page and never starts a camera or retries an action.
+Connection startup times out after 6.5 seconds without a valid streamed state.
+After connection, 45 seconds without a state update or heartbeat triggers the
+same bounded recovery path; camera frames still expire on their own shorter
+freshness deadline.
+
 Frames have exact identity and digest links. Stale, disconnected or malformed
 frames are hidden. The current CLI preview is **uncalibrated**: it does not detect
 a cup, establish that a workspace is clear, publish routing evidence, or enable
