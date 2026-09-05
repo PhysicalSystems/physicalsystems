@@ -8,15 +8,29 @@ import { createReleasePlan, readProductRelease } from './release-plan.mjs'
 import { parsePreparationArguments, prepareProductCandidate } from './prepare-product-candidate.mjs'
 import { createMigrationReport } from './release-migration.mjs'
 import { parsePublishArguments, runPublishCoordinator } from './publish-coordinator.mjs'
+import { watchRelease } from './watch-release.mjs'
+import { prepareReleaseVersion } from './prepare-release-version.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const usage = 'Usage: npm run release -- plan | check | migration | prepare --output ABSOLUTE_NEW_DIRECTORY | verify-publishers/publish/publish-component/resume --output ABSOLUTE_RECEIPT_DIRECTORY [component candidate options]'
+const usage = 'Usage: npm run release -- plan | check | migration | version MAJOR.MINOR.PATCH | prepare --output ABSOLUTE_NEW_DIRECTORY | watch --output ABSOLUTE_RECEIPT_DIRECTORY | verify-publishers/publish/publish-component/resume --output ABSOLUTE_RECEIPT_DIRECTORY [component candidate options]'
 
 export function parseReleaseArguments(args) {
   const [action = 'plan', ...rest] = args
+  if (action === 'version' && rest.length === 1) return { action, version: rest[0] }
   if (['plan', 'check', 'migration'].includes(action) && rest.length === 0) return { action }
+  if (action === 'watch') {
+    const values = parsePublishArguments(rest)
+    if (Object.keys(values).join() !== '--output') throw new Error('Watch accepts only --output for an existing receipt')
+    return { action, args: rest }
+  }
   if (['verify-publishers', 'publish', 'publish-component', 'resume'].includes(action)) {
     if (rest.length === 0) throw new Error(usage)
+    if (rest.includes('--watch')) {
+      if (rest.filter((arg) => arg === '--watch').length !== 1) throw new Error('Repeated --watch option')
+      const args = rest.filter((arg) => arg !== '--watch')
+      parsePublishArguments(args)
+      return { action, args, watch: true }
+    }
     parsePublishArguments(rest)
     return { action, args: rest }
   }
@@ -59,8 +73,18 @@ export async function checkWorkflowReleaseConfiguration(sourceRoot = root) {
   ])) throw new Error('Protected workflow previous tags differ from release/product.json')
 }
 
+async function watchSavedRelease(args, sourceRoot, print) {
+  const controller = new AbortController()
+  const stop = () => controller.abort()
+  process.on('SIGINT', stop)
+  try {
+    return await watchRelease(() => runPublishCoordinator('resume', args, { sourceRoot, print() {} }), { print, signal: controller.signal })
+  } finally { process.off('SIGINT', stop) }
+}
+
 export async function runReleaseCommand(args, { sourceRoot = root, print = console.log, prepare = prepareProductCandidate } = {}) {
   const command = parseReleaseArguments(args)
+  if (command.action === 'version') return prepareReleaseVersion(sourceRoot, command.version, { print })
   if (command.action === 'migration') {
     const report = createMigrationReport(sourceRoot)
     print(JSON.stringify(report, null, 2))
@@ -68,8 +92,16 @@ export async function runReleaseCommand(args, { sourceRoot = root, print = conso
   }
   const plan = await createReleasePlan(sourceRoot)
   await checkWorkflowReleaseConfiguration(sourceRoot)
+  if (command.action === 'watch') {
+    return watchSavedRelease(command.args, sourceRoot, print)
+  }
   if (['verify-publishers', 'publish', 'publish-component', 'resume'].includes(command.action)) {
-    return runPublishCoordinator(command.action, command.args, { sourceRoot, print })
+    const state = await runPublishCoordinator(command.action, command.args, { sourceRoot, print })
+    if (command.watch && !state.workflowVerificationComplete) {
+      const output = parsePublishArguments(command.args)['--output']
+      return watchSavedRelease(['--output', output], sourceRoot, print)
+    }
+    return state
   }
   if (command.action === 'plan') {
     print(JSON.stringify(plan, null, 2))

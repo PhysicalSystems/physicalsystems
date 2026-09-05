@@ -17,9 +17,22 @@ explicit adaptations, not a claim that adapted files are still unchanged.
 
 ## Normal product release
 
+For a product-only version bump, start on a clean release branch:
+
+```sh
+npm run release -- version NEW_MAJOR.MINOR.PATCH
+```
+
+This updates product metadata, both locks, workflow constants, versioned checks
+and documentation references, then regenerates SBOMs and export provenance.
+It retains backend pins and sets the expected previous preview to the current
+product version. Review the diff and write the release notes, run the checks,
+and merge the release PR. Preparation restores the original files if generation
+fails. It does not publish or change registry tags.
+
 ```sh
 npm run release -- check
-npm run release -- publish --output ABSOLUTE_NEW_RECEIPT_DIRECTORY
+npm run release -- publish --output ABSOLUTE_NEW_RECEIPT_DIRECTORY --watch
 ```
 
 Run from a clean reviewed checkout of current `main`, using the pinned Node/npm
@@ -32,10 +45,14 @@ installation matrix and human approval remain mandatory for a new product.
 `plan`, `check`, `migration` and `prepare --output ABSOLUTE_NEW_DIRECTORY` remain
 read-only/preparation routes with no publication authority.
 
-The command returns while GitHub is testing or waiting for review. To continue:
+With `--watch`, the command follows the saved receipt every 30 seconds and prints
+status changes and the GitHub approval link until final evidence verification.
+Human approval remains in GitHub. Ctrl+C stops watching; it does not cancel the
+workflow. Without `--watch`, the command returns after dispatch. To continue:
 
 ```sh
 npm run release -- resume --output ABSOLUTE_RECEIPT_DIRECTORY
+npm run release -- watch --output ABSOLUTE_RECEIPT_DIRECTORY
 ```
 
 The receipt records source SHA, product plan digest, UUID, exact run IDs and
@@ -46,6 +63,18 @@ Every workflow receives the expected source SHA, rejecting a racing main update.
 top-level status (which could hide skipped jobs). It never approves a deployment.
 It downloads evidence by exact artifact ID, verifies the archive digest, and
 compares the receipt with any previous evidence instead of trusting cached files.
+Watch stops on errors or after 240 checks; it never retries a failed dispatch or
+upload. Restart watch with the same receipt directory after inspection.
+
+Native qualification runs local install, isolated npm exec and global install
+concurrently in separate fresh caches and trees. All three must finish
+successfully before their installed content is inspected; failures are reported
+after all children exit so cleanup cannot race an installer. Phase durations
+are printed in the job logs. Qualification caches remain empty at the start.
+Build jobs cache npm downloads using both shrinkwrap files as cache inputs;
+preparation still installs and verifies the reviewed dependency tree. The
+optional `prepare --dependency-cache ABSOLUTE_DIRECTORY` selects an external
+download cache for local preparation too.
 
 ## When a Python component actually changes
 
