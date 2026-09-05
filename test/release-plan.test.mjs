@@ -61,7 +61,7 @@ async function snapshot(directory, relative = '') {
 
 test('the product descriptor keeps independent exact identities, all six selectors and immutable pins', async () => {
   const descriptor = await readProductRelease()
-  assert.deepEqual(descriptor.product, { name: 'physicalsystems', version: '0.2.2' })
+  assert.deepEqual(descriptor.product, { name: 'physicalsystems', version: '0.2.3' })
   assert.equal(descriptor.components.node.version, '0.2.1')
   assert.equal(descriptor.components.runtime.version, '0.2.0')
   assert.equal(descriptor.components.piRuntime.version, '0.84.2-tinyedge.1')
@@ -73,7 +73,7 @@ test('the product descriptor keeps independent exact identities, all six selecto
   assert.deepEqual(descriptor.toolchain, { node: '22.19.0', npm: '11.19.0', consumerNode: '24.15.0', consumerNpm: '12.0.2' })
   const copy = validateProductRelease(descriptor)
   copy.product.version = '1.0.0'
-  assert.equal(descriptor.product.version, '0.2.2')
+  assert.equal(descriptor.product.version, '0.2.3')
 })
 
 test('descriptor validation rejects unknown/missing keys, ranges, alternate identities and reduced selectors', async () => {
@@ -127,16 +127,19 @@ test('a Harness-only version change does not rebuild or bump backend components'
   const directory = await fixture(t)
   const original = await createReleasePlan(directory)
   const descriptor = await json(directory, descriptorPath)
-  descriptor.product.version = '0.2.3'
+  const parts = descriptor.product.version.split('.')
+  parts[2] = String(Number(parts[2]) + 1)
+  const next = parts.join('.')
+  descriptor.product.version = next
   await writeJson(directory, descriptorPath, descriptor)
   const product = await json(directory, 'packages/cli/package.json')
-  product.version = '0.2.3'
+  product.version = next
   await writeJson(directory, 'packages/cli/package.json', product)
   const lock = await json(directory, 'packages/cli/package-lock.json')
-  lock.version = lock.packages[''].version = '0.2.3'
+  lock.version = lock.packages[''].version = next
   for (const filename of ['package-lock.json', 'npm-shrinkwrap.json']) await writeJson(directory, `packages/cli/${filename}`, lock)
   const updated = await createReleasePlan(directory)
-  assert.equal(updated.product.version, '0.2.3')
+  assert.equal(updated.product.version, next)
   assert.deepEqual(updated.components, original.components)
   assert.deepEqual(updated.backend, original.backend)
   assert.notEqual(updated.planDigest, original.planDigest)

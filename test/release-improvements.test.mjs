@@ -66,6 +66,41 @@ test('version preparation changes product roots and guards while preserving ever
   assert.ok(plan.updates.get('.github/workflows/npm-release.yml').includes(`RELEASE_VERSION: ${next}`))
 })
 
+test('version preparation updates tarball filenames without rewriting longer numeric versions', async (t) => {
+  const root = fileURLToPath(new URL('../', import.meta.url))
+  const descriptor = JSON.parse(await fs.readFile(path.join(root, 'release/product.json'), 'utf8'))
+  const current = descriptor.product.version
+  const parts = current.split('.')
+  parts[2] = String(Number(parts[2]) + 1)
+  const next = parts.join('.')
+  const fixture = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), 'ps-version-tarballs-'))
+  t.after(() => fs.rm(fixture, { recursive: true, force: true }))
+  const seed = await planVersionUpdate(root, next)
+  for (const [file, contents] of seed.originals) {
+    const target = path.join(fixture, file)
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    await fs.writeFile(target, contents)
+  }
+  const tarballReferences = (version) => [
+    `physicalsystems-${version}.tgz`,
+    `https://registry.npmjs.org/physicalsystems/-/physicalsystems-${version}.tgz`,
+    `physicalsystems-${version}.tgz.sha256`,
+    `physicalsystems@${version}`,
+    `Published version ${version}.`,
+  ]
+  const longerVersions = [
+    `physicalsystems-${current}0.tgz`,
+    `physicalsystems-1${current}.tgz`,
+    `physicalsystems-${current}.1.tgz`,
+    `physicalsystems-1.${current}.tgz`,
+  ]
+  const original = [...tarballReferences(current), ...longerVersions].join('\n')
+  await fs.writeFile(path.join(fixture, 'README.md'), original)
+  const plan = await planVersionUpdate(fixture, next)
+  assert.equal(plan.updates.get('README.md'), [...tarballReferences(next), ...longerVersions].join('\n'))
+  assert.equal(await fs.readFile(path.join(fixture, 'README.md'), 'utf8'), original, 'planning does not mutate its inputs')
+})
+
 test('version command regenerates a consistent checkout and refuses a dirty tree', async (t) => {
   const fixture = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), 'ps-version-'))
   t.after(() => fs.rm(fixture, { recursive: true, force: true }))

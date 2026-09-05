@@ -45,7 +45,7 @@ test('workflow drift fails before creating outputs or invoking preparation', asy
   await withFixture(async (fixture) => {
     const filename = path.join(fixture, '.github/workflows/npm-release.yml')
     const workflow = await fs.readFile(filename, 'utf8')
-    await fs.writeFile(filename, workflow.replace('  RELEASE_VERSION: 0.2.2', '  RELEASE_VERSION: 9.9.9'))
+    await fs.writeFile(filename, workflow.replace('  RELEASE_VERSION: 0.2.3', '  RELEASE_VERSION: 9.9.9'))
     let prepared = false
     const output = path.join(fixture, 'never-created')
     await assert.rejects(runReleaseCommand(['prepare', '--output', output], {

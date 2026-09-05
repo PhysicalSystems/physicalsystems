@@ -58,7 +58,9 @@ export async function planVersionUpdate(sourceRoot, next) {
   assert.equal(originals.get(jsonFiles[2]), originals.get(jsonFiles[3]), 'Lock and shrinkwrap must be byte-identical')
   const oldHash = digest(originals.get(jsonFiles[3]))
   const newHash = digest(updates.get(jsonFiles[3]))
-  const pattern = new RegExp(`(?<![\\d.])${current.replaceAll('.', '\\.')}(?![\\d.])`, 'g')
+  // A dot may introduce a filename extension or punctuation; only a following
+  // numeric component extends the version and must remain untouched.
+  const pattern = new RegExp(`(?<![\\d.])${current.replaceAll('.', '\\.')}(?!\\d|\\.\\d)`, 'g')
   for (const file of versionFiles) {
     let value = originals.get(file).replace(pattern, next)
       .replaceAll(current.replaceAll('.', '\\.'), next.replaceAll('.', '\\.'))

@@ -5,7 +5,7 @@ import { advanceCoordinator, createDispatchStages, parsePublishArguments, readPu
 
 const id = '01234567-89ab-4cde-8123-456789abcdef'
 const pin = { distribution: 'tinyedge-runtime', version: '0.2.0', wheelSha256: 'a'.repeat(64) }
-const release = { product: { version: '0.2.2' }, components: { runtime: pin, node: { ...pin, distribution: 'physicalsystems-node' } } }
+const release = { product: { version: '0.2.3' }, components: { runtime: pin, node: { ...pin, distribution: 'physicalsystems-node' } } }
 const values = { '--node-candidate': '123', '--node-metadata-sha256': 'b'.repeat(64) }
 async function fixture(action = 'verify-publishers', published = async () => true, options = values) {
   return { contractVersion: 'physicalsystems-release-coordinator-v1', repository: 'PhysicalSystems/physicalsystems',

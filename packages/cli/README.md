@@ -9,19 +9,19 @@ The package is designed for Windows x64/ARM64 and Ubuntu 22.04/24.04 desktop
 x64 with Node.js 22.19.0 or newer. Headless Linux, Raspberry Pi, other Linux
 targets and macOS have not yet passed the package qualification boundary.
 
-## Install version 0.2.2
+## Install version 0.2.3
 
 Registry tags can change. Require the following check to succeed before
-treating `0.2.2` as a published application:
+treating `0.2.3` as a published application:
 
 ```bash
-npm view physicalsystems@0.2.2 version --json
+npm view physicalsystems@0.2.3 version --json
 ```
 
 Run that exact version without a persistent installation:
 
 ```bash
-npx physicalsystems@0.2.2
+npx physicalsystems@0.2.3
 ```
 
 `npx` runs an isolated package command; it does not create a global or
@@ -30,12 +30,12 @@ persistent `physicalsystems` installation.
 Or install an exact persistent command:
 
 ```bash
-npm install --global physicalsystems@0.2.2
+npm install --global physicalsystems@0.2.3
 physicalsystems
 ```
 
 The immutable `tinyedge@0.1.3` and `tinyedge@0.1.5` releases are historical
-product identities. They are not part of the `physicalsystems@0.2.2` package
+product identities. They are not part of the `physicalsystems@0.2.3` package
 graph and are not recommended for a new Physical Systems installation.
 
 The package requires Node.js 22.19.0 or newer. On an older runtime, npm may
@@ -76,9 +76,18 @@ draft does not authorize teaching, exploration or robot movement. `Run` and
 `Verify` remain locked until a separate commissioned executor supplies the
 versioned lifecycle, explicit limits and result evidence described below.
 
-### Version 0.2.2 terminal and discovery improvements
+### Version 0.2.3 camera preview and recovery fixes
 
-Version 0.2.2 keeps the persistent workflow summary compact below the input,
+Basic camera preview is available through `/workcell` without commissioning.
+Valid images and their exact metadata remain visible until a replacement is
+decoded, or until freshness expires. Stop remains independent of assistant
+work; unconfirmed outcomes retain an explicit retry and cleanup path. The
+browser recovers from intermittent or silent connection failures, and provides
+Reconnect when automatic attempts are exhausted. Planning and request errors
+describe the actual blocker instead of prescribing commissioning for every
+rejected proposal. The existing Node and Runtime versions are unchanged.
+
+The compact terminal summary introduced in 0.2.2 stays below the input,
 so the conversation and editor remain together. `/physical-details` shows the
 complete current device inventory, planning/commissioning details and route
 evidence in the conversation. It reads the retained snapshot without opening

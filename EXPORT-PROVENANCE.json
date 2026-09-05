@@ -11,7 +11,7 @@
   },
   "candidatePayload": {
     "fileCount": 1141,
-    "sha256": "590ee35393604eb8727810d868eed67ca0efff4c7eea9f2b0d68dafdf9a46cd8",
+    "sha256": "8558e3968c9d6d1720e43e71418fc60929c3123f4da869ab2c3472b7b0ca995d",
     "canonicalization": "Exclude .git, every node_modules directory, release-artifacts, verification-evidence, and EXPORT-PROVENANCE.json; sort paths ordinally after replacing backslashes with forward slashes; normalize CRLF or CR to LF for text files without NUL bytes and leave binary bytes unchanged; concatenate lowercase SHA-256, two spaces, path, and LF for each file; SHA-256 the UTF-8 byte sequence."
   },
   "boundary": {
