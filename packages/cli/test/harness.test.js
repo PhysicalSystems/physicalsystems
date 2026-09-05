@@ -178,6 +178,8 @@ test('native Harness uses Pi runtime with only reviewed TinyEdge resources and t
     extensionFactories: [calls.services.resourceLoaderOptions.extensionFactories[0]],
   })
   assert.match(calls.services.resourceLoaderOptions.systemPrompt, /Physical Systems Harness assistant/)
+  assert.match(calls.services.resourceLoaderOptions.systemPrompt, /direct the operator to \/workcell in the Harness terminal/)
+  assert.match(calls.services.resourceLoaderOptions.systemPrompt, /Basic camera preview does not require commissioning/)
   assert.doesNotMatch(calls.services.resourceLoaderOptions.systemPrompt, /signed-in user's TinyEdge account/)
   assert.equal(extensionOptions.standalone, true)
   assert.equal(extensionOptions.cloudEnabled, false)

@@ -13,9 +13,9 @@ const MAX_PACKAGE_FILE_BYTES = 16 * 1024
 const PACKAGES = Object.freeze([
   Object.freeze({
     id: 'inspect-workcell',
-    description: 'Inspect connected hardware and explain observed candidates, adapter availability, commissioning gaps, and physical capability readiness without moving hardware.',
+    description: 'Inspect connected hardware, guide operator camera preview through /workcell, and explain observed candidates, adapter availability, commissioning gaps, and physical capability readiness without moving hardware.',
     capabilities: Object.freeze([]),
-    skillHash: '20900858b0c6a0d0c83bb205896733494a82af5229c355ccf39568ced0bcd421',
+    skillHash: 'ae163bf628e38d233183f0a409ddbc03040543221ed6e97bc6bfe4662bc564cc',
     bindingHash: 'b5ed7dff14e9d1808dfe1d43734274c6c9faeacd3b1024f3b6f952a707a0d4f8',
   }),
   Object.freeze({

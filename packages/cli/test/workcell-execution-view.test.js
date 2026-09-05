@@ -38,7 +38,7 @@ async function view(t, handle = () => null) {
     location: { hash: '#token=local-view-test', pathname: '/', reload() {} }, history: { replaceState(_a, _b, path) { assert.equal(path, '/') } },
     Option: class extends Element { constructor(text, value) { super('option', text); this.value = value } },
     URL, URLSearchParams, AbortController, AbortSignal, TextDecoder, cameraIsFresh, executionReadIsFresh, executionApprovalAvailable,
-    setInterval() {}, setTimeout, addEventListener: (name, callback) => handlers.set(name, callback),
+    setInterval() {}, setTimeout, clearTimeout, addEventListener: (name, callback) => handlers.set(name, callback),
     fetch: async (path, options) => {
       calls.push({ path, options })
       if (path === '/api/state') return Response.json(state)

@@ -54,6 +54,30 @@ test('skill metadata is advertised without generic read or path-based activation
   assert.ok(!prompt.includes(bundledRoot))
 })
 
+test('reviewed inspection skill directs candidate-only camera diagnostics to explicit operator preview', async () => {
+  const registry = loadCuratedAgentSkills({ loadSkillsFromDir })
+  assert.match(registry.prompt(), /inspect-workcell:.*guide operator camera preview through \/workcell/)
+  const tool = createReadAgentSkillTool({ registry })
+  const result = await tool.execute('camera-diagnostics', { skillId: 'inspect-workcell' })
+  const payload = JSON.parse(result.content[0].text)
+  const instructions = payload.instructions.replace(/\s+/g, ' ')
+  assert.match(instructions, /"show the camera", "check whether the camera works", or "see whether the camera produces an image"/)
+  assert.match(instructions, /direct the operator to `\/workcell` in the Harness terminal/)
+  assert.match(instructions, /explicitly select an observed camera and click \*\*Start preview\*\*/)
+  assert.match(instructions, /Opening the view does not open a camera/)
+  assert.match(instructions, /Basic camera preview does not require commissioning, a commissioned workcell, robot readiness, or hand-eye calibration/)
+  assert.match(instructions, /even with candidate-only discovery and a not-commissioned camera/)
+  assert.match(instructions, /Do not call `plan_physical_workflow` or `preview_physical_capability` solely for this request/)
+  assert.match(instructions, /missing typed capture-frame capability or a candidate-only execution-planning gap does not establish that browser preview is unavailable/)
+  assert.match(instructions, /assistant has no local camera-start or frame-viewing tool/)
+  assert.match(instructions, /not calibration evidence, detector output, execution readiness or robot-motion approval/)
+  assert.match(instructions, /physical outcome requiring execution planning/)
+  assert.match(instructions, /Do not install dependencies, download drivers, run scripts, read arbitrary files, enable torque, or move a device/)
+  assert.deepEqual(payload.binding.capabilities, [])
+  assert.deepEqual(payload.permissionsGranted, [])
+  assert.equal(payload.physicalExecutionAuthorized, false)
+})
+
 test('ambient user/project packages and local duplicates are never passed to the parser', (t) => {
   const { temporary, packageRoot } = fixture(t)
   for (const ambient of [path.join(temporary, '.pi', 'skills', 'transfer-container'), path.join(temporary, '.agents', 'skills', 'attack')]) {
