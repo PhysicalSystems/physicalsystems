@@ -193,3 +193,39 @@ test('physical and cloud prompts explain candidate evidence uncertainty, label d
     assert.match(prompt, /never authorize motion/i)
   }
 })
+
+test('candidate-only camera diagnostic guidance routes the operator to browser preview without commissioning', async () => {
+  const tools = createPhysicalPiTools({ defineTool: (tool) => tool, client: { inspect: async () => snapshot() } })
+  const result = await tools.find((tool) => tool.name === 'inspect_physical_system').execute()
+  const evidence = JSON.parse(result.content[0].text)
+  assert.equal(evidence.discovery.mode, 'candidates')
+  assert.equal(evidence.discovery.devices[0].commissioningStatus, 'not-commissioned')
+  assert.deepEqual(evidence.discovery.devices[0].assessments, UNASSESSED)
+
+  // These are prompt-contract regressions, not a live model or camera test.
+  for (const prompt of [physicalSystemsSystemPrompt(), tinyEdgeSystemPrompt(['tinyedge:read']), tinyEdgeSystemPrompt(['tinyedge:read', 'tinyedge:run'])]) {
+    for (const request of ['show the camera', 'check whether the camera works', 'see whether the camera produces an image']) {
+      assert.ok(prompt.includes(`"${request}"`), `missing diagnostic request guidance: ${request}`)
+    }
+    assert.match(prompt, /direct the operator to \/workcell in the Harness terminal/)
+    assert.match(prompt, /explicitly select an observed camera and click Start preview/)
+    assert.match(prompt, /opening the view does not open a camera/)
+    assert.match(prompt, /Basic camera preview does not require commissioning, a commissioned workcell, robot readiness, or hand-eye calibration/)
+    assert.match(prompt, /including when discovery.mode=candidates and the camera is not-commissioned/)
+    assert.match(prompt, /Do not call plan_physical_workflow or preview_physical_capability solely for basic camera preview or a visual camera check/)
+    assert.match(prompt, /missing typed capture-frame capability or a candidate-only execution-planning gap does not establish that browser preview is unavailable/)
+    assert.match(prompt, /explain that specific evidence without inventing a commissioning requirement/)
+    assert.ok(prompt.indexOf('direct the operator to /workcell') < prompt.indexOf('physical outcome requiring execution planning'))
+  }
+})
+
+test('camera preview guidance preserves assistant tool limits and evidence boundaries', () => {
+  for (const prompt of [physicalSystemsSystemPrompt(), tinyEdgeSystemPrompt(['tinyedge:read', 'tinyedge:run'])]) {
+    assert.match(prompt, /assistant has no local camera-start or frame-viewing tool/)
+    assert.match(prompt, /Do not claim to open the camera, start preview, see its image, or verify capture/)
+    assert.match(prompt, /operator controls camera selection and starting or stopping capture in \/workcell/)
+    assert.match(prompt, /not calibration evidence, detector output, execution readiness or robot-motion approval/)
+    assert.match(prompt, /Never request, reveal, repeat, or infer credentials/)
+  }
+  assert.match(physicalSystemsSystemPrompt(), /Candidate-only discovery cannot ground an execution plan/)
+})

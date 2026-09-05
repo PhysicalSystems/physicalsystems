@@ -409,14 +409,14 @@ test('model selection updates the view and busy or unconfigured Pi context canno
   await pi.commands.get('workcell').handler('', ctx)
   const controller = host()
   assert.equal(controller.snapshot().agent.model, null)
-  await assert.rejects(controller.submitIntent('Inspect the workcell'), /busy or has no model/)
+  await assert.rejects(controller.submitIntent('Inspect the workcell'), { code: 'model_unavailable', message: 'Select a model in the Harness terminal before sending a request' })
   const selectedContext = { ...ctx, model: { provider: 'new-provider', id: 'new-model' }, hasPendingMessages: () => true }
   await pi.handlers.get('model_select')({}, selectedContext)
   assert.equal(controller.snapshot().agent.model, 'new-provider/new-model')
-  await assert.rejects(controller.submitIntent('Inspect the workcell'), /busy or has no model/)
+  await assert.rejects(controller.submitIntent('Inspect the workcell'), { code: 'agent_busy', message: 'Wait for the current agent request to finish before starting another request' })
   selectedContext.hasPendingMessages = () => false
   selectedContext.isIdle = () => false
-  await assert.rejects(controller.submitIntent('Inspect the workcell'), /busy or has no model/)
+  await assert.rejects(controller.submitIntent('Inspect the workcell'), { code: 'agent_busy', message: 'Wait for the current agent request to finish before starting another request' })
   selectedContext.isIdle = () => true
   await controller.submitIntent('Inspect the workcell')
   await workcellTick()
@@ -455,7 +455,7 @@ test('browser availability sees terminal preflight before Pi marks itself busy a
   assert.equal(ctx.isIdle(), true, 'the regression is specifically before the SDK updates its streaming flag')
   const before = controller.snapshot()
   assert.equal(before.agent.canPrompt, false)
-  await assert.rejects(controller.submitIntent('Competing browser request'), /busy or has no model/)
+  await assert.rejects(controller.submitIntent('Competing browser request'), { code: 'agent_busy', message: 'Wait for the current agent request to finish before starting another request' })
   assert.equal(controller.snapshot().revision, before.revision)
   assert.equal(controller.snapshot().workflow.generation, before.workflow.generation)
   await pi.handlers.get('before_agent_start')({ prompt: 'Terminal-owned request' }, ctx)
@@ -475,7 +475,7 @@ test('a host without a shared-session gate availability contract cannot accept b
   await pi.commands.get('workcell').handler('', ctx)
   const before = host().snapshot()
   assert.equal(before.agent.canPrompt, false)
-  await assert.rejects(host().submitIntent('Inspect the workcell'), /busy or has no model/)
+  await assert.rejects(host().submitIntent('Inspect the workcell'), { code: 'agent_busy', message: 'Wait for the current agent request to finish before starting another request' })
   assert.equal(host().snapshot().revision, before.revision)
   assert.equal(calls.intents.length, 0)
 })

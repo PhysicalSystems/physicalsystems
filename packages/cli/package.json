@@ -1,6 +1,6 @@
 {
   "name": "physicalsystems",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Local Physical Systems Harness for real-world hardware",
   "type": "module",
   "bin": {

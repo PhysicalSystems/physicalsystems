@@ -16,17 +16,31 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
   let state = null
   let connected = false
   let mutating = false
+  let ordinaryRequest = null
   let selectedCandidate = ''
   let choicesKey = ''
   let candidatesKey = ''
   let conversationKey = ''
   let workflowKey = ''
-  let currentFrame = null
+  let displayedCamera = null
+  let displayedObservationStale = false
   let frameUrl = null
-  let frameRequest = null
-  let pendingFrameId = null
+  let pendingFrame = null
+  let frameExpiry = null
+  let observationExpiry = null
+  let previewSelectionChanged = false
+  let stoppedCaptureSessionId = null
+  let cameraStarting = false
+  let cameraStopping = false
+  let cameraStopState = null
+  let cameraStopGeneration = 0
   let stopped = false
   let eventAbort = null
+  let streamRunning = false
+  let streamWatchdogTimer = null
+  let reconnectTimer = null
+  let resumeReconnect = null
+  const notices = { action: '', connection: '', camera: '' }
   let executionPending = false
   let stopPending = false
   let selectedConfiguration = ''
@@ -34,7 +48,11 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
   let configurationOptionsKey = ''
   let runHistoryKey = ''
   let runDetailsKey = ''
-  function notice(message = '') { text('notice', message); byId('notice').hidden = !message }
+  function notice(message = '', category = 'action') {
+    notices[category] = message
+    const value = Object.values(notices).filter(Boolean).join(' ')
+    text('notice', value); byId('notice').hidden = !value
+  }
   function connection(isConnected, label) {
     connected = isConnected
     text('connection-state', label)
@@ -53,15 +71,84 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     }
     return response
   }
+  async function boundedJson(path, body) {
+    const controller = new AbortController()
+    let timeout
+    const deadline = new Promise((_, reject) => {
+      timeout = setTimeout(() => {
+        const error = new Error('The local request timed out. Its outcome must be checked before retrying.')
+        controller.abort(error)
+        reject(error)
+      }, 6500)
+    })
+    try { return await Promise.race([(async () => (await api(path, body, controller.signal)).json())(), deadline]) }
+    finally { clearTimeout(timeout) }
+  }
   async function action(path, body) {
     if (mutating || !connected) return
-    mutating = true; controls(); notice()
+    const request = {}
+    ordinaryRequest = request
+    const sessionId = state?.sessionId
+    const generation = cameraStopGeneration
+    const starting = path === '/api/camera/start'
+    if (starting) { cameraStarting = true; cameraStopState = null }
+    mutating = true; controls(); notice('', starting ? 'camera' : 'action')
     try {
-      const result = await (await api(path, body)).json()
-      if (result.contractVersion === 'physicalsystems-workcell-view-v1') render(result)
+      const result = await boundedJson(path, body)
+      if (stopped || ordinaryRequest !== request || state?.sessionId !== sessionId) return false
+      if (generation === cameraStopGeneration
+        && result.contractVersion === 'physicalsystems-workcell-view-v1') render(result)
       return true
-    } catch (error) { notice(error.message); return false }
-    finally { mutating = false; controls() }
+    } catch (error) {
+      if (!stopped && ordinaryRequest === request && state?.sessionId === sessionId && generation === cameraStopGeneration) notice(error.message, starting ? 'camera' : 'action')
+      return false
+    } finally {
+      if (ordinaryRequest === request) {
+        ordinaryRequest = null; if (starting) cameraStarting = false; mutating = false
+        if (starting && !stopped) renderCamera(state.camera)
+        controls()
+      }
+    }
+  }
+  function cameraStopTarget() {
+    const camera = state?.camera
+    if (camera?.stopCaptureSessionId) return camera.stopCaptureSessionId
+    if (cameraStopState === 'unconfirmed' && stoppedCaptureSessionId) return stoppedCaptureSessionId
+    if (cameraStopState === 'confirmed' && camera?.status?.captureSessionId === stoppedCaptureSessionId) return null
+    if (camera?.status?.captureSessionId && !['idle', 'stopped'].includes(camera.status.phase)) return camera.status.captureSessionId
+    return null
+  }
+  async function stopCamera() {
+    if (cameraStopping || stopped || !token) return
+    const target = cameraStopTarget()
+    if (!target && !cameraStarting && state?.camera?.pending !== 'start') return
+    const sessionId = state.sessionId
+    const generation = ++cameraStopGeneration
+    stoppedCaptureSessionId = target
+    cameraStopState = 'pending'
+    cameraStopping = true
+    hideFrame(); renderCamera(state.camera); controls(); notice('', 'camera')
+    try {
+      const result = await boundedJson('/api/camera/stop', { expectedCaptureSessionId: target })
+      if (stopped || state?.sessionId !== sessionId || generation !== cameraStopGeneration) return
+      const camera = result.sessionId === state.sessionId && result.revision < state.revision ? state.camera : result.camera
+      const confirmed = !camera?.stopUnconfirmed && camera?.pending !== 'start'
+        && camera?.status?.phase === 'stopped' && (!target || camera.status.captureSessionId === target)
+      cameraStopState = confirmed ? 'confirmed' : 'unconfirmed'
+      if (confirmed) stoppedCaptureSessionId = camera.status.captureSessionId
+      render(result)
+      if (!confirmed) notice('Camera Stop is not confirmed. Retry Stop preview or check the capture status in the Harness.', 'camera')
+    } catch (error) {
+      if (state?.sessionId !== sessionId || generation !== cameraStopGeneration) return
+      cameraStopState = 'unconfirmed'
+      notice(`Camera Stop is not confirmed. Retry Stop preview or reopen /workcell. ${error.message}`, 'camera')
+    } finally {
+      if (state?.sessionId === sessionId && generation === cameraStopGeneration) {
+        cameraStopping = false
+        if (!stopped) renderCamera(state.camera)
+        controls()
+      }
+    }
   }
   async function executionAction(kind, body) {
     // A stop request must not wait for approval, refresh, camera I/O or SSE recovery.
@@ -84,8 +171,11 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     const camera = state?.camera?.status
     byId('refresh').disabled = busy || working
     byId('camera-select').disabled = busy || working
-    byId('camera-start').disabled = busy || working || !selectedCandidate || ['live', 'starting', 'stale', 'stop-unconfirmed'].includes(camera?.phase)
-    byId('camera-stop').disabled = busy || working || !camera?.captureSessionId || ['idle', 'stopped'].includes(camera.phase)
+    byId('camera-start').disabled = busy || working || cameraStarting || cameraStopping || state?.camera?.pending === 'start'
+      || state?.camera?.stopUnconfirmed || cameraStopState === 'unconfirmed' || !selectedCandidate
+      || ['live', 'starting', 'stale', 'stop-unconfirmed'].includes(camera?.phase)
+    byId('camera-stop').disabled = !token || stopped || cameraStopping || state?.camera?.stopPending
+      || (!cameraStopTarget() && !cameraStarting && state?.camera?.pending !== 'start')
     byId('intent-submit').disabled = busy || !state?.agent?.canPrompt
     byId('intent-input').disabled = busy || working
     for (const button of byId('choice').querySelectorAll('button,input')) button.disabled = busy
@@ -102,47 +192,149 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     byId('run-reconcile').disabled = executionBusy || !fresh || !execution?.canReconcile
     byId('run-receipt').disabled = executionBusy || !execution?.run
   }
-  function hideFrame() {
-    currentFrame = null
-    frameRequest?.abort(); frameRequest = null
-    pendingFrameId = null
+  function clearDisplayedFrame() {
+    displayedCamera = null
+    displayedObservationStale = false
+    clearTimeout(frameExpiry); frameExpiry = null
+    clearTimeout(observationExpiry); observationExpiry = null
     byId('preview').hidden = true
     byId('preview').removeAttribute('src')
     if (frameUrl) URL.revokeObjectURL(frameUrl)
     frameUrl = null
     byId('frame-kind').hidden = true
     byId('camera-empty').hidden = false
+    text('frame-details', 'No current frame received')
+    text('observation', 'Unknown · preview is not a detector')
+  }
+  function cancelPendingFrame() {
+    if (!pendingFrame) return
+    pendingFrame.controller.abort()
+    clearTimeout(pendingFrame.expiry)
+    if (pendingFrame.url) URL.revokeObjectURL(pendingFrame.url)
+    pendingFrame.url = null
+    pendingFrame = null
+  }
+  function hideFrame() {
+    cancelPendingFrame()
+    clearDisplayedFrame()
+  }
+  function cameraIdentity(camera) {
+    const frame = camera?.frame
+    if (!frame || !frame.candidateId || !frame.candidateDigest || !frame.captureSessionId
+      || !frame.capture?.clockSessionId || !frame.source?.hardwareIdentity
+      || !frame.source?.kind || !frame.source?.identityStability
+      || frame.candidateId !== camera.status?.selectedCandidateId
+      || frame.captureSessionId !== camera.status?.captureSessionId) return null
+    return JSON.stringify([frame.candidateId, frame.candidateDigest, frame.captureSessionId,
+      frame.capture.clockSessionId, frame.source.hardwareIdentity, frame.source.kind, frame.source.identityStability])
+  }
+  function sameCamera(left, right) {
+    const identity = cameraIdentity(left)
+    return identity !== null && identity === cameraIdentity(right)
+  }
+  function cameraCanDisplay(camera) {
+    return connected && !stopped && !camera.stopPending && !camera.stopUnconfirmed
+      && !(['pending', 'unconfirmed'].includes(cameraStopState) && !stoppedCaptureSessionId)
+      && cameraIsFresh(camera) && cameraIdentity(camera) !== null
+      && camera.status.captureSessionId !== stoppedCaptureSessionId
+      && (!previewSelectionChanged || selectedCandidate === camera.status.selectedCandidateId)
+  }
+  function expireDisplayedFrame() {
+    if (displayedCamera && !cameraIsFresh(displayedCamera)) {
+      // A newer snapshot must not renew the lifetime of the pixels on screen.
+      clearDisplayedFrame()
+      text('frame-details', 'Displayed frame expired · awaiting a fresh frame')
+      text('observation', 'Unknown · stale preview')
+    }
+  }
+  function observationRemainingMs(camera) {
+    const observation = camera.frame?.observation
+    if (!observation || observation.status === 'stale' || camera.status.observationStatus === 'stale'
+      || (state?.camera?.previewFrameId === camera.previewFrameId && state.camera.status?.observationStatus === 'stale')) return 0
+    try {
+      const lifetime = Number(BigInt(observation.expiresAtMonotonicNs) - BigInt(observation.capturedAtMonotonicNs)) / 1e6
+      const remaining = lifetime - camera.status.frameAgeMs - (Date.now() - Date.parse(camera.receivedAt))
+      return Number.isFinite(remaining) ? Math.max(0, remaining) : 0
+    } catch { return 0 }
+  }
+  function renderObservation(camera) {
+    if (observationRemainingMs(camera) <= 0) displayedObservationStale = true
+    text('observation', !camera.frame.observation ? 'Unknown · preview is not a detector'
+      : displayedObservationStale ? 'Unknown · stale observation'
+        : `${camera.status.observationStatus || 'Provisional'} · exact-frame observation, not execution permission`)
+  }
+  function renderFrameMetadata(camera) {
+    const { frame, status } = camera
+    text('frame-details', `Frame ${frame.sequence} · age at receipt ${status.frameAgeMs} ms · ${frame.captureSessionId}`)
+    renderObservation(camera)
+    const synthetic = frame.sourceKind === 'synthetic' || frame.source?.kind === 'synthetic'
+    text('frame-kind', synthetic ? 'SYNTHETIC TEST FRAME · NOT HARDWARE' : 'LIVE PREVIEW · NOT VERIFIED STATE')
+    byId('frame-kind').hidden = false
   }
   async function showFrame(camera) {
-    if (!cameraIsFresh(camera)) { hideFrame(); return }
-    if (currentFrame === camera.previewFrameId) return
-    if (pendingFrameId === camera.previewFrameId) return
-    // Never leave the previous image visible under the new frame's metadata.
-    hideFrame()
-    const request = new AbortController()
-    frameRequest = request
-    const id = camera.previewFrameId
-    pendingFrameId = id
+    if (!cameraCanDisplay(camera)) { hideFrame(); return }
+    if (displayedCamera && !sameCamera(displayedCamera, camera)) clearDisplayedFrame()
+    if (pendingFrame && !sameCamera(pendingFrame.camera, camera)) cancelPendingFrame()
+    expireDisplayedFrame()
+    if (displayedCamera?.previewFrameId === camera.previewFrameId) { renderObservation(displayedCamera); return }
+    if (pendingFrame) return
+    // Serialize downloads; newer SSE frames coalesce while this exact frame loads.
+    // Requiring it to stay the newest frame would starve previews on slow links.
+    const request = { camera, sessionId: state.sessionId, controller: new AbortController(), url: null, expiry: null }
+    pendingFrame = request
+    request.expiry = setTimeout(() => {
+      if (pendingFrame !== request) return
+      cancelPendingFrame()
+      expireDisplayedFrame()
+      if (state?.camera?.previewFrameId !== camera.previewFrameId) void showFrame(state?.camera)
+    }, Math.max(0, Date.parse(camera.receivedAt) + camera.status.staleAfterMs - camera.status.frameAgeMs - Date.now()))
+    const canCommit = () => pendingFrame === request && !request.controller.signal.aborted
+      && state?.sessionId === request.sessionId && cameraCanDisplay(state.camera)
+      && cameraIsFresh(camera) && sameCamera(camera, state.camera)
     try {
-      const response = await api(`/api/camera/frame/${id}`, undefined, request.signal)
+      const response = await api(`/api/camera/frame/${camera.previewFrameId}`, undefined, request.controller.signal)
       const blob = await response.blob()
-      if (request.signal.aborted || state?.camera?.previewFrameId !== id || !connected) return
-      if (!cameraIsFresh(state.camera)) { hideFrame(); return }
+      if (!canCommit()) return
       if (blob.type !== 'image/jpeg') throw new Error('Unsupported preview image')
-      const nextUrl = URL.createObjectURL(blob)
+      request.url = URL.createObjectURL(blob)
+      const image = document.createElement('img')
+      image.src = request.url
+      await image.decode()
+      if (!canCommit()) return
+      const previous = byId('preview')
+      image.id = previous.id
+      image.alt = previous.alt
+      image.className = previous.className
+      image.hidden = false
       const oldUrl = frameUrl
-      frameUrl = nextUrl; currentFrame = id
-      pendingFrameId = null
-      byId('preview').src = nextUrl; byId('preview').hidden = false
+      frameUrl = request.url; request.url = null
+      displayedCamera = camera
+      displayedObservationStale = false
+      // The decoded element and its own evidence change in one synchronous turn.
+      previous.replaceWith(image)
+      renderFrameMetadata(camera)
+      clearTimeout(observationExpiry)
+      if (camera.frame.observation) observationExpiry = setTimeout(() => {
+        if (displayedCamera === camera) renderObservation(camera)
+      }, Math.min(observationRemainingMs(camera), camera.status.staleAfterMs))
       byId('camera-empty').hidden = true
-      const synthetic = camera.frame?.sourceKind === 'synthetic' || camera.frame?.source?.kind === 'synthetic'
-      text('frame-kind', synthetic ? 'SYNTHETIC TEST FRAME · NOT HARDWARE' : 'LIVE PREVIEW · NOT VERIFIED STATE')
-      byId('frame-kind').hidden = false
       if (oldUrl) URL.revokeObjectURL(oldUrl)
+      clearTimeout(frameExpiry)
+      frameExpiry = setTimeout(expireDisplayedFrame, Math.max(0,
+        Date.parse(camera.receivedAt) + camera.status.staleAfterMs - camera.status.frameAgeMs - Date.now()))
     } catch (error) {
-      if (!request.signal.aborted && state?.camera?.previewFrameId === id) {
-        hideFrame()
-        text('frame-details', 'Exact frame unavailable · awaiting next frame')
+      if (pendingFrame === request && !request.controller.signal.aborted) {
+        expireDisplayedFrame()
+        if (!displayedCamera) text('frame-details', 'Exact frame unavailable · awaiting next frame')
+      }
+    } finally {
+      clearTimeout(request.expiry)
+      if (request.url) URL.revokeObjectURL(request.url)
+      request.url = null
+      if (pendingFrame === request) {
+        pendingFrame = null
+        // Do not retry a failing frame in a tight loop; only advance to newer state.
+        if (state?.camera?.previewFrameId !== camera.previewFrameId) void showFrame(state?.camera)
       }
     }
   }
@@ -158,18 +350,33 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
       for (const candidate of candidates) select.add(new Option(candidate.displayName || candidate.candidateId, candidate.candidateId))
       select.value = selectedCandidate
     }
-    const phase = camera?.availability === 'unavailable' ? 'unavailable'
+    if (cameraStopState && !stoppedCaptureSessionId && !status?.captureSessionId && status?.phase === 'idle'
+      && !camera.pending && !camera.stopPending && !camera.stopUnconfirmed && !cameraStarting) cameraStopState = 'cancelled'
+    else if (cameraStopState && (!stoppedCaptureSessionId || status?.captureSessionId === stoppedCaptureSessionId)
+      && status?.phase === 'stopped' && !camera.stopUnconfirmed && camera.pending !== 'start') {
+      cameraStopState = 'confirmed'; stoppedCaptureSessionId = status.captureSessionId
+    }
+    else if (stoppedCaptureSessionId && status?.captureSessionId && status.captureSessionId !== stoppedCaptureSessionId
+      && !camera.stopUnconfirmed && !cameraStopping) cameraStopState = null
+    if (['confirmed', 'cancelled'].includes(cameraStopState)) notice('', 'camera')
+    const stoppedLocally = cameraStopState && (!stoppedCaptureSessionId || !status?.captureSessionId || status.captureSessionId === stoppedCaptureSessionId
+      || camera?.availability === 'unavailable')
+    const phase = cameraStopping || camera?.stopPending ? 'stopping'
+      : camera?.stopUnconfirmed || (stoppedLocally && cameraStopState === 'unconfirmed') ? 'stop-unconfirmed'
+      : stoppedLocally && cameraStopState === 'cancelled' ? 'start-cancelled'
+      : stoppedLocally && cameraStopState === 'confirmed' ? 'stopped'
+      : camera?.availability === 'unavailable' ? 'unavailable'
       : status?.phase === 'live' && !cameraIsFresh(camera) ? 'stale' : status?.phase || 'idle'
     text('camera-state', phase === 'live' ? 'LIVE PREVIEW' : phase.replaceAll('-', ' ').toUpperCase())
     byId('camera-state').className = `badge ${phase === 'live' ? 'live' : ['stale', 'error', 'unavailable', 'stop-unconfirmed'].includes(phase) ? 'warning' : ''}`
-    const frame = camera?.frame
-    text('frame-details', phase === 'stale' ? 'No fresh camera frame is available' : frame ? `Frame ${frame.sequence} · age at receipt ${status.frameAgeMs ?? '?'} ms · ${frame.captureSessionId}` : 'No current frame received')
-    text('observation', phase === 'stale' ? 'Unknown · stale preview' : frame?.observation ? `${status.observationStatus || 'Provisional'} · exact-frame observation, not execution permission` : 'Unknown · preview is not a detector')
     const selected = candidates.find((candidate) => candidate.candidateId === status?.selectedCandidateId)
-    text('camera-detail', camera?.error || (selected ? `${selected.displayName} · ${selected.identityStability} identity · host read timing, not a bounded sensor-exposure age.` : 'Refresh discovery to find cameras. Select one explicitly; no automatic camera switching.'))
+    const stopDetail = phase === 'stopping' ? 'Requesting camera Stop. Capture release is not yet confirmed.'
+      : phase === 'stop-unconfirmed' ? 'Camera Stop is not confirmed. Retry Stop preview or reopen /workcell to check capture status.'
+        : phase === 'start-cancelled' ? 'Preview Start was cancelled before a capture began. Select a camera to start a new preview.' : null
+    text('camera-detail', stopDetail || camera?.error || (selected ? `${selected.displayName} · ${selected.identityStability} identity · host read timing, not a bounded sensor-exposure age.` : 'Refresh discovery to find cameras. Select one explicitly; no automatic camera switching.'))
     const empty = byId('camera-empty')
-    empty.querySelector('h3').textContent = { idle: 'No camera capture started', starting: 'Waiting for the first frame', stopped: 'Preview stopped', stale: 'Camera frame is stale', error: 'Camera preview failed', unavailable: 'Camera preview unavailable', 'stop-unconfirmed': 'Capture stop is not confirmed' }[phase] || 'Waiting for the exact frame'
-    empty.querySelector('p').textContent = camera?.error || (phase === 'idle' ? 'Choose a camera observed by the local node, then start preview. Opening this view does not open a camera.' : 'No current image is being claimed. Physical state remains unknown.')
+    empty.querySelector('h3').textContent = { idle: 'No camera capture started', starting: 'Waiting for the first frame', 'start-cancelled': 'Preview Start cancelled', stopping: 'Stopping camera preview', stopped: 'Preview stopped', stale: 'Camera frame is stale', error: 'Camera preview failed', unavailable: 'Camera preview unavailable', 'stop-unconfirmed': 'Capture stop is not confirmed' }[phase] || 'Waiting for the exact frame'
+    empty.querySelector('p').textContent = stopDetail || camera?.error || (phase === 'idle' ? 'Choose a camera observed by the local node, then start preview. Opening this view does not open a camera.' : 'No current image is being claimed. Physical state remains unknown.')
     void showFrame(camera || {})
   }
   function renderAgent(agent) {
@@ -220,8 +427,12 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     text('discovery-note', snapshot?.discovery?.observedAt ? `Observed ${snapshot.discovery.observedAt} · detection alone is not readiness.` : 'Only devices reported as detected are listed; no fixed demo inventory.')
     text('node-detail', snapshot ? `${snapshot.nodeName} · ${workflow.nodeOrigin}` : `Local node · ${workflow.nodeOrigin || 'not connected'}`)
     const receipt = workflow.routeReceipt
+    const interpretation = workflow.response?.interpretation
     const panel = byId('proposal'); panel.replaceChildren()
-    text('proposal-state', receipt ? receipt.decision.decision_status === 'selected' ? 'SELECTED · NOT APPROVED' : 'NEEDS COMMISSIONING' : workflow.routeError ? 'UNAVAILABLE' : 'WAITING')
+    text('proposal-state', receipt ? receipt.decision.decision_status === 'selected' ? 'SELECTED · NOT APPROVED' : 'NO ELIGIBLE IMPLEMENTATION'
+      : workflow.routeError ? 'UNAVAILABLE' : workflow.error ? 'BLOCKED'
+        : interpretation?.status === 'ready' ? 'PLAN GROUNDED' : interpretation?.status === 'unsupported' ? 'UNSUPPORTED'
+          : interpretation?.questions?.length ? 'NEEDS INPUT' : interpretation ? 'BLOCKED' : 'WAITING')
     if (workflow.agentSkillId) panel.append(make('p', `Agent Skill: ${workflow.agentSkillId} · instructions only`, 'receipt-meta'))
     if (receipt) {
       panel.append(make('p', receipt.capabilityId, 'proposal-summary'))
@@ -238,6 +449,7 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
       panel.append(make('p', `Evaluated ${receipt.evaluatedAt}. This is a recorded decision, not a live authorization.`, 'receipt-meta'))
       panel.append(make('p', `Receipt ${receipt.receiptDigest}`, 'receipt-meta'))
     } else if (workflow.routeError) panel.append(make('p', workflow.routeError, 'error'))
+    else if (workflow.error) panel.append(make('p', workflow.error, 'error'))
     else if (workflow.response?.interpretation) {
       const interpretation = workflow.response.interpretation
       panel.append(make('p', `Workflow: ${interpretation.status}`, 'proposal-summary'))
@@ -248,6 +460,12 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
   }
   function render(next) {
     if (next.contractVersion !== 'physicalsystems-workcell-view-v1' || next.physicalExecutionAuthorized !== false) throw new Error('Unsupported workcell contract; no physical state is trusted.')
+    // HTTP action responses can arrive after a newer snapshot on the event stream.
+    if (state && state.sessionId === next.sessionId && next.revision < state.revision) return
+    if (state && state.sessionId !== next.sessionId) {
+      hideFrame(); stoppedCaptureSessionId = null; cameraStopState = null; cameraStopGeneration += 1
+      cameraStarting = false; cameraStopping = false; ordinaryRequest = null; mutating = false
+    }
     state = next
     connection(true, 'Connected to Harness')
     renderCamera(next.camera); renderAgent(next.agent); renderWorkflow(next.workflow); renderExecution(next.execution); controls()
@@ -342,55 +560,123 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
   byId('run-reconcile').onclick = () => { if (state?.execution?.run) void executionAction('reconcile', { runId: state.execution.run.runId, expectedRunDigest: state.execution.run.runDigest }) }
   byId('run-receipt').onclick = () => { if (state?.execution?.run) void executionAction('receipt', { runId: state.execution.run.runId }) }
   byId('refresh').onclick = () => action('/api/refresh', {})
-  byId('camera-select').onchange = (event) => { selectedCandidate = event.target.value; controls() }
+  byId('camera-select').onchange = (event) => {
+    selectedCandidate = event.target.value; previewSelectionChanged = true
+    hideFrame(); controls()
+  }
   byId('camera-start').onclick = () => {
     const candidate = state?.camera?.status?.availableCameras?.find((item) => item.candidateId === selectedCandidate)
     if (candidate) void action('/api/camera/start', { candidateId: candidate.candidateId, expectedCandidateDigest: candidate.candidateDigest })
   }
-  byId('camera-stop').onclick = () => action('/api/camera/stop', { expectedCaptureSessionId: state.camera.status.captureSessionId })
+  byId('camera-stop').onclick = stopCamera
   byId('intent-form').onsubmit = async (event) => {
     event.preventDefault()
     const input = byId('intent-input')
     if (input.value.trim() && await action('/api/intent', { text: input.value.trim() })) input.value = ''
   }
+  function recoveryAvailable(available) {
+    byId('reconnect').hidden = !available
+    byId('reconnect').disabled = !available || stopped || !token
+  }
+  function cancelReconnectDelay() {
+    clearTimeout(reconnectTimer); reconnectTimer = null
+    const resume = resumeReconnect; resumeReconnect = null
+    resume?.()
+  }
+  function cancelStreamWatchdog() {
+    clearTimeout(streamWatchdogTimer); streamWatchdogTimer = null
+  }
   async function stream() {
-    let failures = 0
-    while (!stopped && failures < 4) {
-      eventAbort = new AbortController()
-      try {
-        render(await (await api('/api/state', undefined, eventAbort.signal)).json())
-        const response = await api('/api/events', undefined, eventAbort.signal)
-        const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''
-        while (!stopped) {
-          const { value, done } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          if (buffer.length > 1024 * 1024) throw new Error('Workcell stream exceeded its limit')
-          let boundary
-          while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-            const block = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2)
-            const data = block.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
-            if (data) render(JSON.parse(data))
-          }
+    // Automatic retries and repeated operator clicks share one stream owner.
+    if (streamRunning || stopped || !token) return
+    streamRunning = true
+    recoveryAvailable(false)
+    let failures = 0, lastFailure = ''
+    try {
+      while (!stopped && failures < 4) {
+        const attempt = new AbortController()
+        eventAbort = attempt
+        let reader = null, validatedState = false
+        const armWatchdog = (delay) => {
+          cancelStreamWatchdog()
+          streamWatchdogTimer = setTimeout(() => attempt.abort(new Error('Harness connection timed out')), delay)
         }
-        throw new Error('Harness connection ended')
-      } catch (error) {
-        if (stopped) return
-        eventAbort.abort(); failures += 1
-        connection(false, 'Harness disconnected'); hideFrame(); notice(error.message)
-        if (failures < 4) await new Promise((resolve) => setTimeout(resolve, failures * 1000))
+        const waitForStream = async (pending) => {
+          let onAbort
+          const aborted = new Promise((resolve, reject) => {
+            onAbort = () => reject(attempt.signal.reason)
+            if (attempt.signal.aborted) onAbort()
+            else attempt.signal.addEventListener('abort', onAbort, { once: true })
+          })
+          try { return await Promise.race([aborted, pending]) }
+          finally { attempt.signal.removeEventListener('abort', onAbort) }
+        }
+        // One startup budget includes state headers/body and the first valid
+        // event. Once established, allow three missed 15-second heartbeats.
+        armWatchdog(6500)
+        try {
+          const initial = await waitForStream(api('/api/state', undefined, attempt.signal))
+          render(await waitForStream(initial.json()))
+          const response = await waitForStream(api('/api/events', undefined, attempt.signal))
+          reader = response.body.getReader()
+          const decoder = new TextDecoder(); let buffer = ''
+          while (!stopped) {
+            const { value, done } = await waitForStream(reader.read())
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            if (buffer.length > 1024 * 1024) throw new Error('Workcell stream exceeded its limit')
+            let boundary
+            while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+              const block = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2)
+              const data = block.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
+              if (data) {
+                render(JSON.parse(data))
+                // A valid state from SSE proves stream recovery. A successful
+                // /api/state read or an empty heartbeat alone cannot do so.
+                failures = 0
+                validatedState = true
+                armWatchdog(45000)
+                notice('', 'connection')
+              } else if (validatedState && block.split('\n').some((line) => line.startsWith(':'))) armWatchdog(45000)
+            }
+          }
+          throw new Error('Harness connection ended')
+        } catch (error) {
+          cancelStreamWatchdog()
+          if (stopped) return
+          attempt.abort(); failures += 1; lastFailure = error.message
+          connection(false, 'Harness disconnected'); hideFrame(); notice(lastFailure, 'connection')
+          if (failures < 4) await new Promise((resolve) => {
+            resumeReconnect = resolve
+            reconnectTimer = setTimeout(() => {
+              reconnectTimer = null; resumeReconnect = null; resolve()
+            }, failures * 1000)
+          })
+        } finally { cancelStreamWatchdog(); reader?.releaseLock() }
+      }
+    } finally {
+      streamRunning = false
+      if (!stopped && failures >= 4) {
+        notice(`${lastFailure}. Automatic reconnection paused. Click Reconnect to try again, or run /workcell in the Harness terminal to reopen the view.`, 'connection')
+        recoveryAvailable(true)
       }
     }
   }
+  byId('reconnect').onclick = () => { void stream() }
   setInterval(() => {
     if (!executionApprovalAvailable(state?.execution)) byId('run-confirm').checked = false
     controls()
+    expireDisplayedFrame()
+    if (displayedCamera) renderObservation(displayedCamera)
     const camera = state?.camera
-    if (connected && camera?.status?.phase === 'live' && !cameraIsFresh(camera)) {
+    if (connected && camera?.status?.phase === 'live' && !cameraIsFresh(camera)
+      && !cameraStopping && !camera.stopPending && !camera.stopUnconfirmed && !cameraStopState) {
       hideFrame(); text('camera-state', 'STALE'); text('frame-details', 'No fresh update from the Harness'); text('observation', 'Unknown · stale preview')
     }
   }, 500)
-  addEventListener('pagehide', () => { stopped = true; eventAbort?.abort(); hideFrame() })
+  addEventListener('pagehide', () => {
+    stopped = true; eventAbort?.abort(); cancelStreamWatchdog(); cancelReconnectDelay(); recoveryAvailable(false); hideFrame()
+  })
   // A browser may reuse this tab when /workcell opens its session link again.
   // Reload to consume a new fragment in memory; history.replaceState itself
   // does not fire hashchange and never persists the bearer.

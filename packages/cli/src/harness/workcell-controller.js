@@ -4,6 +4,25 @@ import { createExecutionController } from './execution-controller.js'
 
 export const WORKCELL_VIEW_VERSION = 'physicalsystems-workcell-view-v1'
 
+const REQUEST_ERRORS = Object.freeze({
+  agent_busy: [409, 'Wait for the current agent request to finish before starting another request'],
+  model_unavailable: [503, 'Select a model in the Harness terminal before sending a request'],
+  question_expired: [409, 'This operator question is no longer current; use the current question in the terminal or browser'],
+  camera_busy: [409, 'Finish the current request before starting another camera preview; Stop remains available'],
+  camera_changed: [409, 'No matching current capture or pending Start is available; refresh camera state before retrying'],
+  camera_unavailable: [503, 'Camera preview is unavailable; refresh camera state and check the terminal'],
+  camera_start_unconfirmed: [503, 'Camera Start was not confirmed; refresh camera state and request Stop before starting another preview'],
+  camera_stop_unconfirmed: [503, 'Camera stop is not confirmed; retry Stop for this capture and check the terminal'],
+})
+class WorkcellRequestError extends Error {
+  constructor(code) { super(REQUEST_ERRORS[code][1]); this.code = code }
+}
+/** Only errors constructed here may select a fixed public explanation. */
+export function workcellRequestFailure(error) {
+  const entry = error instanceof WorkcellRequestError && REQUEST_ERRORS[error.code]
+  return entry ? { status: entry[0], code: error.code, message: entry[1] } : null
+}
+
 function displayText(value, maximum = 8000) {
   return String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, '').slice(0, maximum)
 }
@@ -31,8 +50,15 @@ export function createWorkcellController({
   let inventoryPending = null
   let cameraActionPending = false
   let cameraActionDone = null
+  let cameraStart = null
+  let cameraEpoch = 0
+  let startUnconfirmed = false
+  let stopCaptureSessionId = null
+  const ownedCaptureSessions = new Set()
+  const stopRequestedSessions = new Set()
+  const unconfirmedStops = new Set()
+  const pendingStops = new Map()
   let disposePromise = null
-  let ownedCaptureSessionId = null
   let choice = null
   let browserTurn = false
   let pendingPrompt = null
@@ -46,7 +72,11 @@ export function createWorkcellController({
     workflow,
     agent: { ...agent, model: displayText(modelLabel(), 160) || null, canPrompt: !disposed && agent.status !== 'working' && canPrompt(),
       pendingChoice: choice ? { choiceId: choice.id, kind: choice.kind, question: choice.question, options: choice.options } : null },
-    camera, execution: execution.snapshot(),
+    camera: { ...camera, pending: cameraActionPending ? 'start' : null,
+      stopPending: pendingStops.size > 0 || Boolean(cameraStart?.cancelled),
+      stopUnconfirmed: unconfirmedStops.size > 0,
+      stopCaptureSessionId: stopCaptureSessionId || ownedCaptureSessions.values().next().value || null },
+    execution: execution.snapshot(),
   })
   const emit = () => {
     if (disposed) return
@@ -54,7 +84,7 @@ export function createWorkcellController({
     for (const listener of listeners) { try { listener() } catch { /* A viewer cannot break the agent. */ } }
   }
   const execution = createExecutionController({ client: executionClient, currentRoute: () => workflow?.routeReceipt,
-    canPrepare: () => !disposed && agent.status !== 'working' && !choice && !cameraActionPending,
+    canPrepare: () => !disposed && agent.status !== 'working' && !choice && !cameraActionPending && !pendingStops.size && !unconfirmedStops.size,
     onChange: emit, now: () => Date.parse(now()) })
   const setWorkflow = (value) => { workflow = value; execution.contextChanged() }
   const resolveChoice = (answer) => {
@@ -67,20 +97,60 @@ export function createWorkcellController({
     emit()
   }
 
+  const clearCameraFrame = () => { cachedFrame = null; camera = { ...camera, frame: null, previewFrameId: null } }
+  function acceptStopped(status) {
+    if (status.phase !== 'stopped' || !status.captureSessionId) return
+    ownedCaptureSessions.delete(status.captureSessionId)
+    unconfirmedStops.delete(status.captureSessionId)
+    if (stopCaptureSessionId === status.captureSessionId) stopCaptureSessionId = null
+  }
+  function stopCapture(sessionId) {
+    if (pendingStops.has(sessionId)) return pendingStops.get(sessionId)
+    const epoch = ++cameraEpoch
+    stopCaptureSessionId = sessionId
+    stopRequestedSessions.add(sessionId)
+    clearCameraFrame()
+    // The camera client already bounds each authenticated request to five seconds.
+    // Reads and the assistant never hold this independent exact-session channel.
+    const request = Promise.resolve().then(() => cameraClient.stop({ expectedCaptureSessionId: sessionId })).then((status) => {
+      if (status.captureSessionId !== sessionId || !['stopped', 'stop-unconfirmed'].includes(status.phase)) throw new Error('Invalid camera stop response')
+      if (status.phase === 'stopped') acceptStopped(status)
+      else unconfirmedStops.add(sessionId)
+      if (cameraEpoch === epoch) camera = { ...camera, availability: 'available',
+        status: { ...status, availableCameras: camera.status?.availableCameras || [] },
+        error: status.phase === 'stopped' ? null : REQUEST_ERRORS.camera_stop_unconfirmed[1] }
+      return status
+    }).catch(() => {
+      unconfirmedStops.add(sessionId)
+      if (cameraEpoch === epoch) camera = { ...camera, availability: 'unavailable',
+        status: { ...camera.status, phase: 'stop-unconfirmed', captureSessionId: sessionId },
+        error: REQUEST_ERRORS.camera_stop_unconfirmed[1] }
+      throw new WorkcellRequestError('camera_stop_unconfirmed')
+    }).finally(() => { pendingStops.delete(sessionId); emit() })
+    pendingStops.set(sessionId, request)
+    emit()
+    return request
+  }
+
   async function pollCamera() {
-    if (disposed || cameraPending || cameraActionPending) return cameraPending
+    if (disposed || cameraPending || cameraActionPending || pendingStops.size) return cameraPending
     if (!cameraClient) {
       camera = { ...camera, availability: 'unavailable', error: 'Camera preview integration is unavailable', frame: null, previewFrameId: null }
       emit()
       return
     }
+    const epoch = cameraEpoch
     cameraPending = (async () => {
       try {
         const packet = await cameraClient.frame()
-        if (disposed) return
+        if (disposed || epoch !== cameraEpoch) return
         const previousSession = camera.status?.captureSessionId
         const previousPhase = camera.status?.phase
-        let frame = packet.frame
+        acceptStopped(packet.status)
+        if (['idle', 'stopped'].includes(packet.status.phase)) startUnconfirmed = false
+        const stopUnconfirmed = stopRequestedSessions.has(packet.status.captureSessionId) && packet.status.phase !== 'stopped'
+        if (stopUnconfirmed) { unconfirmedStops.add(packet.status.captureSessionId); stopCaptureSessionId ||= packet.status.captureSessionId }
+        let frame = stopUnconfirmed ? null : packet.frame
         let previewFrameId = null
         if (frame) {
           const { jpegBytes, ...metadata } = frame
@@ -88,14 +158,14 @@ export function createWorkcellController({
           cachedFrame = { id: previewFrameId, bytes: jpegBytes, contentType: 'image/jpeg' }
           frame = metadata
         } else cachedFrame = null
-        camera = { availability: 'available', status: { ...packet.status,
+        camera = { availability: 'available', status: { ...packet.status, ...(stopUnconfirmed ? { phase: 'stop-unconfirmed' } : {}),
           availableCameras: packet.status.availableCameras ?? camera.status?.availableCameras ?? [] },
-          frame, previewFrameId, error: null, receivedAt: now() }
+          frame, previewFrameId, error: stopUnconfirmed ? REQUEST_ERRORS.camera_stop_unconfirmed[1] : null, receivedAt: now() }
         if ((previousSession && previousSession !== packet.status.captureSessionId)
           || (previousPhase === 'live' && packet.status.phase !== 'live')) invalidateWorkflow()
         emit()
       } catch (error) {
-        if (disposed) return
+        if (disposed || epoch !== cameraEpoch) return
         cachedFrame = null
         if (camera.status?.phase === 'live') invalidateWorkflow()
         camera = { ...camera, availability: 'unavailable', frame: null, previewFrameId: null,
@@ -149,7 +219,7 @@ export function createWorkcellController({
     },
     async refresh() {
       if (disposed) throw new Error('Harness session ended')
-      if (agent.status === 'working') throw new Error('Wait for the current agent request before refreshing the workcell')
+      if (agent.status === 'working') throw new WorkcellRequestError('agent_busy')
       await refreshWorkflow()
       await refreshCameras()
       await pollCamera()
@@ -160,7 +230,8 @@ export function createWorkcellController({
       const text = inputText(value)
       if (/^[!/]/.test(text)) throw new TypeError('Enter a physical outcome, not a terminal command')
       if (disposed) throw new Error('Harness session ended')
-      if (agent.status === 'working' || choice || !canPrompt()) throw new Error('The Harness is busy or has no model configured; finish the current request or select a model in the terminal')
+      if (agent.status === 'working' || choice) throw new WorkcellRequestError('agent_busy')
+      if (!canPrompt()) throw new WorkcellRequestError(displayText(modelLabel(), 160) ? 'agent_busy' : 'model_unavailable')
       browserTurn = true
       agent = { status: 'working', intent: text, reply: '', error: null, tool: null }
       invalidateWorkflow()
@@ -211,7 +282,7 @@ export function createWorkcellController({
       })
     },
     async answerChoice({ choiceId, answer }) {
-      if (!choice || choice.id !== choiceId) throw new Error('This operator question is no longer current')
+      if (!choice || choice.id !== choiceId) throw new WorkcellRequestError('question_expired')
       if (answer !== null) {
         answer = inputText(answer, 2000)
         if (choice.kind === 'select' && !choice.options.includes(answer)) throw new TypeError('Choose one of the displayed answers')
@@ -220,45 +291,66 @@ export function createWorkcellController({
       return { accepted: true, physicalExecutionAuthorized: false }
     },
     async cameraAction(action, body) {
-      if (disposed || !cameraClient) throw new Error('Camera preview is unavailable')
-      if (cameraActionPending || agent.status === 'working') throw new Error('Finish the current request before changing camera capture')
+      if (disposed || !cameraClient) throw new WorkcellRequestError('camera_unavailable')
+      if (action === 'stop') {
+        const id = body?.expectedCaptureSessionId
+        if (id === null) {
+          if (!cameraStart) throw new WorkcellRequestError('camera_changed')
+          cameraStart.cancelled = true
+          cameraEpoch += 1
+          clearCameraFrame(); invalidateWorkflow(); emit()
+          // No session is guessed: the pending Start owns its eventual exact cleanup.
+          return snapshot()
+        }
+        if (typeof id !== 'string' || !id || (!ownedCaptureSessions.has(id) && id !== camera.status?.captureSessionId
+          && id !== stopCaptureSessionId)) throw new WorkcellRequestError('camera_changed')
+        if (cameraStart) cameraStart.cancelled = true
+        invalidateWorkflow()
+        await stopCapture(id)
+        return snapshot()
+      }
+      if (action !== 'start') throw new TypeError('Unsupported camera action')
+      if (cameraActionPending || pendingStops.size || agent.status === 'working') throw new WorkcellRequestError('camera_busy')
+      if (unconfirmedStops.size || startUnconfirmed) throw new WorkcellRequestError('camera_stop_unconfirmed')
+      if (ownedCaptureSessions.size || (camera.status?.captureSessionId && !['idle', 'stopped'].includes(camera.status.phase))) throw new WorkcellRequestError('camera_busy')
       cameraActionPending = true
+      const start = { cancelled: false }
+      cameraStart = start
+      cameraEpoch += 1
+      stopRequestedSessions.clear()
       let finishAction
       const actionDone = new Promise((resolve) => { finishAction = resolve })
       cameraActionDone = actionDone
+      emit()
       try {
         // Finish the previous read before mutating the selected capture session.
         await cameraPending
-        if (disposed) throw new Error('Harness session ended')
-        invalidateWorkflow()
-        cachedFrame = null
-        camera = { ...camera, frame: null, previewFrameId: null }
-        emit()
-        if (action === 'start') {
-          const status = await cameraClient.start(body)
-          if (disposed) {
-            if (status.captureSessionId) {
-              try { await cameraClient.stop({ expectedCaptureSessionId: status.captureSessionId }) } catch { /* Exact session only. */ }
-            }
-            throw new Error('Harness session ended')
+        if (!disposed && !start.cancelled) {
+          invalidateWorkflow()
+          clearCameraFrame()
+          emit()
+          let status
+          try { status = await cameraClient.start(body) }
+          catch { startUnconfirmed = true; throw new WorkcellRequestError('camera_start_unconfirmed') }
+          if (!status.captureSessionId) { startUnconfirmed = true; throw new WorkcellRequestError('camera_start_unconfirmed') }
+          ownedCaptureSessions.add(status.captureSessionId)
+          if (disposed || start.cancelled) {
+            await stopCapture(status.captureSessionId)
+          } else {
+            camera = { ...camera, availability: 'available', status: { ...status, availableCameras: camera.status?.availableCameras || [] }, error: null }
           }
-          ownedCaptureSessionId = status.captureSessionId
-          camera = { ...camera, availability: 'available', status: { ...status, availableCameras: camera.status?.availableCameras || [] }, error: null }
-        } else if (action === 'stop') {
-          const status = await cameraClient.stop(body)
-          ownedCaptureSessionId = null
-          camera = { ...camera, availability: 'available', status: { ...status, availableCameras: camera.status?.availableCameras || [] }, error: null }
-        } else throw new TypeError('Unsupported camera action')
+        }
       } catch (error) {
-        camera = { ...camera, error: displayText(safeErrorMessage(error), 350) }
-        throw new Error(camera.error)
+        camera = { ...camera, error: workcellRequestFailure(error)?.message || REQUEST_ERRORS.camera_unavailable[1] }
+        throw error
       } finally {
+        if (cameraStart === start) cameraStart = null
         cameraActionPending = false
         finishAction()
         if (cameraActionDone === actionDone) cameraActionDone = null
         emit()
       }
-      await pollCamera()
+      if (!disposed && !start.cancelled) void pollCamera()
       return snapshot()
     },
     async cameraFrame(id) {
@@ -283,8 +375,9 @@ export function createWorkcellController({
         // cleanup here; a fire-and-forget continuation could die with the host.
         await cameraActionDone
         // Only stop capture started by this Harness, never an unrelated session.
-        if (ownedCaptureSessionId && cameraClient) {
-          try { await cameraClient.stop({ expectedCaptureSessionId: ownedCaptureSessionId }) } catch { /* Node still owns its capture status. */ }
+        await Promise.allSettled([...pendingStops.values()])
+        for (const id of ownedCaptureSessions) {
+          try { await stopCapture(id) } catch { /* Retain ownership when exact stop remains unconfirmed. */ }
         }
       })()
       return disposePromise

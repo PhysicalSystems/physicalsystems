@@ -9,8 +9,9 @@ clients and are not the current package identity described by this repository.
 | Version | Security support |
 | --- | --- |
 | `main` | Yes |
-| `physicalsystems@0.2.2` | Yes after the protected `preview` publication |
-| `physicalsystems@0.2.1` | Superseded after `preview` moves to `0.2.2` |
+| `physicalsystems@0.2.3` | Yes after the protected `preview` publication |
+| `physicalsystems@0.2.2` | Superseded after `preview` moves to `0.2.3` |
+| `physicalsystems@0.2.1` | Superseded preview |
 | `physicalsystems@0.2.0` | Superseded preview |
 | `tinyedge@0.1.5` | Historical preview during the package transition |
 | `tinyedge@0.1.4` | Historical Windows preview |

@@ -81,7 +81,7 @@ test('intent accepts once without awaiting the shared agent and rejects simultan
   assert.deepEqual(await controller.submitIntent('  Inspect the workcell  '), {
     accepted: true, physicalExecutionAuthorized: false,
   })
-  await assert.rejects(controller.submitIntent('Move another container'), /busy/)
+  await assert.rejects(controller.submitIntent('Move another container'), /current agent request/)
   await assert.rejects(controller.refresh(), /current agent request/)
   await assert.rejects(controller.cameraAction('start', {}), /current request/)
   assert.equal(controller.snapshot().agent.status, 'working')
@@ -101,9 +101,21 @@ test('intent rejects terminal commands, control characters and unavailable model
   }
   assert.equal(calls.intents.length, 0)
   assert.equal(calls.invalidations, 0)
-  const busy = setup(t, { canPrompt: () => false })
-  await assert.rejects(busy.controller.submitIntent('Inspect the workcell'), /busy or has no model/)
+  const busy = setup(t, { canPrompt: () => false, modelLabel: () => null })
+  await assert.rejects(busy.controller.submitIntent('Inspect the workcell'), /Select a model/)
   assert.equal(busy.calls.intents.length, 0)
+})
+
+test('a gated terminal preflight with a configured model reports busy rather than missing model', async (t) => {
+  const { controller, calls } = setup(t, { canPrompt: () => false, modelLabel: () => 'provider/configured-model' })
+  assert.equal(controller.snapshot().agent.status, 'idle')
+  await assert.rejects(controller.submitIntent('Inspect the workcell'), (error) => {
+    assert.equal(error.code, 'agent_busy')
+    assert.match(error.message, /current agent request/)
+    assert.doesNotMatch(error.message, /select a model/i)
+    return true
+  })
+  assert.equal(calls.intents.length, 0)
 })
 
 test('shared-session prompt failures are bounded and redacted and release the browser busy latch', async (t) => {
@@ -385,4 +397,154 @@ test('shutdown while a previous frame read is pending does not begin a queued ca
   await Promise.allSettled([action, disposing])
   assert.deepEqual(starts, [])
   close()
+})
+
+test('camera Stop bypasses a working assistant and clears the exact capture', async (t) => {
+  const { controller, calls } = setup(t)
+  await controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+  controller.agentStart('Inspect the workcell')
+  await controller.cameraAction('stop', { expectedCaptureSessionId: 'capture-one' })
+  assert.deepEqual(calls.stops, [{ expectedCaptureSessionId: 'capture-one' }])
+  assert.equal(controller.snapshot().camera.status.phase, 'stopped')
+  assert.equal(controller.snapshot().camera.frame, null)
+  assert.equal(controller.snapshot().agent.status, 'working')
+})
+
+test('camera Stop bypasses an in-flight frame read and its late response cannot restore pixels', async (t) => {
+  const reading = deferred()
+  const { controller, calls, cameraClient } = setup(t)
+  await controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+  cameraClient.frame = async () => reading.promise
+  const refreshing = controller.refresh()
+  await tick()
+  const stopping = controller.cameraAction('stop', { expectedCaptureSessionId: 'capture-one' })
+  await tick()
+  const stopsBeforeReadCompleted = calls.stops.length
+  reading.resolve({ status: { phase: 'live', captureSessionId: 'capture-one' }, frame: {
+    captureSessionId: 'capture-one', sequence: 1, previewDigest: 'digest', jpegBytes: Buffer.from('synthetic-frame'),
+  } })
+  await Promise.all([refreshing, stopping])
+  assert.equal(stopsBeforeReadCompleted, 1, 'Stop must reach the client before a prior read completes')
+  assert.equal(controller.snapshot().camera.frame, null)
+  assert.equal(controller.snapshot().camera.previewFrameId, null)
+  assert.notEqual(controller.snapshot().camera.status.phase, 'live')
+})
+
+test('unconfirmed and failed stops retain exact ownership for cleanup and block another Start', async (t) => {
+  for (const result of ['stop-unconfirmed', 'error']) {
+    const { controller, calls, cameraClient } = setup(t)
+    await controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+    cameraClient.stop = async (body) => {
+      calls.stops.push(body)
+      if (calls.stops.length === 1) {
+        if (result === 'error') throw new Error('private adapter diagnostics')
+        return { phase: 'stop-unconfirmed', captureSessionId: body.expectedCaptureSessionId }
+      }
+      return { phase: 'stopped', captureSessionId: body.expectedCaptureSessionId }
+    }
+    await controller.cameraAction('stop', { expectedCaptureSessionId: 'capture-one' }).catch(() => {})
+    const state = controller.snapshot().camera
+    assert.equal(state.stopUnconfirmed, true)
+    assert.equal(state.stopCaptureSessionId, 'capture-one')
+    await assert.rejects(controller.cameraAction('start', { candidateId: 'camera-two', expectedCandidateDigest: 'other-digest' }))
+    await controller.dispose()
+    assert.deepEqual(calls.stops, [{ expectedCaptureSessionId: 'capture-one' }, { expectedCaptureSessionId: 'capture-one' }])
+    assert.equal(calls.starts.length, 1)
+    assert.doesNotMatch(JSON.stringify(state), /private adapter/)
+  }
+})
+
+test('Stop cancels only this controller pending Start and cleans up its exact late session', async (t) => {
+  const starting = deferred(), stopping = deferred()
+  const stops = []
+  const { controller } = setup(t, { cameraClient: {
+    async frame() { return { status: { phase: 'idle', captureSessionId: null }, frame: null } },
+    async start() { return starting.promise },
+    async stop(body) { stops.push(body); await stopping.promise; return { phase: 'stopped', captureSessionId: body.expectedCaptureSessionId } },
+  } })
+  const action = controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+  const actionResult = Promise.allSettled([action])
+  await tick()
+  const cancelled = await controller.cameraAction('stop', { expectedCaptureSessionId: null }).catch((error) => ({ error }))
+  const pending = controller.snapshot().camera
+  starting.resolve({ phase: 'live', captureSessionId: 'late-capture' })
+  await tick()
+  const latePhase = controller.snapshot().camera.status?.phase
+  stopping.resolve()
+  await actionResult
+  assert.equal(cancelled.error, undefined)
+  assert.equal(pending.stopPending, true)
+  assert.deepEqual(stops, [{ expectedCaptureSessionId: 'late-capture' }])
+  assert.notEqual(latePhase, 'live')
+  assert.equal(controller.snapshot().camera.status.phase, 'stopped')
+  assert.equal(controller.snapshot().camera.stopPending, false)
+  await assert.rejects(controller.cameraAction('stop', { expectedCaptureSessionId: null }), /pending|current/)
+})
+
+test('Stop cancels a queued Start before its earlier frame read finishes without opening capture', async (t) => {
+  const reading = deferred()
+  const { controller, calls, cameraClient } = setup(t)
+  cameraClient.frame = async () => reading.promise
+  const close = controller.onViewerConnect()
+  await tick()
+  const starting = controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+  const cancelled = await controller.cameraAction('stop', { expectedCaptureSessionId: null }).catch((error) => ({ error }))
+  reading.resolve({ status: { phase: 'idle', captureSessionId: null }, frame: null })
+  const result = await starting
+  close()
+  assert.equal(cancelled.error, undefined)
+  assert.equal(calls.starts.length, 0)
+  assert.equal(calls.stops.length, 0)
+  assert.equal(controller.snapshot().camera.stopPending, false)
+  assert.equal(result.camera.stopPending, false, 'the Start response cannot restore an already completed pending state')
+  assert.equal(result.camera.pending, null)
+})
+
+test('repeated Stop requests share the pending exact operation and a new Start cannot overwrite its ownership', async (t) => {
+  const stopping = deferred()
+  const { controller, calls, cameraClient } = setup(t)
+  await controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+  cameraClient.stop = async (body) => { calls.stops.push(body); await stopping.promise; return { phase: 'stopped', captureSessionId: body.expectedCaptureSessionId } }
+  const first = controller.cameraAction('stop', { expectedCaptureSessionId: 'capture-one' })
+  const second = controller.cameraAction('stop', { expectedCaptureSessionId: 'capture-one' })
+  await tick()
+  const pending = controller.snapshot().camera
+  const cannotStart = controller.cameraAction('start', { candidateId: 'camera-two', expectedCandidateDigest: 'another-digest' })
+  await assert.rejects(cannotStart)
+  stopping.resolve()
+  await Promise.all([first, second])
+  assert.equal(pending.stopPending, true)
+  assert.equal(pending.stopCaptureSessionId, 'capture-one')
+  assert.equal(calls.stops.length, 1)
+  assert.equal(controller.snapshot().camera.stopCaptureSessionId, null)
+  assert.equal(controller.snapshot().camera.stopUnconfirmed, false)
+  assert.equal(calls.starts.length, 1)
+})
+
+test('an incorrect Stop response cannot release owned capture or authorize another Start', async (t) => {
+  const { controller, calls, cameraClient } = setup(t)
+  await controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+  cameraClient.stop = async (body) => { calls.stops.push(body); return { phase: 'stopped', captureSessionId: calls.stops.length === 1 ? 'another-session' : body.expectedCaptureSessionId } }
+  await assert.rejects(controller.cameraAction('stop', { expectedCaptureSessionId: 'capture-one' }), /not confirmed/)
+  assert.equal(controller.snapshot().camera.stopCaptureSessionId, 'capture-one')
+  assert.equal(controller.snapshot().camera.stopUnconfirmed, true)
+  await assert.rejects(controller.cameraAction('start', { candidateId: 'camera-two', expectedCandidateDigest: 'another-digest' }))
+  await controller.dispose()
+  assert.deepEqual(calls.stops, [{ expectedCaptureSessionId: 'capture-one' }, { expectedCaptureSessionId: 'capture-one' }])
+})
+
+test('a fresh read after an unconfirmed Stop cannot revive that stopped preview or release ownership', async (t) => {
+  const { controller, calls, cameraClient, setPacket } = setup(t)
+  await controller.cameraAction('start', { candidateId: 'camera-one', expectedCandidateDigest: 'digest' })
+  cameraClient.stop = async (body) => { calls.stops.push(body); return { phase: calls.stops.length === 1 ? 'stop-unconfirmed' : 'stopped', captureSessionId: body.expectedCaptureSessionId } }
+  await controller.cameraAction('stop', { expectedCaptureSessionId: 'capture-one' })
+  setPacket({ status: { phase: 'live', captureSessionId: 'capture-one' }, frame: {
+    captureSessionId: 'capture-one', sequence: 3, previewDigest: 'digest', jpegBytes: Buffer.from('synthetic-frame'),
+  } })
+  await controller.refresh()
+  assert.equal(controller.snapshot().camera.frame, null)
+  assert.equal(controller.snapshot().camera.status.phase, 'stop-unconfirmed')
+  assert.equal(controller.snapshot().camera.stopUnconfirmed, true)
+  await controller.dispose()
+  assert.equal(calls.stops.length, 2)
 })

@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { lstat, readFile, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { workcellRequestFailure } from './workcell-controller.js'
 
 const MAX_BODY_BYTES = 8 * 1024
 const MAX_STATE_BYTES = 256 * 1024
@@ -88,11 +89,12 @@ function sendError(response, error) {
     response.destroy()
     return
   }
-  // Never forward a controller error message, stack, path, credential or URL.
+  // Only controller-owned codes select fixed text; arbitrary errors stay generic.
+  const known = workcellRequestFailure(error)
   const own = error instanceof HttpError
-  const status = own ? error.status : ([400, 404, 409, 422, 429, 503].includes(error?.status) ? error.status : 503)
-  const code = own ? error.code : (status === 409 ? 'workcell_conflict' : 'workcell_action_failed')
-  const message = own ? error.message : (status === 409 ? 'Workcell state changed; refresh before retrying' : 'Workcell action could not be completed')
+  const status = own ? error.status : known?.status || ([400, 404, 409, 422, 429, 503].includes(error?.status) ? error.status : 503)
+  const code = own ? error.code : known?.code || (status === 409 ? 'workcell_conflict' : 'workcell_action_failed')
+  const message = own ? error.message : known?.message || (status === 409 ? 'Workcell state changed; refresh before retrying' : 'Workcell action could not be completed')
   response.setHeader('Connection', 'close')
   sendJson(response, status, { error: message, code })
 }
@@ -184,7 +186,8 @@ function validateAction(path, body) {
     }
   } else if (path === '/api/camera/stop') {
     exact(body, ['expectedCaptureSessionId'])
-    identifier(body.expectedCaptureSessionId, 'Expected capture session ID')
+    // Null cancels only a controller-owned pending Start, never a guessed Node session.
+    if (body.expectedCaptureSessionId !== null) identifier(body.expectedCaptureSessionId, 'Expected capture session ID')
   }
   return body
 }

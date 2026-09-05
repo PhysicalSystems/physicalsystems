@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_VERSION: 0.2.2
+  RELEASE_VERSION: 0.2.3
   PI_RUNTIME_VERSION: 0.84.2-tinyedge.1
   NODE_VERSION: 22.19.0
   # Keep the exact packaging/publishing CLI fixed. Consumer verification also
@@ -31,7 +31,7 @@ env:
   NPM_REGISTRY: https://registry.npmjs.org/
   NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
   RELEASE_ARTIFACT_DIRECTORY: release-artifacts
-  RELEASE_ARTIFACT_NAME: physicalsystems-npm-0.2.2-${{ github.sha }}-${{ github.run_attempt }}
+  RELEASE_ARTIFACT_NAME: physicalsystems-npm-0.2.3-${{ github.sha }}-${{ github.run_attempt }}
 
 jobs:
   require-main:
@@ -123,7 +123,7 @@ jobs:
           const root = process.env.GITHUB_WORKSPACE
           const expectedVersion = process.env.RELEASE_VERSION
           const expectedRuntimeVersion = process.env.PI_RUNTIME_VERSION
-          assert.equal(expectedVersion, '0.2.2')
+          assert.equal(expectedVersion, '0.2.3')
           assert.equal(expectedRuntimeVersion, '0.84.2-tinyedge.1')
 
           const readPackage = (directory) => JSON.parse(
@@ -523,7 +523,7 @@ jobs:
           fi
 
   publish:
-    name: Publish physicalsystems 0.2.2 to preview with npm OIDC
+    name: Publish physicalsystems 0.2.3 to preview with npm OIDC
     needs:
       - build
       - verify
@@ -663,10 +663,10 @@ jobs:
           const manifest = JSON.parse(manifestBytes.toString('utf8'))
           const expected = [
             ['pi-runtime', '@tinyedge/pi-runtime', process.env.PI_RUNTIME_VERSION, 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz'],
-            ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, 'physicalsystems-0.2.2.tgz'],
+            ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, 'physicalsystems-0.2.3.tgz'],
           ]
 
-          assert.equal(process.env.RELEASE_VERSION, '0.2.2')
+          assert.equal(process.env.RELEASE_VERSION, '0.2.3')
           assert.equal(process.env.PI_RUNTIME_VERSION, '0.84.2-tinyedge.1')
           assert.equal(manifest.schemaVersion, 1)
           assert.equal(manifest.version, process.env.RELEASE_VERSION)
@@ -713,7 +713,7 @@ jobs:
               legalFiles: ['LICENSE', 'NOTICE', 'SBOM.cdx.json', 'UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM_README.md'],
             },
             ...[
-              ['physicalsystems', 'physicalsystems-0.2.2.tgz', 'packages/cli'],
+              ['physicalsystems', 'physicalsystems-0.2.3.tgz', 'packages/cli'],
             ].map(([name, filename, sourceDirectory]) => ({
               name,
               version: process.env.RELEASE_VERSION,
@@ -839,7 +839,7 @@ jobs:
           const manifest = JSON.parse(
             execFileSync(
               'tar',
-              ['-xOf', path.join(directory, 'physicalsystems-0.2.2.tgz'), 'package/npm-shrinkwrap.json'],
+              ['-xOf', path.join(directory, 'physicalsystems-0.2.3.tgz'), 'package/npm-shrinkwrap.json'],
               { encoding: 'utf8' },
             ),
           )
@@ -916,8 +916,8 @@ jobs:
           const tags = JSON.parse(process.env.PHYSICALSYSTEMS_TAGS_JSON)
           assert.deepEqual(
             tags,
-            { bootstrap: '0.0.0', latest: '0.0.0', preview: '0.2.1' },
-            'preview update requires the existing 0.2.1 preview and unchanged inert bootstrap/latest tags',
+            { bootstrap: '0.0.0', latest: '0.0.0', preview: '0.2.2' },
+            'preview update requires the existing 0.2.2 preview and unchanged inert bootstrap/latest tags',
           )
           const [packed] = JSON.parse(process.env.PHYSICALSYSTEMS_PACK_JSON)
           assert.equal(packed.name, 'physicalsystems')
@@ -1070,11 +1070,11 @@ jobs:
             'packed runtime tarball must match the already-published registry artifact',
           )
           NODE
-      - name: Publish physicalsystems@0.2.2 directly to preview
+      - name: Publish physicalsystems@0.2.3 directly to preview
         shell: bash
         run: |
           set -euo pipefail
-          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.2.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.3.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
             | tee publish-evidence/physicalsystems-publish.log
       - name: Verify preview isolation, registry bytes, and provenance signature
         shell: bash
@@ -1117,7 +1117,7 @@ jobs:
           )
           assert.equal(tags.latest, '0.0.0', 'publishing preview must not move the inert initial latest tag')
           assert.equal(tags.bootstrap, '0.0.0', 'the inert namespace bootstrap must remain isolated')
-          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.2.2')
+          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.2.3')
           NODE
           mkdir -p publish-evidence/signature-audit
           (
@@ -1180,7 +1180,7 @@ jobs:
             echo "- Registry integrity, dist-tags, SLSA provenance metadata, and npm's cryptographic signature audit were rechecked after publication."
             echo "- @tinyedge/pi-runtime@$PI_RUNTIME_VERSION is already published; this workflow packs it for verification, matches the packed tarball to the live registry artifact, and never republishes it."
             echo "- @tinyedge/cli@0.1.3 and @tinyedge/pi@0.1.3 remain immutable compatibility releases and are not part of this candidate."
-            echo "- Automatic provenance applies to physicalsystems@0.2.2 from this public repository, not to either earlier inert namespace bootstrap publication."
+            echo "- Automatic provenance applies to physicalsystems@0.2.3 from this public repository, not to either earlier inert namespace bootstrap publication."
             echo "- Promotion from preview to latest remains a separate manual maintainer action with npm 2FA."
           } | tee publish-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload registry preflight and publication logs

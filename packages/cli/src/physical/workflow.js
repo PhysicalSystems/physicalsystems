@@ -315,6 +315,14 @@ export function renderPhysicalWorkflow(state, width = 100) {
   if (plan) lines.push(fit(plan, safeWidth))
   if (grounding) lines.push(fit(grounding, safeWidth))
   if (observation) lines.push(fit(observation, safeWidth))
+  // Explicit cached details retain every reported requirement, even when the
+  // compact status or a commissioning draft highlights only the next step.
+  for (const question of state.response?.interpretation?.questions || []) {
+    lines.push(fit(`Question · ${cleanMessage(question)}`, safeWidth))
+  }
+  for (const gap of state.response?.interpretation?.gaps || []) {
+    lines.push(fit(`Reported gap · ${cleanMessage(gap.detail)}`, safeWidth))
+  }
   for (const line of explorationLines(state.exploration)) lines.push(fit(line, safeWidth))
   for (const line of physicalRouteLines(state.routeReceipt)) lines.push(fit(line, safeWidth))
   lines.push(fit(nextLine(state), safeWidth))
