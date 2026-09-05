@@ -22,6 +22,7 @@ import { stageNodeBundle } from './node-bundle-stage.js'
 import { verifyNodeBundle } from '../src/physical/node-bundle.js'
 import { checkDownloadableNodePackage } from '../../../scripts/check-downloaded-node.mjs'
 import { assertProductArchiveSize } from './product-size-policy.js'
+import { runConcurrentChecks } from './concurrent-checks.js'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
@@ -912,17 +913,35 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false, req
       }, null, 2)}\n`,
       'utf8',
     )
-    runNpm([
-      'install',
-      '--offline',
-      '--no-audit',
-      '--no-fund',
-    ], {
-      cwd: temporaryRoot,
-      env: { npm_config_cache: path.join(temporaryRoot, 'local-npm-cache') },
-      phase: 'local npm install',
-      timeout: NPM_INSTALL_TIMEOUT_MS,
-    })
+    assert.equal(existsSync(path.join(npmExecRoot, 'node_modules')), false,
+      'npm exec verification must start without a local dependency tree')
+    const npmExecCache = path.join(npmExecRoot, 'npm-cache')
+    const globalPrefix = path.join(temporaryRoot, 'global-prefix')
+    // All three routes retain distinct empty caches and installation trees.
+    // Await the complete group before inspecting installs or removing directories.
+    const [, npxReportedVersion] = await runConcurrentChecks([
+      {
+        args: ['install', '--offline', '--no-audit', '--no-fund'],
+        cwd: temporaryRoot,
+        env: { npm_config_cache: path.join(temporaryRoot, 'local-npm-cache') },
+        phase: 'local npm install',
+        timeout: NPM_INSTALL_TIMEOUT_MS,
+      },
+      {
+        args: ['exec', '--yes', '--offline', '--no-audit', '--no-fund', '--timing',
+          '--package', npmFileSpec(physicalSystemsArtifact.file), '--', 'physicalsystems', '--version'],
+        cwd: npmExecRoot,
+        env: { npm_config_cache: npmExecCache },
+        phase: 'isolated npm exec', timeout: NPM_EXEC_TIMEOUT_MS,
+      },
+      {
+        args: ['install', '--global', '--prefix', globalPrefix, '--offline', '--no-audit', '--no-fund', physicalSystemsArtifact.file],
+        cwd: temporaryRoot,
+        env: { npm_config_cache: path.join(temporaryRoot, 'global-npm-cache') },
+        phase: 'global npm install', timeout: NPM_INSTALL_TIMEOUT_MS,
+      },
+    ].map((check) => ({ ...check, command: process.execPath, args: [NPM_CLI, ...check.args],
+      env: { ...process.env, NO_COLOR: '1', ...check.env } })))
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
     const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')
@@ -1009,30 +1028,6 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false, req
     })
     assert.equal(reportedVersion, manifest.version)
 
-    assert.equal(
-      existsSync(path.join(npmExecRoot, 'node_modules')),
-      false,
-      'npm exec verification must start without a local dependency tree',
-    )
-    const npmExecCache = path.join(npmExecRoot, 'npm-cache')
-    const npxReportedVersion = runNpm([
-      'exec',
-      '--yes',
-      '--offline',
-      '--no-audit',
-      '--no-fund',
-      '--timing',
-      '--package',
-      npmFileSpec(physicalSystemsArtifact.file),
-      '--',
-      'physicalsystems',
-      '--version',
-    ], {
-      cwd: npmExecRoot,
-      env: { npm_config_cache: npmExecCache },
-      phase: 'isolated npm exec',
-      timeout: NPM_EXEC_TIMEOUT_MS,
-    })
     assert.equal(npxReportedVersion, manifest.version, 'npm exec must launch the exact packed artifact')
     const npmExecInstalls = path.join(npmExecCache, '_npx')
     assert.ok(
@@ -1040,22 +1035,6 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false, req
       'npm exec must materialize the packed artifact in its isolated cache',
     )
 
-    const globalPrefix = path.join(temporaryRoot, 'global-prefix')
-    runNpm([
-      'install',
-      '--global',
-      '--prefix',
-      globalPrefix,
-      '--offline',
-      '--no-audit',
-      '--no-fund',
-      physicalSystemsArtifact.file,
-    ], {
-      cwd: temporaryRoot,
-      env: { npm_config_cache: path.join(temporaryRoot, 'global-npm-cache') },
-      phase: 'global npm install',
-      timeout: NPM_INSTALL_TIMEOUT_MS,
-    })
     const globalPhysicalSystemsDirectory = globalPackageDirectory(globalPrefix)
     const globalShim = globalCommandShim(globalPrefix)
     const globalEntry = path.join(globalPhysicalSystemsDirectory, 'bin/physicalsystems.js')

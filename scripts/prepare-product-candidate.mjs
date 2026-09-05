@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 // protected workflow remains the only authority to publish product bytes.
 export function parsePreparationArguments(args) {
   const values = {}
-  const flags = new Map([['--output', 'output'], ['--metadata', 'directory'], ['--wheelhouse', 'wheelhouse']])
+  const flags = new Map([['--output', 'output'], ['--metadata', 'directory'], ['--wheelhouse', 'wheelhouse'], ['--dependency-cache', 'dependencyCache']])
   const usage = 'Usage: npm run release:prepare -- --output ABSOLUTE_NEW_DIRECTORY [--offline [--metadata ABSOLUTE_DIRECTORY] [--wheelhouse ABSOLUTE_DIRECTORY]]'
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--offline' && !values.offline) { values.offline = true; continue }
@@ -38,6 +38,15 @@ export async function prepareProductCandidate(values) {
   const relative = path.relative(sourceRoot, parent)
   if (!path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..') throw new Error('Product artifacts must stay outside the source repository')
   const output = path.join(parent, path.basename(values.output))
+  const dependencyCache = values.dependencyCache || path.join(output, 'pi-cache')
+  if (values.dependencyCache) {
+    const cacheParent = await fs.realpath(path.dirname(dependencyCache))
+    const relativeCache = path.relative(sourceRoot, cacheParent)
+    if (!path.isAbsolute(relativeCache) && relativeCache.split(path.sep)[0] !== '..') throw new Error('Build dependency cache must stay outside source')
+    try {
+      if ((await fs.lstat(dependencyCache)).isSymbolicLink()) throw new Error('Build dependency cache cannot be a link')
+    } catch (error) { if (error.code !== 'ENOENT') throw error }
+  }
   await fs.mkdir(output)
   const runNpm = async (arguments_) => {
     const child = spawn(process.execPath, [process.env.npm_execpath, '--prefix', path.join(sourceRoot, 'packages/cli'), ...arguments_], { stdio: 'inherit', shell: false, windowsHide: true })
@@ -47,7 +56,7 @@ export async function prepareProductCandidate(values) {
   let dependencyTree
   try { dependencyTree = await fs.lstat(path.join(sourceRoot, 'packages/cli/node_modules')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
-  if (!dependencyTree) await runNpm(['run', 'bootstrap:pi-runtime', '--', '--cache', path.join(output, 'pi-cache'), '--install-cli'])
+  if (!dependencyTree) await runNpm(['run', 'bootstrap:pi-runtime', '--', '--cache', dependencyCache, '--install-cli'])
   if (values.offline) {
     const bundle = await assembleNodeBundle({ ...values, output: path.join(output, 'node-bundle') })
     await runNpm(['run', 'release:pack', '--', path.join(output, 'candidate'), '--node-bundle', bundle.output])

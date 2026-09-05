@@ -86,6 +86,8 @@ jobs:
     name: Pack the Windows x64 candidate once
     needs: require-main
     runs-on: windows-latest
+    env:
+      npm_config_cache: ${{ runner.temp }}/physicalsystems-build-npm-cache
     outputs:
       artifact-name: ${{ steps.candidate.outputs.name }}
       artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
@@ -96,7 +98,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           architecture: x64
-          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: |
+            packages/cli/npm-shrinkwrap.json
+            packages/pi-runtime/npm-shrinkwrap.json
       - name: Install the pinned trusted-publishing npm CLI
         shell: pwsh
         run: |
@@ -167,7 +172,7 @@ jobs:
         run: |
           $productDirectory = Join-Path $env:RUNNER_TEMP 'physicalsystems-product'
           $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE $env:RELEASE_ARTIFACT_DIRECTORY
-          npm run release:prepare -- --output $productDirectory
+          npm run release:prepare -- --output $productDirectory --dependency-cache $env:npm_config_cache
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (Test-Path -LiteralPath $artifactDirectory) { throw 'Candidate output already exists' }
           Copy-Item -LiteralPath (Join-Path $productDirectory 'candidate') -Destination $artifactDirectory -Recurse

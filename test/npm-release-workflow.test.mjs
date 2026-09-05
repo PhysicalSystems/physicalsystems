@@ -1031,7 +1031,7 @@ test('release verification uses real npm lifecycle and platform command shims', 
   assert.match(packageChecker, /npm exec verification must start without a local dependency tree/)
   assert.match(packageChecker, /cwd: npmExecRoot/)
   assert.match(packageChecker, /npm exec must materialize the packed artifact in its isolated cache/)
-  const npmExecVerificationStart = packageChecker.indexOf('const npxReportedVersion = runNpm([')
+  const npmExecVerificationStart = packageChecker.indexOf('const [, npxReportedVersion] = await runConcurrentChecks([')
   const npmExecVerificationEnd = packageChecker.indexOf(
     'assert.equal(npxReportedVersion',
     npmExecVerificationStart,
