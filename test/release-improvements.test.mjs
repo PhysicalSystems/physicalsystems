@@ -24,6 +24,11 @@ test('watch follows the same receipt to evidence completion and stops on errors'
   let attempts = 0
   await assert.rejects(watchRelease(async () => { attempts++; throw new Error('Failed run') }), /Failed run/)
   assert.equal(attempts, 1)
+  const controller = new AbortController()
+  controller.abort()
+  await watchRelease(async () => { throw new Error('Cancelled watch must not resume') }, {
+    signal: controller.signal, print() {},
+  })
   await assert.rejects(watchRelease(async () => ({ stages: [], workflowVerificationComplete: false }), {
     print() {}, sleep: async () => {}, maxPolls: 2,
   }), /time limit/)
@@ -65,7 +70,9 @@ test('version command regenerates a consistent checkout and refuses a dirty tree
   const fixture = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), 'ps-version-'))
   t.after(() => fs.rm(fixture, { recursive: true, force: true }))
   const root = fileURLToPath(new URL('../', import.meta.url))
-  await fs.cp(root, fixture, { recursive: true, filter: (source) => !['.git', 'node_modules'].includes(path.basename(source)) })
+  await fs.cp(root, fixture, { recursive: true, filter: (source) => ![
+    '.git', 'node_modules', 'candidate-artifacts', 'release-artifacts', 'verification-evidence',
+  ].includes(path.basename(source)) })
   const git = (...args) => execFileSync('git', args, { cwd: fixture, encoding: 'utf8', stdio: 'pipe' })
   git('init', '--quiet')
   git('add', '.')
@@ -81,6 +88,14 @@ test('version command regenerates a consistent checkout and refuses a dirty tree
   assert.match(changes, /EXPORT-PROVENANCE.json/)
   assert.doesNotMatch(changes, /packages\/runtime\/|packages\/pi-runtime\/|node-releases/)
   await assert.rejects(prepareReleaseVersion(fixture, '9.0.0'), /clean checkout/)
+  // A broken reviewed inventory makes generation fail after file updates.
+  // Verify that failure restores both source inputs and generated evidence.
+  const inventory = path.join(fixture, 'scripts/legal/reviewed-inventory.mjs')
+  await fs.appendFile(inventory, '\nthrow new Error("fixture generation failure")\n')
+  git('add', '.')
+  git('-c', 'user.name=Release test', '-c', 'user.email=release@example.test', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'broken fixture')
+  await assert.rejects(prepareReleaseVersion(fixture, '9.0.0'), /restored original release files/)
+  assert.equal(git('status', '--porcelain'), '')
 })
 
 const check = (code, phase, timeout = 5000) => ({ command: process.execPath, args: ['-e', code], phase, timeout, env: process.env })
