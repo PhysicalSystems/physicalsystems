@@ -75,6 +75,9 @@ test('version command regenerates a consistent checkout and refuses a dirty tree
   ].includes(path.basename(source)) })
   const git = (...args) => execFileSync('git', args, { cwd: fixture, encoding: 'utf8', stdio: 'pipe' })
   git('init', '--quiet')
+  // Disposable commits must not start background Git maintenance that races cleanup.
+  git('config', 'gc.auto', '0')
+  git('config', 'maintenance.auto', 'false')
   git('add', '.')
   git('-c', 'user.name=Release test', '-c', 'user.email=release@example.test', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'fixture')
   const descriptor = JSON.parse(await fs.readFile(path.join(fixture, 'release/product.json'), 'utf8'))
