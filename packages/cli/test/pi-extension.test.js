@@ -124,6 +124,7 @@ test('standalone Harness is local-only and blocks shell and unreviewed tools', a
   assert.deepEqual([...pi.tools.keys()], [
     'ask_choice', 'inspect_physical_system', 'inspect_physical_capabilities',
     'preview_physical_capability', 'plan_physical_workflow',
+    'inspect_physical_execution',
   ])
   assert.equal(pi.tools.has(READ_AGENT_SKILL_TOOL), false)
 

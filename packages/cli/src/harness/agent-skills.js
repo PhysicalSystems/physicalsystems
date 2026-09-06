@@ -22,7 +22,7 @@ const PACKAGES = Object.freeze([
     id: 'transfer-container',
     description: "Prepare a container transfer by inspecting the workcell, clarifying the operator's intent, and requesting a typed physical capability route preview with current node evidence.",
     capabilities: Object.freeze(['transfer-container']),
-    skillHash: 'bd34f7005b8a7064529ad8bd12ce6a96e0aa59354f1b415f19ba0a277db74140',
+    skillHash: 'd689617cb30139aceba5068d6056479d48b79054e9ed3f5f4fa394032ceeca6d',
     bindingHash: 'd800b6b2ad058a9c674cd33147f27ac91a3e77c22918389f6d50db604138f4c2',
   }),
 ])

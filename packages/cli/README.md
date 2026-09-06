@@ -66,15 +66,18 @@ An operator can describe an outcome in the normal editor or use:
 /physical <outcome>
 ```
 
-When a commissioned state exists, intent planning is bound to that exact state
-evidence. In candidate-only mode the outcome is retained, but planning remains
-blocked until the selected devices have the necessary adapters, configuration
-and commissioned capabilities.
+When a commissioned state exists, legacy intent planning is bound to that exact
+state evidence. Candidate-only discovery cannot ground object and station names
+for that planner. Typed capability routing is a separate path: if the current
+catalog exposes the exact required inputs, the assistant can request a route
+using those inputs without inventing commissioned state. Node still checks all
+implementation, configuration and evidence requirements.
 
 The default discovered-device mode has no configured executor. A commissioning
-draft does not authorize teaching, exploration or robot movement. `Run` and
-`Verify` remain locked until a separate commissioned executor supplies the
-versioned lifecycle, explicit limits and result evidence described below.
+draft does not authorize teaching, exploration or robot movement. When the
+matching Node execution service and local configuration are available, the
+operator can use the invocation lifecycle described below. A selected route
+alone never authorizes execution.
 
 ### Version 0.2.3 camera preview and recovery fixes
 
@@ -131,7 +134,9 @@ evidence must not become a success claim; stale responses are invalidated.
 Route receipts always retain `physicalExecutionAuthorized: false`. Selection
 does not dispatch anything. The separate operator run channel below requires
 an available Node-owned executor, an exact local configuration and a fresh
-approval for one invocation. The assistant has no approval or execution tool.
+approval for one invocation. After route selection, the assistant uses the
+read-only `inspect_physical_execution` tool to explain the available operator
+path or its actual blockers. It has no preparation, approval or execution tool.
 
 The Python routing library and equipment host remain separate components of
 the product. Bundling their approved distributions does not establish hardware
@@ -248,6 +253,25 @@ activation happens automatically.
    checks stored run and snapshot integrity, then separately fetches the exact
    pinned shared-configuration and outcome-evidence snapshots. It grants no
    new execution authority. Missing or tampered references fail verification.
+
+The assistant can call `inspect_physical_execution` after route selection and
+again when asked about an invocation's result. This reads bounded service and
+configuration availability, known run identities and phases, and the selected
+run's verified receipt through the existing read-only Node APIs. An optional
+`runId` must identify a run already known to this Harness; arbitrary identifiers
+are rejected. If multiple runs require disambiguation, the assistant asks which
+one to inspect. It cannot prepare, approve, dispatch, stop or reconcile a run.
+Operator controls may be temporarily unavailable while the assistant is busy;
+the assistant finishes its reply before asking the operator to use them.
+
+Inspection availability is separate from the run's actual phase. A failed or
+stale status read does not establish Node's `OUTCOME_UNKNOWN`, and an unavailable
+or invalid receipt does not establish verified success. Receipt verification
+checks historical evidence integrity; a valid receipt can record an unsuccessful
+outcome. The assistant reports success only when the matching run and verified
+receipt support it, always distinguishing simulation from physical execution.
+Historical run evidence remains historical if its route or configuration has
+changed and never establishes current readiness or physical qualification.
 
 The receipt view projects only bounded historical check results and known
 numerical measurements; it does not expose raw configuration, local paths,

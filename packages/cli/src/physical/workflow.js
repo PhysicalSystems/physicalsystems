@@ -7,12 +7,14 @@ export const PHYSICAL_DISCOVERY_TOOL = 'inspect_physical_system'
 export const PHYSICAL_INTENT_TOOL = 'plan_physical_workflow'
 export const PHYSICAL_CAPABILITIES_TOOL = 'inspect_physical_capabilities'
 export const PHYSICAL_ROUTE_TOOL = 'preview_physical_capability'
+export const PHYSICAL_EXECUTION_INSPECTION_TOOL = 'inspect_physical_execution'
 export const PHYSICAL_TOOL_ALLOWLIST = Object.freeze([
   PHYSICAL_DISCOVERY_TOOL,
   PHYSICAL_INTENT_TOOL,
   PHYSICAL_CAPABILITIES_TOOL,
   PHYSICAL_ROUTE_TOOL,
   READ_AGENT_SKILL_TOOL,
+  PHYSICAL_EXECUTION_INSPECTION_TOOL,
 ])
 
 const STEPS = Object.freeze(['Discover', 'Intent', 'Plan', 'Commission', 'Run', 'Verify'])
