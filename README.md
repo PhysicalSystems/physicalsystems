@@ -79,7 +79,7 @@ npx --yes physicalsystems@preview
 added a fail-fast prerequisite check for older Node.js versions and pinned,
 reviewed backend manifests in a small npm artifact. Version `0.2.2` added a
 compact workflow status and separated observed discovery metadata from
-unassessed driver, capture and calibration evidence. Version `0.2.4` retains
+unassessed driver, capture and calibration evidence. Version `0.2.5` retains
 the backend pins and adds a read-only setup preflight with actionable evidence
 gaps and consistent terminal guidance. Camera freshness, independent Stop,
 browser recovery and exact execution inspection remain covered. See the

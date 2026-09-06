@@ -9,19 +9,19 @@ The package is designed for Windows x64/ARM64 and Ubuntu 22.04/24.04 desktop
 x64 with Node.js 22.19.0 or newer. Headless Linux, Raspberry Pi, other Linux
 targets and macOS have not yet passed the package qualification boundary.
 
-## Install version 0.2.4
+## Install version 0.2.5
 
 Registry tags can change. Require the following check to succeed before
-treating `0.2.4` as a published application:
+treating `0.2.5` as a published application:
 
 ```bash
-npm view physicalsystems@0.2.4 version --json
+npm view physicalsystems@0.2.5 version --json
 ```
 
 Run that exact version without a persistent installation:
 
 ```bash
-npx physicalsystems@0.2.4
+npx physicalsystems@0.2.5
 ```
 
 `npx` runs an isolated package command; it does not create a global or
@@ -30,12 +30,12 @@ persistent `physicalsystems` installation.
 Or install an exact persistent command:
 
 ```bash
-npm install --global physicalsystems@0.2.4
+npm install --global physicalsystems@0.2.5
 physicalsystems
 ```
 
 The immutable `tinyedge@0.1.3` and `tinyedge@0.1.5` releases are historical
-product identities. They are not part of the `physicalsystems@0.2.4` package
+product identities. They are not part of the `physicalsystems@0.2.5` package
 graph and are not recommended for a new Physical Systems installation.
 
 The package requires Node.js 22.19.0 or newer. On an older runtime, npm may
