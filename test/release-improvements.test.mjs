@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process'
 import { watchRelease } from '../scripts/watch-release.mjs'
 import { parseReleaseArguments } from '../scripts/release.mjs'
 import { planVersionUpdate, prepareReleaseVersion, requireNewVersion } from '../scripts/prepare-release-version.mjs'
-import { runConcurrentChecks } from '../packages/cli/scripts/concurrent-checks.js'
+import { installationCheckConcurrency, runConcurrentChecks } from '../packages/cli/scripts/concurrent-checks.js'
 
 test('watch follows the same receipt to evidence completion and stops on errors', async () => {
   let polls = 0, sleeps = 0
@@ -153,4 +153,80 @@ test('concurrent checks preserve output order and drain other children before re
   ], { print: (line) => failed.push(line) }), /failure/)
   assert.ok(failed.some((line) => line.startsWith('Completed drain')))
   await assert.rejects(runConcurrentChecks([check('setInterval(() => {}, 1000)', 'timeout', 100)], { print() {} }), /timeout/)
+})
+
+test('an explicit concurrency limit serializes installation children that need an exclusive scratch lock', async (t) => {
+  const directory = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), 'ps-install-sequencing-'))
+  t.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const lock = path.join(directory, 'exclusive.lock')
+  const exclusive = (label) => check(`
+    const fs = require('node:fs')
+    const lock = ${JSON.stringify(lock)}
+    let descriptor
+    try { descriptor = fs.openSync(lock, 'wx') }
+    catch (error) { console.error('Concurrent scratch lock access: ' + error.code); process.exit(17) }
+    setTimeout(() => {
+      fs.closeSync(descriptor)
+      fs.unlinkSync(lock)
+      console.log(${JSON.stringify(label)})
+    }, 300)
+  `, label)
+  const result = await runConcurrentChecks(['local', 'global', 'npx'].map(exclusive), { concurrency: 1, print() {} })
+  assert.deepEqual(result, ['local', 'global', 'npx'])
+  await assert.rejects(fs.stat(lock), { code: 'ENOENT' })
+})
+
+test('installation check policy serializes Windows while keeping Linux three-way parallelism', () => {
+  assert.equal(installationCheckConcurrency('win32'), 1)
+  assert.equal(installationCheckConcurrency('linux'), 3)
+  assert.equal(installationCheckConcurrency(), process.platform === 'win32' ? 1 : 3)
+})
+
+test('queued checks receive their full timeout when launched rather than while waiting for a slot', async () => {
+  const output = await runConcurrentChecks([
+    check("setTimeout(() => console.log('occupies slot'), 1200)", 'initial', 4000),
+    check("setTimeout(() => console.log('queued child completed'), 200)", 'queued', 1000),
+  ], { concurrency: 1, print() {} })
+  assert.deepEqual(output, ['occupies slot', 'queued child completed'])
+})
+
+test('a bounded pool preserves result order and drains both active and queued children on failure', async (t) => {
+  const output = await runConcurrentChecks([
+    check("setTimeout(() => console.log('first'), 150)", 'first'),
+    check("console.log('second')", 'second'),
+    check("console.log('third')", 'third'),
+  ], { concurrency: 2, print() {} })
+  assert.deepEqual(output, ['first', 'second', 'third'])
+  const directory = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), 'ps-install-drain-'))
+  t.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const activeMarker = path.join(directory, 'active-finished')
+  const queuedMarker = path.join(directory, 'queued-finished')
+  const markerCheck = (filename, phase) => check(`
+    process.on('exit', () => require('node:fs').writeFileSync(${JSON.stringify(filename)}, 'finished'))
+    setTimeout(() => {}, 150)
+  `, phase)
+  const messages = []
+  await assert.rejects(runConcurrentChecks([
+    check('process.exit(23)', 'failure'),
+    markerCheck(activeMarker, 'already running'),
+    markerCheck(queuedMarker, 'queued after failure'),
+  ], { concurrency: 2, print: (line) => messages.push(line) }), /failure/)
+  assert.equal(await fs.readFile(activeMarker, 'utf8'), 'finished')
+  assert.equal(await fs.readFile(queuedMarker, 'utf8'), 'finished')
+  assert.ok(messages.some((line) => line.startsWith('Completed already running')))
+  assert.ok(messages.some((line) => line.startsWith('Completed queued after failure')))
+})
+
+test('invalid concurrency rejects before any child starts and an empty default pool completes', async (t) => {
+  const directory = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), 'ps-install-invalid-limit-'))
+  t.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const marker = path.join(directory, 'must-not-launch')
+  const command = check(`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'unexpected launch')`, 'must not start')
+  const messages = []
+  for (const concurrency of [0, -1, 1.5, Infinity, NaN, '1', null, false]) {
+    await assert.rejects(runConcurrentChecks([command], { concurrency, print: (line) => messages.push(line) }), /concurrency/i)
+  }
+  assert.deepEqual(messages, [])
+  await assert.rejects(fs.stat(marker), { code: 'ENOENT' })
+  assert.deepEqual(await runConcurrentChecks([], { print() {} }), [])
 })
