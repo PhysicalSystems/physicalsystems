@@ -18,6 +18,8 @@ authorize upgrading an existing installation.
   artifacts, current-state observations, qualification, execution target and
   request/policy mismatches receive concrete next steps. Unknown reasons remain
   visible. Missing API detail is never silently counted as a successful check.
+  Unexposed evidence is not described as absent. Routing-envelope and executable-
+  artifact digests retain their separate meanings; they need not be equal.
 - Physical calibration and taught-position requirements remain unverified when
   not exposed by the public contract. A selected route, matching digest,
   available adapter or historical/simulated result never establishes current

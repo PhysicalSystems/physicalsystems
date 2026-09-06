@@ -161,6 +161,16 @@ test('setup tool is standalone, lazy, status-only and cannot gain execution or c
   }
 })
 
+test('setup tool description distinguishes missing evidence and digest scopes for the model', t => {
+  const h = setup(t)
+  const description = h.pi.tools.get(toolName).description
+  assert.match(description, /Not exposed, unverified or unavailable does not mean absent or missing/)
+  assert.match(description, /explicit missing status or missing reason code/)
+  assert.match(description, /routing envelope.*executable artifact.*different scopes need not match/)
+  assert.match(description, /Node enforces exact bindings/)
+  assert.equal(h.calls.clients, 0)
+})
+
 test('physical-setup reports cached context without discovery, routing or browser startup', async t => {
   const h = setup(t)
   assert.ok(h.pi.commands.has('physical-setup'), 'Operator needs an explicit read-only setup report')

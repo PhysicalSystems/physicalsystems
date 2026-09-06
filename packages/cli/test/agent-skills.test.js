@@ -116,6 +116,29 @@ test('both curated skills explain setup evidence without inventing or changing p
   }
 })
 
+test('curated setup guidance keeps unavailable qualification evidence distinct from missing evidence', () => {
+  const registry = loadCuratedAgentSkills({ loadSkillsFromDir })
+  for (const skillId of ['inspect-workcell', 'transfer-container']) {
+    const instructions = registry.read(skillId).instructions.replace(/\s+/g, ' ')
+    assert.match(instructions, /Never translate not exposed, unverified or unavailable into absent or missing/)
+    assert.match(instructions, /explicit missing status or missing reason code/)
+    assert.match(instructions, /Qualification metadata may be present.*underlying physical evidence remains unverified/)
+    assert.match(instructions, /qualification_missing/)
+  }
+})
+
+test('curated setup guidance distinguishes digest scopes without weakening exact binding checks', () => {
+  const registry = loadCuratedAgentSkills({ loadSkillsFromDir })
+  for (const skillId of ['inspect-workcell', 'transfer-container']) {
+    const instructions = registry.read(skillId).instructions.replace(/\s+/g, ' ')
+    assert.match(instructions, /route implementation digest identifies the routing envelope/)
+    assert.match(instructions, /configuration implementation digest identifies the executable artifact/)
+    assert.match(instructions, /different scopes need not match/)
+    assert.match(instructions, /Compare digests only within the same named scope/)
+    assert.match(instructions, /Node.*exact binding checks.*never.*mismatch/i)
+  }
+})
+
 test('ambient user/project packages and local duplicates are never passed to the parser', (t) => {
   const { temporary, packageRoot } = fixture(t)
   for (const ambient of [path.join(temporary, '.pi', 'skills', 'transfer-container'), path.join(temporary, '.agents', 'skills', 'attack')]) {

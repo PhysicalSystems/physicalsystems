@@ -28,6 +28,8 @@ const ACTIONS = Object.freeze({
 const LIMITATIONS = Object.freeze([
   'This is a read-only setup inventory and explanation of cached records. It does not establish current readiness, approval or permission to execute.',
   'The public capability and normalized route contracts do not expose exact per-implementation driver, calibration or artifact requirements. Unreported details remain unverified.',
+  'Not exposed or unverified does not mean absent or missing. A missing claim requires an explicitly reported missing condition or a missing matching record in an available inventory.',
+  'An implementation row\'s implementationDigest identifies a routing envelope; a configuration row\'s implementationDigest identifies an executable artifact. These digests have different scopes and need not match. Exact Node binding checks remain unchanged.',
   'Route decisions, qualification metadata and discovery observations describe their recorded context and times. A new inspection does not refresh those observations.',
   'Simulation configurations, route qualification labels, matching digests and discovery compatibility flags do not qualify physical operation.',
   'Preparation, approval, Stop, calibration and configuration changes remain in their existing operator-controlled workflows.',
@@ -143,17 +145,17 @@ function implementationProjection(candidate, route, service) {
     && item.implementationId === candidate.implementation_id) : null
   const checks = Object.entries(GROUPS).map(([id, codes]) => {
     const reported = candidate.rejection_codes.filter((code) => codes.includes(code))
-    let status = 'unverified', message = 'Exact requirements and their validation evidence are not exposed by the public setup contracts.'
+    let status = 'unverified', message = 'Exact requirements and their validation evidence are not exposed by the public setup contracts. This does not mean they are absent or missing.'
     if (id === 'implementation') { status = 'present'; message = 'This implementation record is present in the cached route decision; current availability is not established.' }
-    if (id === 'qualification') { status = 'present'; message = 'Qualification status metadata is present in the cached route record; underlying physical qualification evidence is not exposed.' }
+    if (id === 'qualification') { status = 'present'; message = 'Qualification status metadata is present in the cached route record; underlying physical qualification evidence is not exposed. This does not mean it is absent or missing.' }
     if (id === 'configuration') {
       status = installed === null ? 'unverified' : installed.length ? 'present' : 'missing'
       message = installed === null ? 'Configuration inventory is unavailable; no missing configuration is inferred.'
-        : installed.length ? 'A configuration registration matches this capability and implementation ID. It does not establish current readiness or verify calibration.'
+        : installed.length ? 'A configuration registration matches this capability and implementation ID. The implementation row\'s digest identifies a routing envelope; this configuration\'s implementation digest identifies an executable artifact. These digests need not match. Registration does not establish current readiness or verify calibration.'
           : service.configurations.length ? 'Installed configurations do not match this capability and implementation ID.' : 'No execution configurations were reported by the available status service.'
     }
     if (id === 'state') message = 'Fresh state and readiness have not been inspected. Cached routing observations cannot establish the current state.'
-    if (id === 'artifacts' && candidate.mechanism === 'taught-waypoints') message = 'The route names a taught-waypoints mechanism, but exact taught artifacts and their validation evidence are not exposed.'
+    if (id === 'artifacts' && candidate.mechanism === 'taught-waypoints') message = 'The route names a taught-waypoints mechanism, but exact taught artifacts and their validation evidence are not exposed. This does not mean they are absent or missing.'
     if (reported.length) {
       status = reported.some((code) => code.endsWith('_missing') || code === 'execution_target_unavailable') ? 'missing' : 'unverified'
       message = 'The cached Node route reports the listed blockers for this implementation. Missing, mismatched, stale and policy-rejected evidence must be distinguished using those codes.'

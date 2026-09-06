@@ -47,6 +47,19 @@ This package is neither an implementation nor a source of execution authority.
    refresh or missing typed inputs. `/physical-setup` gives the same read-only
    operator report. A missing public inspection contract remains unverified;
    never invent an installation procedure or change setup to fill a gap.
+   Never translate not exposed, unverified or unavailable into absent or missing.
+   Report absence only for the exact item with an explicit missing status or missing
+   reason code. Qualification metadata may be present while underlying physical
+   evidence remains unverified because this API does not expose it. Say "not
+   exposed by this API; physical qualification remains unverified" in that case.
+   Report missing qualification evidence only when Node explicitly reports
+   `qualification_missing` for that implementation.
+   The route implementation digest identifies the routing envelope; the
+   configuration implementation digest identifies the executable artifact. These
+   different scopes need not match. Compare digests only within the same named
+   scope. Use the reported matching-configuration result and operator preparation
+   path. Keep Node's exact binding checks; never excuse a reported same-scope
+   mismatch or bypass preparation.
 6. After a selected route, call `inspect_physical_execution` to check the execution
    service and matching local configurations. When available, direct the operator
    to `/workcell`, the **Physical run** panel, select the matching configuration

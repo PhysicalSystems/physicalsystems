@@ -396,3 +396,30 @@ test('invalid retained-context relationship cannot label a cached proposal as cu
     assert.equal(JSON.stringify(result).includes('private-invalid-relation'), false)
   }
 })
+
+test('model projection explicitly distinguishes unavailable detail from reported missing evidence', async (t) => {
+  const h = setup(t), result = await h.inspector.inspect()
+  const selected = result.implementations.find((row) => row.implementationId === 'a-waypoint')
+  const alternative = result.implementations.find((row) => row.implementationId === 'b-learned')
+  assert.equal(find(selected, 'qualification').status, 'present', 'the reported qualification metadata exists')
+  assert.deepEqual(find(selected, 'qualification').reasonCodes, [])
+  assert.equal(find(selected, 'calibration').status, 'unverified')
+  assert.match(find(selected, 'qualification').message, /not exposed.*does not mean.*absent or missing/i)
+  assert.match(result.limitations.join(' '), /unverified does not mean absent or missing/i)
+  assert.equal(find(alternative, 'qualification').status, 'missing', 'explicit missing code remains an actionable blocker')
+  assert.ok(find(alternative, 'qualification').reasonCodes.includes('qualification_missing'))
+})
+
+test('model projection explains distinct routing-envelope and executable-artifact digests without weakening exact bindings', async (t) => {
+  const h = setup(t), result = await h.inspector.inspect()
+  const implementation = result.implementations.find((row) => row.implementationId === 'a-waypoint')
+  const configuration = result.configurations.find((row) => row.implementationId === implementation.implementationId)
+  assert.notEqual(implementation.implementationDigest, configuration.implementationDigest)
+  assert.equal(implementation.implementationDigest, h.current().routeReceipt.decision.selected_implementation_digest)
+  assert.equal(configuration.implementationDigest, h.service().configurations[0].implementationDigest)
+  assert.equal(find(implementation, 'configuration').status, 'present')
+  assert.match(find(implementation, 'configuration').message, /routing envelope.*executable artifact.*need not match/i)
+  assert.match(result.limitations.join(' '), /exact.*Node.*checks.*remain/i)
+  assert.equal(result.physicalReadiness, 'unverified')
+  assert.equal(result.physicalExecutionAuthorized, false)
+})

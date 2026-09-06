@@ -50,3 +50,20 @@ test('physical prompt inspects setup gaps without inferring physical readiness o
   assert.match(prompt, /setup inspection.*not.*refresh.*route/i)
   assert.match(prompt, /Never.*commission.*install.*write.*configuration/i)
 })
+
+test('physical prompt preserves unexposed qualification evidence as unknown instead of asserting absence', () => {
+  const prompt = physicalSystemsSystemPrompt()
+  assert.match(prompt, /Never translate not exposed, unverified or unavailable into absent or missing/)
+  assert.match(prompt, /explicit missing status or missing reason code/)
+  assert.match(prompt, /Qualification metadata may be present.*underlying physical evidence remains unverified/)
+  assert.match(prompt, /qualification_missing/)
+})
+
+test('physical prompt distinguishes routing and executable digest scopes while preserving exact Node checks', () => {
+  const prompt = physicalSystemsSystemPrompt()
+  assert.match(prompt, /route implementation digest identifies the routing envelope/)
+  assert.match(prompt, /configuration implementation digest identifies the executable artifact/)
+  assert.match(prompt, /different scopes need not match/)
+  assert.match(prompt, /Compare digests only within the same named scope/)
+  assert.match(prompt, /Node.*exact binding checks.*never.*mismatch/i)
+})

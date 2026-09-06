@@ -24,6 +24,17 @@ not mean that equipment is ready, calibration is valid or movement is approved.
 An unavailable service or absent inspection leaves facts unverified. It is not
 proof that the laptop has no configuration or calibration.
 
+Unexposed evidence is not necessarily absent. Report an item as missing only
+when the inspected inventory or an explicit Node reason establishes that fact.
+For example, qualification metadata can be present while the underlying physical
+evidence is not exposed by this API; physical qualification remains unverified.
+
+Implementation digests also have named scopes. A route implementation digest
+identifies a routing envelope, while a configuration implementation digest
+identifies an executable artifact. These different digests need not be equal.
+Compare only the same named scope; Node preparation retains its exact binding
+checks.
+
 Read each item with its source and observation time. A retained route describes
 one earlier assessment of one exact invocation. A historical successful run
 does not establish current physical state. Simulation evidence remains

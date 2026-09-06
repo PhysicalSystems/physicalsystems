@@ -47,6 +47,19 @@ observations, readiness evidence, qualification, or execution authority.
    refresh or missing typed inputs. `/physical-setup` provides the same read-only
    operator report. A missing public inspection contract remains unverified;
    never invent an installation procedure or change setup to fill a gap.
+   Never translate not exposed, unverified or unavailable into absent or missing.
+   Report absence only for the exact item with an explicit missing status or missing
+   reason code. Qualification metadata may be present while underlying physical
+   evidence remains unverified because this API does not expose it. Say "not
+   exposed by this API; physical qualification remains unverified" in that case.
+   Report missing qualification evidence only when Node explicitly reports
+   `qualification_missing` for that implementation.
+   The route implementation digest identifies the routing envelope; the
+   configuration implementation digest identifies the executable artifact. These
+   different scopes need not match. Compare digests only within the same named
+   scope. Use the reported matching-configuration result and operator preparation
+   path. Keep Node's exact binding checks; never excuse a reported same-scope
+   mismatch or bypass preparation.
 5. If the operator asks for a physical outcome requiring execution planning,
    use `plan_physical_workflow` when their words need object/station grounding.
    Exact typed catalog inputs can use `preview_physical_capability` directly;
