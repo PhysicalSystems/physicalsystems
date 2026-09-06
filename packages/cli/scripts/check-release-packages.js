@@ -22,7 +22,7 @@ import { stageNodeBundle } from './node-bundle-stage.js'
 import { verifyNodeBundle } from '../src/physical/node-bundle.js'
 import { checkDownloadableNodePackage } from '../../../scripts/check-downloaded-node.mjs'
 import { assertProductArchiveSize } from './product-size-policy.js'
-import { runConcurrentChecks } from './concurrent-checks.js'
+import { installationCheckConcurrency, runConcurrentChecks } from './concurrent-checks.js'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..')
@@ -918,6 +918,8 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false, req
     const npmExecCache = path.join(npmExecRoot, 'npm-cache')
     const globalPrefix = path.join(temporaryRoot, 'global-prefix')
     // All three routes retain distinct empty caches and installation trees.
+    // Serialize cold installs on Windows: parallel installs exceeded the existing
+    // per-install deadlines in all four Windows qualification jobs.
     // Await the complete group before inspecting installs or removing directories.
     const [, npxReportedVersion] = await runConcurrentChecks([
       {
@@ -941,7 +943,9 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false, req
         phase: 'global npm install', timeout: NPM_INSTALL_TIMEOUT_MS,
       },
     ].map((check) => ({ ...check, command: process.execPath, args: [NPM_CLI, ...check.args],
-      env: { ...process.env, NO_COLOR: '1', ...check.env } })))
+      env: { ...process.env, NO_COLOR: '1', ...check.env } })), {
+      concurrency: installationCheckConcurrency(),
+    })
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
     const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')

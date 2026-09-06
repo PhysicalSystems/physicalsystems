@@ -1,9 +1,13 @@
 import { spawn } from 'node:child_process'
 
-// Settle every child before returning (including failures), so callers may
-// safely remove their isolated installation directories in finally blocks.
-export async function runConcurrentChecks(checks, { print = console.log } = {}) {
-  const results = await Promise.all(checks.map(({ command, args, cwd, env, phase, timeout }) => new Promise((resolve) => {
+// Cold installs compete for Windows runner resources even with separate caches.
+// Keep the proven sequential Windows path and parallel installation on Linux.
+export function installationCheckConcurrency(platform = process.platform) {
+  return platform === 'win32' ? 1 : 3
+}
+
+function runCheck({ command, args, cwd, env, phase, timeout }, print) {
+  return new Promise((resolve) => {
     const started = Date.now()
     print(`Starting ${phase} (timeout ${timeout} ms)`)
     let stdout = '', stderr = '', error, size = 0
@@ -25,7 +29,28 @@ export async function runConcurrentChecks(checks, { print = console.log } = {}) 
       resolve({ phase, stdout: stdout.trim(), error: error || (code !== 0
         ? new Error(`${phase} exited with ${code}${signal ? ` (${signal})` : ''}: ${stderr.trim()}`) : null) })
     })
-  })))
+  })
+}
+
+// Start each timeout when its child launches, not while it waits for a slot.
+// Settle every child before returning (including failures), so callers may
+// safely remove their isolated installation directories in finally blocks.
+export async function runConcurrentChecks(checks, {
+  print = console.log, concurrency = Math.max(1, checks.length),
+} = {}) {
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+    throw new RangeError('Check concurrency must be a positive integer')
+  }
+  const results = new Array(checks.length)
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(concurrency, checks.length) }, async () => {
+    while (next < checks.length) {
+      const index = next++
+      const check = checks[index]
+      try { results[index] = await runCheck(check, print) }
+      catch (error) { results[index] = { phase: check.phase, stdout: '', error } }
+    }
+  }))
   const failures = results.filter((result) => result.error)
   if (failures.length) throw new AggregateError(failures.map((result) => result.error), failures.map((result) => `${result.phase}: ${result.error.message}`).join('\n'))
   return results.map((result) => result.stdout)

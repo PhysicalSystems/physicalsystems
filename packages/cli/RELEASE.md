@@ -143,6 +143,13 @@ The workflow does not use a long-lived npm token, publish the runtime, change
 `latest`, or contain a lifecycle publishing script. Local packing and tests
 never publish or alter registry state.
 
+Within each Windows job, the local, npm-exec and global installation checks run
+one at a time. Overlapping cold installs exceeded the existing deadlines on both
+x64 and ARM64 runners. Linux keeps the three routes parallel. Every route still
+uses its own fresh cache and installation tree, runs normal lifecycle scripts,
+and receives its full existing timeout when its child process starts. All routes
+must finish successfully before the remaining qualification checks can pass.
+
 ### Linux first-run acceptance
 
 The protected Linux jobs select CPython 3.10 on Ubuntu 22.04 and 3.12 on Ubuntu
