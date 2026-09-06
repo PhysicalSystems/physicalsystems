@@ -18,6 +18,7 @@ import { createWorkcellController } from './harness/workcell-controller.js'
 import { createWorkcellServer } from './harness/workcell-server.js'
 import { createCameraPreviewClient } from './physical/camera-preview-client.js'
 import { createExecutionClient } from './physical/execution-client.js'
+import { createExecutionInspector } from './harness/execution-inspection.js'
 import { openBrowser } from './auth/open-browser.js'
 import {
   promptPhysicalCommissioningDraft,
@@ -31,6 +32,7 @@ import {
   observedPhysicalDevices,
   renderPhysicalWorkflow,
   PHYSICAL_TOOL_ALLOWLIST,
+  PHYSICAL_EXECUTION_INSPECTION_TOOL,
   updatePhysicalWorkflow,
 } from './physical/workflow.js'
 
@@ -167,6 +169,30 @@ export function createTinyEdgePiExtension({
     let physicalState = physicalEnabled
       ? createPhysicalWorkflowState(physicalClient.origin)
       : null
+    // One host-owned client serves both the operator controller and the narrow
+    // model reader. Construction is inert and lazy; only explicit use reads Node.
+    let executionClient
+    let executionClientCreated = false
+    function getExecutionClient() {
+      if (workcellClosing) throw new Error('Execution inspection is unavailable')
+      if (!executionClientCreated) {
+        executionClient = createExecutionClientImpl({ baseUrl: physicalClient.origin,
+          token: env.PHYSICAL_NODE_EXECUTION_TOKEN, fetchImpl: physicalFetchImpl })
+        executionClientCreated = true
+      }
+      return executionClient
+    }
+    const executionInspector = physicalEnabled ? createExecutionInspector({
+      // The inspector receives only GET methods, never the credential, raw
+      // client or an operator action callback. No model argument chooses a URL.
+      client: Object.freeze(Object.fromEntries(['status', 'runs', 'run', 'receipt', 'snapshot'].map(name => [name, (...args) => {
+        const client = getExecutionClient()
+        if (typeof client?.[name] !== 'function') throw new Error('Execution inspection is unavailable')
+        return client[name](...args)
+      }]))),
+      getContext: () => ({ generation: physicalState.generation, route: physicalState.routeReceipt,
+        selectedRun: workcell?.snapshot().execution.run || null }),
+    }) : null
     let physicalContext
     let registeredTools = []
     let headerContext
@@ -250,6 +276,18 @@ export function createTinyEdgePiExtension({
         },
       })
       for (const tool of physicalTools) pi.registerTool(tool)
+      pi.registerTool(defineToolImpl({
+        name: PHYSICAL_EXECUTION_INSPECTION_TOOL,
+        label: 'Inspect Physical Execution',
+        description: 'Read the local execution service, matching configurations, known runs and verified receipt evidence. Use after a route proposal and to check an operator-approved run. No preparation, approval, execution, camera access, Stop or reconciliation. With multiple runs, use only a runId returned by this tool or selected in the operator view. Inspection failure does not change a recorded outcome.',
+        parameters: { type: 'object', additionalProperties: false,
+          properties: { runId: { type: 'string', pattern: '^run-[0-9a-f]{32}$', maxLength: 36 } } },
+        async execute(_callId, params, signal) {
+          const value = await executionInspector.inspect(params ?? {}, { signal })
+          return { content: [{ type: 'text', text: JSON.stringify(value) }],
+            details: { displaySummary: 'Read-only execution status and receipt inspection' } }
+        },
+      }))
     }
 
     function renderHeader(ctx = headerContext) {
@@ -390,7 +428,7 @@ export function createTinyEdgePiExtension({
                     && typeof canSubmitWorkcellIntent === 'function' && canSubmitWorkcellIntent() === true),
                   modelLabel: () => latestContext?.model ? `${latestContext.model.provider}/${latestContext.model.id}` : null,
                   cameraClient: createCameraPreviewClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_CAMERA_TOKEN, fetchImpl: physicalFetchImpl }),
-                  executionClient: createExecutionClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_EXECUTION_TOKEN, fetchImpl: physicalFetchImpl }),
+                  executionClient: getExecutionClient(),
                 })
                 workcellServer = await createWorkcellServerImpl({ host: workcell })
               }
@@ -519,6 +557,7 @@ export function createTinyEdgePiExtension({
       pi.on('model_select', (_event, ctx) => { latestContext = ctx; workcell?.modelChanged() })
       pi.on('session_shutdown', async () => {
         workcellClosing = true
+        executionInspector.dispose()
         await workcellOpening
         const closingServer = workcellServer
         const closingController = workcell
