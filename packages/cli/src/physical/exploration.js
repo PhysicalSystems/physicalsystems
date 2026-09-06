@@ -1,4 +1,4 @@
-export const PHYSICAL_COMMISSIONING_DECLINE_LABEL = 'Not now · keep physical execution locked'
+export const PHYSICAL_COMMISSIONING_DECLINE_LABEL = 'Not now · do not prepare a draft'
 
 const PREPARE_DRAFT_LABEL = 'Prepare a gap-bound commissioning draft · no method or motion selected'
 

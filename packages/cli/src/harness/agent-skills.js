@@ -15,14 +15,14 @@ const PACKAGES = Object.freeze([
     id: 'inspect-workcell',
     description: 'Inspect connected hardware, guide operator camera preview through /workcell, and explain observed candidates, adapter availability, commissioning gaps, and physical capability readiness without moving hardware.',
     capabilities: Object.freeze([]),
-    skillHash: 'ae163bf628e38d233183f0a409ddbc03040543221ed6e97bc6bfe4662bc564cc',
+    skillHash: '44e14a14cd62ce81f205e5a42f1a6f2525b2ddf0307de27359ff2bd355102122',
     bindingHash: 'b5ed7dff14e9d1808dfe1d43734274c6c9faeacd3b1024f3b6f952a707a0d4f8',
   }),
   Object.freeze({
     id: 'transfer-container',
     description: "Prepare a container transfer by inspecting the workcell, clarifying the operator's intent, and requesting a typed physical capability route preview with current node evidence.",
     capabilities: Object.freeze(['transfer-container']),
-    skillHash: 'd689617cb30139aceba5068d6056479d48b79054e9ed3f5f4fa394032ceeca6d',
+    skillHash: '1530532b3cde76cba7cd9a28ea7911300cd87bd85d38d0c40f9004beff975cf8',
     bindingHash: 'd800b6b2ad058a9c674cd33147f27ac91a3e77c22918389f6d50db604138f4c2',
   }),
 ])

@@ -120,11 +120,12 @@ test('standalone Harness is local-only and blocks shell and unreviewed tools', a
     defineToolImpl: (value) => value,
   })(pi)
 
-  assert.deepEqual([...pi.commands.keys()], ['workcell', 'physical-details', 'physical'])
+  assert.deepEqual([...pi.commands.keys()], ['workcell', 'physical-details', 'physical-setup', 'physical'])
   assert.deepEqual([...pi.tools.keys()], [
     'ask_choice', 'inspect_physical_system', 'inspect_physical_capabilities',
     'preview_physical_capability', 'plan_physical_workflow',
     'inspect_physical_execution',
+    'inspect_physical_setup',
   ])
   assert.equal(pi.tools.has(READ_AGENT_SKILL_TOOL), false)
 
@@ -193,8 +194,8 @@ test('ordinary new user intent clears an earlier route preview before the agent 
   assert.match(render(), /Implementation proposed/)
   await pi.handlers.get('before_agent_start')({ prompt: 'Now move a different container to the other station.' }, ctx)
   assert.doesNotMatch(render(), /Implementation proposed|Route receipt ·/)
-  assert.match(render(), /— Run/)
-  assert.match(render(), /— Verify/)
+  assert.match(render(), /\/workcell.*run controls/)
+  assert.doesNotMatch(render(), /Run.*locked|Verify.*locked/)
 })
 
 function createWorkcellFixture(t, overrides = {}) {
@@ -633,7 +634,7 @@ test('standalone Harness renders and drives the local physical workflow inside P
   assert.match(widget, /✓ Intent/)
   assert.match(widget, /! Plan/)
   assert.match(widget, /◇ Commission/)
-  assert.match(widget, /— Run/)
+  assert.match(widget, /\/workcell.*run controls/)
   assert.match(widget, /Commissioning draft ready/)
   assert.match(widget, /method and bounds remain unresolved/)
   assert.equal(selections.length, 1)
@@ -703,6 +704,36 @@ test('compact workflow stays below the editor and details are an explicit cached
   await pi.commands.get('physical-details').handler('unexpected arguments', ctx)
   assert.deepEqual(messages.at(-1), { message: 'Usage: /physical-details', level: 'warning' })
   assert.deepEqual(calls, ['inspect', 'preview'])
+})
+
+test('legacy plan notifications describe proposal authority without claiming global execution is locked', async t => {
+  for (const scenario of ['grounded', 'declined', 'cancelled']) {
+    const pi = fakePi()
+    const messages = []
+    const snapshot = { discovery: { devices: [{ deviceId: 'test-robot', kind: 'robot', detected: true }] }, physicalExecutionAuthorized: false }
+    const response = { interpretation: {
+      status: scenario === 'grounded' ? 'ready' : 'needs-clarification',
+      interpretationDigest: `sha256:${'b'.repeat(64)}`,
+      workflowIntent: scenario === 'grounded' ? { operation: 'test-operation' } : null,
+      questions: [],
+      gaps: scenario === 'grounded' ? [] : [{ kind: 'commissioning-required', gapId: 'test-gap', deviceId: 'test-robot', operationIds: ['test-operation'] }],
+      physicalExecutionAuthorized: false,
+    }, physicalExecutionAuthorized: false }
+    const ctx = fakeContext(messages)
+    ctx.ui.select = async (_question, options) => scenario === 'declined' ? options[1] : null
+    createTinyEdgePiExtension({ standalone: true, env: {},
+      createPhysicalNodeClientImpl: () => ({ origin: 'http://127.0.0.1:8876', async inspect() { return snapshot }, async interpret() { return response } }),
+      createExecutionClientImpl: () => assert.fail('A plan notification cannot inspect or change execution'),
+      createCameraPreviewClientImpl: () => assert.fail('A plan notification cannot open camera access'),
+    })(pi)
+    t.after(() => pi.handlers.get('session_shutdown')())
+    await pi.commands.get('physical').handler('Report the supplied synthetic plan.', ctx)
+    assert.doesNotMatch(messages.map(item => item.message).join('\n'), /execution.*locked|Run.*locked/i, scenario)
+    if (scenario === 'grounded') {
+      assert.match(messages.at(-1).message, /grounded.*not approved/i)
+      assert.match(messages.at(-1).message, /\/physical-setup.*\/workcell/)
+    } else assert.match(messages.at(-1).message, /draft.*no execution authority/i)
+  }
 })
 
 test('cloud Pi extension gives a fresh benchmark request a deterministic question-first tool boundary', async () => {

@@ -17,6 +17,7 @@ const { createPhysicalNodeClient } = await import(new URL('physical/node-client.
 const { createExecutionClient } = await import(new URL('physical/execution-client.js', source))
 const { createExecutionController } = await import(new URL('harness/execution-controller.js', source))
 const { createExecutionInspector } = await import(new URL('harness/execution-inspection.js', source))
+const { createSetupInspector } = await import(new URL('harness/setup-inspection.js', source))
 
 // Explicit opt-in cross-repository check. The public Harness neither imports
 // Node code nor installs Python; the operator supplies the test environment.
@@ -99,6 +100,8 @@ test('opt-in real Node HTTP registry/router/SQLite service completes one explici
     return response
   }
   const physical = createPhysicalNodeClient({ baseUrl: startup.origin })
+  const discovery = await physical.inspect()
+  assert.equal(discovery.physicalExecutionAuthorized, false)
   const catalog = await physical.capabilities()
   assert.equal(catalog.physicalExecutionAuthorized, false)
   const route = await physical.previewCapability(startup.routeRequest)
@@ -116,7 +119,13 @@ test('opt-in real Node HTTP registry/router/SQLite service completes one explici
     [method, (...args) => { readCalls.push({ method, identity: args[0] ?? null }); return client[method](...args) }])))
   const inspector = createExecutionInspector({ client: readOnlyClient,
     getContext: () => ({ generation, route: currentRoute, selectedRun: selectedInBrowser ? controller.snapshot().run : null }) })
+  let setupReadCount = 0
+  const setupInspector = createSetupInspector({
+    client: Object.freeze({ status() { setupReadCount += 1; return client.status() } }),
+    getContext: () => ({ generation, snapshot: discovery, capabilityCatalog: catalog, routeReceipt: currentRoute }),
+  })
   t.after(() => inspector.dispose())
+  t.after(() => setupInspector.dispose())
   t.after(() => controller.dispose())
   const inspectWithoutDispatch = async (args, expectedMetrics) => {
     const firstHttp = httpCalls.length, firstRead = readCalls.length
@@ -128,6 +137,42 @@ test('opt-in real Node HTTP registry/router/SQLite service completes one explici
     assert.ok(readCalls.slice(firstRead).some(({ method }) => method === 'runs'))
     assert.deepEqual(await metrics(), expectedMetrics, 'inspection must not create a run or dispatch a simulated command')
     assert.equal(result.physicalExecutionAuthorized, false)
+    return result
+  }
+  const inspectSetupWithoutChanges = async (expectedMetrics) => {
+    const before = controller.snapshot(), routeBefore = currentRoute, firstHttp = httpCalls.length, firstRead = setupReadCount
+    const result = await setupInspector.inspect({})
+    assert.deepEqual(httpCalls.slice(firstHttp), [{ method: 'GET', path: '/v2/physical/execution/status' }],
+      'setup reads only status, never discovery, route, execution history or actions')
+    assert.equal(setupReadCount - firstRead, 1)
+    assert.deepEqual(await metrics(), expectedMetrics, 'setup inspection cannot create an invocation or dispatch a command')
+    assert.deepEqual(controller.snapshot(), before, 'setup inspection cannot change operator preparation, approval or run selection')
+    assert.equal(currentRoute, routeBefore, 'setup inspection preserves the existing proposal')
+    assert.equal(result.physicalReadiness, 'unverified')
+    assert.equal(result.physicalExecutionAuthorized, false)
+    assert.equal(result.service.mode, 'simulation')
+    assert.equal(result.sources.discovery.observedAt, discovery.discovery.observedAt)
+    assert.equal(result.sources.catalog.observedAt, null, 'catalog contract supplies no observation timestamp')
+    assert.ok(result.configurations.some((item) => item.configurationId === configuration.configurationId && item.mode === 'simulation'))
+    if (currentRoute) {
+      assert.equal(result.inspection.status, 'available', JSON.stringify(result.inspection))
+      assert.equal(result.sources.route.receiptDigest, currentRoute.receiptDigest)
+      assert.equal(result.sources.route.relationship, 'current')
+      assert.equal(result.sources.route.observedAt, currentRoute.observedAt)
+      assert.equal(result.sources.route.historical, true)
+      const implementation = result.implementations.find((item) => item.implementationId === currentRoute.decision.selected_implementation_id)
+      assert.ok(implementation, 'exact Node-selected implementation must appear in setup inventory')
+      assert.equal(implementation.mode, 'simulation')
+      assert.equal(implementation.checks.find((item) => item.id === 'configuration').status, 'present')
+      for (const id of ['dependencies', 'calibration', 'artifacts', 'state']) {
+        assert.equal(implementation.checks.find((item) => item.id === id).status, 'unverified', id)
+      }
+    } else {
+      assert.equal(result.inspection.status, 'partial')
+      assert.equal(result.sources.route.status, 'unavailable')
+      assert.equal(result.sources.route.relationship, 'none')
+      assert.deepEqual(result.implementations, [])
+    }
     return result
   }
   await controller.refresh()
@@ -143,6 +188,7 @@ test('opt-in real Node HTTP registry/router/SQLite service completes one explici
   assert.equal(availability.configurationAvailability.matchingConfigurations[0].configurationDigest, configuration.configurationDigest)
   assert.equal(availability.selectedRun, null)
   assert.equal(availability.receipt.status, 'not_requested')
+  await inspectSetupWithoutChanges({ commands: 0, runs: 0, mode: 'simulation' })
   assistantBusy = false
   await controller.action('prepare', { configurationId: configuration.configurationId, expectedConfigurationDigest: configuration.configurationDigest, routeReceiptDigest: route.receiptDigest })
   const prepared = controller.snapshot().run
@@ -157,6 +203,7 @@ test('opt-in real Node HTTP registry/router/SQLite service completes one explici
   assert.equal(preparation.selectedRun.outcomeStatus, null)
   assert.equal(controller.snapshot().run.approval.approvedAt, null)
   assert.equal(httpCalls.filter(({ method }) => method === 'POST').length, 1)
+  await inspectSetupWithoutChanges({ commands: 0, runs: 1, mode: 'simulation' })
   await controller.action('approve', { runId: prepared.runId, expectedRunDigest: prepared.runDigest, approvalDigest: prepared.approval.digest, approved: true })
   const deadline = Date.now() + 8000
   while (Date.now() < deadline && !['VERIFIED_SUCCESS', 'FAILED', 'OUTCOME_UNKNOWN', 'BLOCKED'].includes(controller.snapshot().run.phase)) {
@@ -186,6 +233,7 @@ test('opt-in real Node HTTP registry/router/SQLite service completes one explici
   assert.equal(success.receipt.verification.mode, 'simulation')
   assert.equal(success.receipt.historical, true)
   assert.equal(success.receipt.verification.historical, true)
+  await inspectSetupWithoutChanges({ commands: 3, runs: 1, mode: 'simulation' })
   for (const digest of [configuration.configurationDigest, completed.outcome.evidenceDigest]) {
     assert.ok(readCalls.some(({ method, identity }) => method === 'snapshot' && identity === digest))
   }
@@ -213,7 +261,9 @@ test('opt-in real Node HTTP registry/router/SQLite service completes one explici
   assert.equal(historical.receipt.runDigest, completed.runDigest)
   assert.equal(historical.receipt.historical, true)
   assert.equal(controller.snapshot().canPrepare, false)
+  await inspectSetupWithoutChanges({ commands: 3, runs: 1, mode: 'simulation' })
   assert.deepEqual(httpCalls.filter(({ method }) => method === 'POST').map(({ path }) => path),
     ['/v2/physical/execution/runs:prepare', `/v2/physical/execution/runs/${prepared.runId}:approve`])
   t.diagnostic(`Read-only inspection passed before preparation, while awaiting approval, after success and after route retirement; ${readCalls.length} GET facade calls, 1 simulated invocation, 3 simulated commands, 0 inspection actions.`)
+  t.diagnostic(`Setup preflight passed at the same four stages: ${setupReadCount} status-only GETs, cached proposal and operator state unchanged, physical readiness unverified, 0 setup actions.`)
 })

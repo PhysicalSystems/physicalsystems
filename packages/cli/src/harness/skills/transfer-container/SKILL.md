@@ -31,6 +31,22 @@ This package is neither an implementation nor a source of execution authority.
    calibration, and implementation bindings; do not fabricate those as arguments.
 5. Explain the selected capability implementation or the rejection reasons exactly
    as returned. Say explicitly that route selection does not authorize motion.
+   When asked what is missing for physical execution or about setup, call
+   `inspect_physical_setup` with no arguments. Report present, missing and
+   unverified configuration, drivers, calibration, implementation artifacts, state
+   and qualification separately for each returned implementation. Describe taught
+   positions only when the report identifies a taught-waypoints mechanism; other
+   artifacts are implementation-specific. Preserve reported
+   reasons, observation times, omitted-entry limits and next actions. If
+   `sources.route.relationship` is `retired`, identify evidence from the previous
+   proposal; it does not restore a current route or permission to prepare. Adapter
+   registration does not verify driver health; missing cached evidence does not
+   prove an uninspected file or device is absent. A simulation configuration or
+   receipt never establishes physical setup or qualification. Setup inspection
+   does not refresh discovery or route a new request; explain any requested
+   refresh or missing typed inputs. `/physical-setup` gives the same read-only
+   operator report. A missing public inspection contract remains unverified;
+   never invent an installation procedure or change setup to fill a gap.
 6. After a selected route, call `inspect_physical_execution` to check the execution
    service and matching local configurations. When available, direct the operator
    to `/workcell`, the **Physical run** panel, select the matching configuration

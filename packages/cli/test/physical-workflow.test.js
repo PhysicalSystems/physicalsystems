@@ -125,7 +125,7 @@ test('route failure clears the proposal and preserves host rejection rather than
   assert.deepEqual(events, [[failure, 7]])
 })
 
-test('route widget separates Agent Skill, capability and implementation and keeps execution locked', () => {
+test('route widget separates Agent Skill, capability and implementation without claiming execution approval', () => {
   const fixture = routeFixture()
   let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
   state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
@@ -142,6 +142,24 @@ test('route widget separates Agent Skill, capability and implementation and keep
   assert.match(lines, /— Run/)
   assert.match(lines, /— Verify/)
   assert.doesNotMatch(lines, /✓ Run|✓ Verify|movement completed|transfer successful/i)
+})
+
+test('a selected route directs execution review to workcell without a fabricated terminal lock', () => {
+  let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
+  state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
+  state = updatePhysicalWorkflow(state, { type: 'route', receipt: routeFixture().selected })
+  // This workflow projection has no execution-service state. The same selected
+  // route can have an available browser configuration or a missing setup.
+  // Neither approval nor a global execution lock can be inferred from it.
+  const details = renderPhysicalWorkflow(state, 500).join('\n')
+  assert.match(details, /Implementation proposed · not approved · review execution in \/workcell/)
+  for (const width of [20, 48, 120]) {
+    const summary = renderPhysicalWorkflowSummary(state, width)
+    assert.match(summary[2], /\/workcell/)
+    assert.doesNotMatch(summary.join('\n'), /locked|✓ Run|✓ Verify|execution authorized/i)
+  }
+  assert.equal(state.routeReceipt.physicalExecutionAuthorized, false)
+  assert.equal(state.routeReceipt.decision.physical_execution_authorized, false)
 })
 
 test('unknown and stale observations render rejection reasons without selected or verified claims', () => {
@@ -315,7 +333,7 @@ test('workflow renders actual discovery separately from configuration', () => {
   assert.doesNotMatch(rendered, /yellow|taught motion/i)
 })
 
-test('workflow exposes grounded plan but keeps run and verify locked', () => {
+test('workflow exposes a grounded plan without inferring execution availability', () => {
   let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
   state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
   state = updatePhysicalWorkflow(state, {
@@ -330,7 +348,7 @@ test('workflow exposes grounded plan but keeps run and verify locked', () => {
   assert.match(rendered, /— Verify/)
   assert.match(rendered, /Intent · Move the cup/)
   assert.match(rendered, /Plan · transfer cup-one · source → destination/)
-  assert.match(rendered, /physical execution endpoint remains locked/)
+  assert.match(rendered, /route and review an implementation before execution approval/)
 })
 
 test('workflow renders candidate readiness without exposing provider internals', () => {
@@ -416,7 +434,7 @@ test('explicit workflow details include every reported question and gap without 
   assert.equal(summary[3], `Needs input · ${questions[0]}`)
   assert.ok(!summary.join('\n').includes(questions[1]))
   for (const gap of gaps) assert.ok(!summary.join('\n').includes(gap.detail))
-  assert.match(summary.join('\n'), /— Run · — Verify · locked/)
+  assert.match(summary.join('\n'), /\/workcell · run controls/)
 })
 
 test('a commissioning draft preserves all concrete gap explanations in explicit details', () => {
@@ -533,7 +551,7 @@ test('persistent workflow has five width-safe rows independently of inventory si
     }
     const summary = widget.render(120).join('\n')
     assert.match(summary, new RegExp(`${count} observed`))
-    assert.match(summary, /— Run · — Verify · locked/)
+    assert.match(summary, /\/workcell · run controls/)
     assert.match(summary, /\/physical-details/)
     assert.doesNotMatch(summary, /forged row|相機/)
     const details = renderPhysicalWorkflow(state, Number.MAX_SAFE_INTEGER).join('\n')
@@ -542,7 +560,7 @@ test('persistent workflow has five width-safe rows independently of inventory si
   }
 })
 
-test('compact status preserves blockers and locks while route and commissioning details remain available', () => {
+test('compact status preserves blockers and operator controls while route and commissioning details remain available', () => {
   let state = createPhysicalWorkflowState('local')
   const widget = createPhysicalWorkflowWidget(() => state)(null, { fg: (_name, value) => value })
   state = updatePhysicalWorkflow(state, { type: 'checking' })
@@ -570,7 +588,7 @@ test('compact status preserves blockers and locks while route and commissioning 
   assert.match(widget.render(120).join('\n'), /Capability preview blocked/)
   for (const width of [20, 48, 120]) {
     const summary = widget.render(width).join('\n')
-    assert.match(summary, width === 20 ? /Run\/Verify locked/ : /— Run · — Verify · locked/)
+    assert.match(summary, width === 20 ? /Run: \/workcell/ : /\/workcell · run controls/)
     assert.doesNotMatch(summary, /✓ Run|✓ Verify/)
   }
 })
@@ -617,7 +635,7 @@ test('an explicit commissioning gap can prepare a bound draft without claiming a
   assert.equal(state.exploration.physicalExecutionAuthorized, false)
 })
 
-test('workflow renders a declined commissioning draft and keeps execution blocked', () => {
+test('workflow renders a declined commissioning draft without inferring execution authority', () => {
   const response = commissioningResponseFixture()
   let state = createPhysicalWorkflowState('http://127.0.0.1:8876')
   state = updatePhysicalWorkflow(state, { type: 'snapshot', snapshot: snapshotFixture() })
@@ -631,7 +649,7 @@ test('workflow renders a declined commissioning draft and keeps execution blocke
   assert.doesNotMatch(rendered, /◇ Commission/)
   assert.match(rendered, /— Run/)
   assert.match(rendered, /— Verify/)
-  assert.match(rendered, /Commissioning · no draft prepared · physical execution remains locked/)
+  assert.match(rendered, /Commissioning · no draft prepared · no execution authorized by this draft/)
   assert.match(rendered, /Commissioning paused · no draft prepared/)
   assert.deepEqual(state.exploration, {
     status: 'declined',

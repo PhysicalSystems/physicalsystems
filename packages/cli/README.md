@@ -219,7 +219,28 @@ Local tests use explicitly synthetic frames and scripted agent responses.
 They establish transport/UI behavior, not live Ubuntu camera qualification or
 a successful physical transfer. The npm registry release is a separate gate.
 
-### Operator invocation lifecycle (TIN-405 source candidate)
+### Read-only setup preflight
+
+Use `/physical-setup`, or ask the assistant what setup evidence is missing for
+the current proposal. The assistant's `inspect_physical_setup` tool reads the
+same report. It combines the session's retained discovery/catalog/route evidence
+with a bounded read of execution-service status. It does not refresh discovery,
+open devices, create a proposal, inspect arbitrary files or change configuration.
+Follow-up questions can explain the previous assessment as explicitly retired
+historical evidence, without restoring its execution eligibility. New discovery,
+routing, camera evidence or session context clears that retained explanation.
+
+The report distinguishes present records, explicitly missing evidence and
+unverified details. Rejections stay attached to the implementation that received
+them; a rejected alternative does not automatically block a selected one.
+Driver behavior, physical calibration, taught positions and qualification remain
+unverified when the current public API does not expose the necessary evidence.
+Matching hashes, simulation and historical observations never establish current
+physical readiness. Each area includes the next operator or integrator action.
+See [the setup preflight guide](SETUP-PREFLIGHT.md) for the evidence limits and
+the separate preparation/approval path.
+
+### Operator invocation lifecycle
 
 The same `/workcell` view includes a **Physical run** panel. A capability is the
 typed operation; its implementation is the controller or policy. A local

@@ -101,6 +101,21 @@ test('reviewed inspection skill directs candidate-only camera diagnostics to exp
   assert.equal(payload.physicalExecutionAuthorized, false)
 })
 
+test('both curated skills explain setup evidence without inventing or changing physical setup', () => {
+  const registry = loadCuratedAgentSkills({ loadSkillsFromDir })
+  for (const skillId of ['inspect-workcell', 'transfer-container']) {
+    const instructions = registry.read(skillId).instructions.replace(/\s+/g, ' ')
+    assert.match(instructions, /`inspect_physical_setup`/)
+    assert.match(instructions, /present.*missing.*unverified/)
+    assert.match(instructions, /configuration.*drivers.*calibration.*implementation artifacts.*state.*qualification/)
+    assert.match(instructions, /taught positions only when.*taught-waypoints mechanism/)
+    assert.match(instructions, /sources.route.relationship.*retired.*previous proposal.*does not restore a current route/)
+    assert.match(instructions, /simulation.*physical.*qualification/)
+    assert.match(instructions, /`\/physical-setup`/)
+    assert.match(instructions, /not.*refresh.*route/)
+  }
+})
+
 test('ambient user/project packages and local duplicates are never passed to the parser', (t) => {
   const { temporary, packageRoot } = fixture(t)
   for (const ambient of [path.join(temporary, '.pi', 'skills', 'transfer-container'), path.join(temporary, '.agents', 'skills', 'attack')]) {

@@ -15,6 +15,7 @@
     "bin",
     "src",
     "README.md",
+    "SETUP-PREFLIGHT.md",
     "npm-shrinkwrap.json",
     "LICENSE",
     "NOTICE",

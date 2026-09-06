@@ -234,7 +234,9 @@ export function createWorkcellController({
       if (!canPrompt()) throw new WorkcellRequestError(displayText(modelLabel(), 160) ? 'agent_busy' : 'model_unavailable')
       browserTurn = true
       agent = { status: 'working', intent: text, reply: '', error: null, tool: null }
-      invalidateWorkflow()
+      // Retire execution eligibility; the host may keep an explicitly historical
+      // setup explanation. Camera invalidations must still clear that evidence.
+      invalidateWorkflow('conversation')
       emit()
       // Accept once under the synchronous busy latch. The same Pi session may
       // ask a question before it completes; do not keep this HTTP POST pending.

@@ -36,3 +36,17 @@ test('physical prompt preserves typed routing after candidate-only legacy ground
   assert.match(prompt, /all required typed inputs.*current catalog/)
   assert.match(prompt, /Never fabricate commissioning.*bypass.*gate/)
 })
+
+test('physical prompt inspects setup gaps without inferring physical readiness or creating setup', () => {
+  const prompt = physicalSystemsSystemPrompt()
+  assert.match(prompt, /what.*missing.*physical.*inspect_physical_setup/i)
+  assert.match(prompt, /present.*missing.*unverified/)
+  assert.match(prompt, /configuration.*drivers.*calibration.*implementation artifacts.*state.*qualification/)
+  assert.match(prompt, /taught positions only when.*taught-waypoints mechanism/)
+  assert.match(prompt, /sources.route.relationship is retired.*previous proposal.*does not restore a current route/)
+  assert.match(prompt, /cached.*evidence.*live.*readiness/i)
+  assert.match(prompt, /simulation.*configuration.*physical/i)
+  assert.match(prompt, /\/physical-setup/)
+  assert.match(prompt, /setup inspection.*not.*refresh.*route/i)
+  assert.match(prompt, /Never.*commission.*install.*write.*configuration/i)
+})
