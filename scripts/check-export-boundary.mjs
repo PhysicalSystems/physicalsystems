@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkSourceImports } from './check-source-imports.mjs'
 import { readMigrationPlan } from './release-migration.mjs'
+import { checkDesktopManifest } from './check-desktop-boundary.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const expectedRepository = 'git+https://github.com/PhysicalSystems/physicalsystems.git'
@@ -92,9 +93,10 @@ assert.deepEqual(
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort(),
-  ['cli', 'npx', 'pi', 'pi-runtime', 'runtime'],
-  'the clean export contains the Harness, public Python Runtime and frozen compatibility source, never private Node source',
+  ['cli', 'desktop', 'npx', 'pi', 'pi-runtime', 'runtime'],
+  'the clean export contains the Harness, private desktop development client, public Python Runtime and frozen compatibility source, never private Node source',
 )
+checkDesktopManifest(JSON.parse(readFileSync(path.join(root, 'packages/desktop/package.json'), 'utf8')))
 
 const licensePending = existsSync(path.join(root, 'LICENSE-PENDING.md'))
 const npmReleasePending = existsSync(path.join(root, 'NPM-RELEASE-PENDING.md'))

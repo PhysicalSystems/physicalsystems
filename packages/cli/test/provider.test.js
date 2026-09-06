@@ -197,6 +197,8 @@ test('an aborted Pi provider mutation releases its persistent lock before the ca
 })
 
 test('Pi provider credential store refuses to write after lock compromise', async (t) => {
+  const configDir = await mkdtemp(path.join(os.tmpdir(), 'tinyedge-pi-compromised-lock-'))
+  t.after(() => rm(configDir, { recursive: true, force: true }))
   const originalLock = lockfile.lock
   let compromise
   lockfile.lock = async (_target, options) => {
@@ -206,7 +208,7 @@ test('Pi provider credential store refuses to write after lock compromise', asyn
   t.after(() => { lockfile.lock = originalLock })
   let writes = 0
   const store = createPiCredentialStore({
-    configDir: 'C:\\test',
+    configDir,
     secretStore: {
       kind: 'test-persistent',
       async read() { return null },

@@ -157,6 +157,9 @@ export function createTinyEdgePiExtension({
   agentSkillRegistry = null,
   submitWorkcellIntent = null,
   canSubmitWorkcellIntent = null,
+  onWorkcell = null,
+  onSetupInspector = null,
+  isWorkcellModelConfigured = null,
   createWorkcellServerImpl = createWorkcellServer,
   createCameraPreviewClientImpl = createCameraPreviewClient,
   createExecutionClientImpl = createExecutionClient,
@@ -250,6 +253,9 @@ export function createTinyEdgePiExtension({
       } }),
       getContext: () => setupContext,
     }) : null
+    // The application receives only this bounded read-only operation, never the
+    // execution client or any preparation, approval or dispatch authority.
+    if (setupInspector) onSetupInspector?.(() => setupInspector.inspect({}))
     let physicalContext
     let registeredTools = []
     let headerContext
@@ -471,6 +477,36 @@ export function createTinyEdgePiExtension({
       },
     })
 
+    function ensureWorkcell() {
+      if (workcellClosing) throw new Error('Harness session ended')
+      if (workcell) return workcell
+      const model = () => typeof isWorkcellModelConfigured === 'function' && !isWorkcellModelConfigured() ? null : latestContext?.model
+      workcell = createWorkcellController({
+        workflow: physicalState,
+        refreshWorkflow: async () => {
+          await refreshPhysicalSystem(latestContext)
+          transitionPhysical({ type: 'catalog-checking' })
+          const generation = physicalState.generation
+          try { transitionPhysical({ type: 'capability-catalog', catalog: await physicalClient.capabilities(), generation }) }
+          catch (error) { transitionPhysical({ type: 'route-error', error, generation }) }
+        },
+        invalidateWorkflow: (reason) => transitionPhysical({ type: 'reset-intent' }, physicalContext,
+          { retainSetup: reason === 'conversation' }),
+        sendIntent: (text) => {
+          if (typeof submitWorkcellIntent !== 'function') throw new Error('This host cannot submit to the shared Harness session')
+          return submitWorkcellIntent(text)
+        },
+        canPrompt: () => Boolean(model() && latestContext?.isIdle?.()
+          && !latestContext?.hasPendingMessages?.() && typeof submitWorkcellIntent === 'function'
+          && typeof canSubmitWorkcellIntent === 'function' && canSubmitWorkcellIntent() === true),
+        modelLabel: () => model() ? `${model().provider}/${model().id}` : null,
+        cameraClient: createCameraPreviewClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_CAMERA_TOKEN, fetchImpl: physicalFetchImpl }),
+        executionClient: getExecutionClient(),
+      })
+      onWorkcell?.(workcell)
+      return workcell
+    }
+
     if (physicalEnabled) {
       pi.registerCommand('workcell', {
         description: 'Open the camera and workflow view for this same Harness session',
@@ -482,28 +518,7 @@ export function createTinyEdgePiExtension({
           workcellOpening = (async () => {
             try {
               if (!workcellServer) {
-                workcell = createWorkcellController({
-                  workflow: physicalState,
-                  refreshWorkflow: async () => {
-                    await refreshPhysicalSystem(latestContext)
-                    transitionPhysical({ type: 'catalog-checking' })
-                    const generation = physicalState.generation
-                    try { transitionPhysical({ type: 'capability-catalog', catalog: await physicalClient.capabilities(), generation }) }
-                    catch (error) { transitionPhysical({ type: 'route-error', error, generation }) }
-                  },
-                  invalidateWorkflow: (reason) => transitionPhysical({ type: 'reset-intent' }, physicalContext,
-                    { retainSetup: reason === 'conversation' }),
-                  sendIntent: (text) => {
-                    if (typeof submitWorkcellIntent !== 'function') throw new Error('This host cannot submit to the shared Harness session')
-                    return submitWorkcellIntent(text)
-                  },
-                  canPrompt: () => Boolean(latestContext?.model && latestContext?.isIdle?.()
-                    && !latestContext?.hasPendingMessages?.() && typeof submitWorkcellIntent === 'function'
-                    && typeof canSubmitWorkcellIntent === 'function' && canSubmitWorkcellIntent() === true),
-                  modelLabel: () => latestContext?.model ? `${latestContext.model.provider}/${latestContext.model.id}` : null,
-                  cameraClient: createCameraPreviewClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_CAMERA_TOKEN, fetchImpl: physicalFetchImpl }),
-                  executionClient: getExecutionClient(),
-                })
+                ensureWorkcell()
                 workcellServer = await createWorkcellServerImpl({ host: workcell })
               }
               if (workcellClosing) return
@@ -642,11 +657,13 @@ export function createTinyEdgePiExtension({
         replaceSetupContext()
         executionInspector.dispose()
         setupInspector.dispose()
+        onSetupInspector?.(null)
         await workcellOpening
         const closingServer = workcellServer
         const closingController = workcell
         workcellServer = null
         workcell = null
+        onWorkcell?.(null)
         latestContext = null
         try { await closingServer?.close() }
         finally { await closingController?.dispose() }
@@ -688,6 +705,7 @@ export function createTinyEdgePiExtension({
       workcellClosing = false
       replaceSetupContext()
       latestContext = ctx
+      if (physicalEnabled && onWorkcell) ensureWorkcell()
       pi.setActiveTools([...new Set([
         ASK_CHOICE_TOOL,
         ...physicalActiveTools,
