@@ -61,7 +61,7 @@ async function snapshot(directory, relative = '') {
 
 test('the product descriptor keeps independent exact identities, all six selectors and immutable pins', async () => {
   const descriptor = await readProductRelease()
-  assert.deepEqual(descriptor.product, { name: 'physicalsystems', version: '0.2.4' })
+  assert.deepEqual(descriptor.product, { name: 'physicalsystems', version: '0.2.5' })
   assert.equal(descriptor.components.node.version, '0.2.1')
   assert.equal(descriptor.components.runtime.version, '0.2.0')
   assert.equal(descriptor.components.piRuntime.version, '0.84.2-tinyedge.1')
@@ -73,7 +73,7 @@ test('the product descriptor keeps independent exact identities, all six selecto
   assert.deepEqual(descriptor.toolchain, { node: '22.19.0', npm: '11.19.0', consumerNode: '24.15.0', consumerNpm: '12.0.2' })
   const copy = validateProductRelease(descriptor)
   copy.product.version = '1.0.0'
-  assert.equal(descriptor.product.version, '0.2.4')
+  assert.equal(descriptor.product.version, '0.2.5')
 })
 
 test('descriptor validation rejects unknown/missing keys, ranges, alternate identities and reduced selectors', async () => {

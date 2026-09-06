@@ -1,6 +1,6 @@
 {
   "name": "physicalsystems",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Local Physical Systems Harness for real-world hardware",
   "type": "module",
   "bin": {
@@ -15,6 +15,7 @@
     "bin",
     "src",
     "README.md",
+    "SETUP-PREFLIGHT.md",
     "npm-shrinkwrap.json",
     "LICENSE",
     "NOTICE",

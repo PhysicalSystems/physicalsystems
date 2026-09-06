@@ -116,7 +116,7 @@ function Install-PinnedNode {
 }
 
 if ($env:OS -ne 'Windows_NT') {
-  throw 'This historical unreleased-source installer is Windows-only. On qualified Ubuntu desktop x64, first require `npm view physicalsystems@0.2.4 version --json` to return `"0.2.4"`, then run `npx --yes physicalsystems@0.2.4`.'
+  throw 'This historical unreleased-source installer is Windows-only. On qualified Ubuntu desktop x64, first require `npm view physicalsystems@0.2.5 version --json` to return `"0.2.5"`, then run `npx --yes physicalsystems@0.2.5`.'
 }
 
 if (-not $env:LOCALAPPDATA) {

@@ -19,6 +19,7 @@ import { createWorkcellServer } from './harness/workcell-server.js'
 import { createCameraPreviewClient } from './physical/camera-preview-client.js'
 import { createExecutionClient } from './physical/execution-client.js'
 import { createExecutionInspector } from './harness/execution-inspection.js'
+import { createSetupInspector } from './harness/setup-inspection.js'
 import { openBrowser } from './auth/open-browser.js'
 import {
   promptPhysicalCommissioningDraft,
@@ -33,6 +34,7 @@ import {
   renderPhysicalWorkflow,
   PHYSICAL_TOOL_ALLOWLIST,
   PHYSICAL_EXECUTION_INSPECTION_TOOL,
+  PHYSICAL_SETUP_INSPECTION_TOOL,
   updatePhysicalWorkflow,
 } from './physical/workflow.js'
 
@@ -95,6 +97,39 @@ function uiIo(ctx) {
     log(value) { ctx.ui.notify(String(value), 'info') },
     error(value) { ctx.ui.notify(String(value), 'error') },
   }
+}
+
+function setupReportLines(report) {
+  const checkLine = (check) => `${check.id} · ${check.status}${check.reasonCodes.length ? ` · ${check.reasonCodes.join(', ')}` : ''} · ${check.message}${check.action ? ` Next: ${check.action}` : ''}`
+  const evidenceTime = (value) => {
+    if (!value) return 'not reported'
+    const age = Date.parse(report.inspection.observedAt) - Date.parse(value)
+    return `${value} (${!Number.isFinite(age) ? 'age unverified' : age < 0 ? 'after report time' : `${Math.floor(age / 1000)} seconds before report`})`
+  }
+  return [
+    `Physical setup · ${report.inspection.status} · ${report.inspection.message}`,
+    ...(report.inspection.observedAt ? [`Report generated ${report.inspection.observedAt} · expires ${report.inspection.expiresAt}`] : []),
+    'Cached discovery and route evidence with a read-only execution service check. Physical readiness remains unverified; this report grants no execution authority.',
+    `Execution service · ${report.service.availability} · mode ${report.service.mode || 'unverified'}`,
+    `Configuration inventory · ${report.service.configurationInventory}`,
+    `Discovery evidence · ${report.sources.discovery.status} · observed ${evidenceTime(report.sources.discovery.observedAt)}`,
+    `Catalog evidence · ${report.sources.catalog.status} · observation time ${evidenceTime(report.sources.catalog.observedAt)}`,
+    `Route evidence · ${report.sources.route.status} · ${report.sources.route.relationship} · observed ${evidenceTime(report.sources.route.observedAt)} · evaluated ${evidenceTime(report.sources.route.evaluatedAt)}`,
+    ...report.checks.map(checkLine),
+    ...report.requestBlockers.map((blocker) => `Request blocked · ${blocker.code} · ${blocker.message}${blocker.action ? ` Next: ${blocker.action}` : ''}`),
+    ...report.devices.map((device) => `Device ${device.deviceId} · ${device.presence} · adapter registration ${device.adapterRegistration} · driver health ${device.driverHealth} · calibration ${device.calibration}`),
+    ...report.capabilities.map((capability) => `Capability ${capability.capabilityId} · typed routing ${capability.availableForRouting ? 'available' : 'unavailable'}${capability.reasonCodes.length ? ` · ${capability.reasonCodes.join(', ')}` : ''}`),
+    ...report.configurations.map((configuration) => `Configuration ${configuration.configurationId} · ${configuration.mode} · ${configuration.configurationDigest}`),
+    ...report.implementations.flatMap((implementation) => [
+      `Implementation ${implementation.implementationId} · capability ${implementation.capabilityId} · route ${implementation.routingStatus} · recorded qualification ${implementation.recordedQualificationStatus}`,
+      ...implementation.checks.map((check) => `  ${checkLine(check)}`),
+    ]),
+    ...(report.sources.discovery.truncated ? ['Device list truncated; inspect the exact intended device before choosing it.'] : []),
+    ...(report.sources.catalog.truncated ? ['Capability catalog list truncated; omitted entries are not evaluated here.'] : []),
+    ...(report.counts.configurationTruncated || report.counts.implementationTruncated
+      ? [`Bounded report · configurations ${report.counts.configurations === null ? 'unverified' : `${report.configurations.length}/${report.counts.configurations}`}, implementations ${report.implementations.length}/${report.counts.implementations}. Omitted entries are not evaluated here.`] : []),
+    ...report.limitations,
+  ]
 }
 
 /**
@@ -169,6 +204,18 @@ export function createTinyEdgePiExtension({
     let physicalState = physicalEnabled
       ? createPhysicalWorkflowState(physicalClient.origin)
       : null
+    // One bounded, read-only context can explain the preceding proposal after a
+    // conversational turn retires it. It is never supplied to execution or UI
+    // eligibility and is replaced on an actual evidence request or invalidation.
+    let setupGeneration = 0
+    let setupContext = Object.freeze({ generation: setupGeneration, snapshot: null,
+      capabilityCatalog: null, routeReceipt: null, routeRelationship: 'none' })
+    function replaceSetupContext(source = {}) {
+      setupContext = Object.freeze({ generation: ++setupGeneration,
+        snapshot: source.snapshot ?? null, capabilityCatalog: source.capabilityCatalog ?? null,
+        routeReceipt: source.routeReceipt ?? null,
+        routeRelationship: source.routeReceipt ? source.routeRelationship === 'retired' ? 'retired' : 'current' : 'none' })
+    }
     // One host-owned client serves both the operator controller and the narrow
     // model reader. Construction is inert and lazy; only explicit use reads Node.
     let executionClient
@@ -193,6 +240,16 @@ export function createTinyEdgePiExtension({
       getContext: () => ({ generation: physicalState.generation, route: physicalState.routeReceipt,
         selectedRun: workcell?.snapshot().execution.run || null }),
     }) : null
+    const setupInspector = physicalEnabled ? createSetupInspector({
+      // Setup diagnosis can only read status. Cached workflow evidence is
+      // projected by the inspector without refreshing discovery or routing.
+      client: Object.freeze({ status: (...args) => {
+        const client = getExecutionClient()
+        if (typeof client?.status !== 'function') throw new Error('Setup inspection is unavailable')
+        return client.status(...args)
+      } }),
+      getContext: () => setupContext,
+    }) : null
     let physicalContext
     let registeredTools = []
     let headerContext
@@ -214,11 +271,16 @@ export function createTinyEdgePiExtension({
       )
     }
 
-    function transitionPhysical(event, ctx = physicalContext) {
+    function transitionPhysical(event, ctx = physicalContext, { retainSetup = false } = {}) {
       if (!physicalEnabled) return false
       const nextState = updatePhysicalWorkflow(physicalState, event)
       if (nextState === physicalState) return false
       physicalState = nextState
+      if (event.type === 'reset-intent' && retainSetup) {
+        replaceSetupContext({ ...setupContext, snapshot: physicalState.snapshot, routeRelationship: 'retired' })
+      } else if (!['agent-skill', 'exploration', 'exploration-declined'].includes(event.type)) {
+        replaceSetupContext(event.type === 'checking' ? {} : physicalState)
+      }
       workcell?.setWorkflow(physicalState)
       updateHeader({
         nodeStatus: physicalState.status,
@@ -286,6 +348,17 @@ export function createTinyEdgePiExtension({
           const value = await executionInspector.inspect(params ?? {}, { signal })
           return { content: [{ type: 'text', text: JSON.stringify(value) }],
             details: { displaySummary: 'Read-only execution status and receipt inspection' } }
+        },
+      }))
+      pi.registerTool(defineToolImpl({
+        name: PHYSICAL_SETUP_INSPECTION_TOOL,
+        label: 'Inspect Physical Setup',
+        description: 'Explain present, missing and unverified physical setup from cached discovery, capability and route evidence plus a bounded read-only execution status check. Use when asked what is missing for physical execution: configuration, drivers, calibration, implementation artifacts, state and qualification. Taught positions apply only when the reported implementation uses taught-waypoints. Not exposed, unverified or unavailable does not mean absent or missing. Report absence only from an explicit missing status or missing reason code for that item. Qualification metadata can be present while underlying physical evidence is unverified. Route implementation digest: routing envelope; configuration implementation digest: executable artifact. These different scopes need not match; Node enforces exact bindings. No arguments, discovery refresh, routing, file access, commissioning, camera access or execution actions. This report never establishes physical readiness or grants approval; inspect_physical_execution reads existing run results.',
+        parameters: { type: 'object', additionalProperties: false, properties: {} },
+        async execute(_callId, params, signal) {
+          const value = await setupInspector.inspect(params ?? {}, { signal })
+          return { content: [{ type: 'text', text: JSON.stringify(value) }],
+            details: { displaySummary: 'Read-only physical setup evidence and gaps' } }
         },
       }))
     }
@@ -418,7 +491,8 @@ export function createTinyEdgePiExtension({
                     try { transitionPhysical({ type: 'capability-catalog', catalog: await physicalClient.capabilities(), generation }) }
                     catch (error) { transitionPhysical({ type: 'route-error', error, generation }) }
                   },
-                  invalidateWorkflow: () => transitionPhysical({ type: 'reset-intent' }),
+                  invalidateWorkflow: (reason) => transitionPhysical({ type: 'reset-intent' }, physicalContext,
+                    { retainSetup: reason === 'conversation' }),
                   sendIntent: (text) => {
                     if (typeof submitWorkcellIntent !== 'function') throw new Error('This host cannot submit to the shared Harness session')
                     return submitWorkcellIntent(text)
@@ -455,6 +529,14 @@ export function createTinyEdgePiExtension({
             'Cached workflow details · run /physical to refresh discovery.',
             ...renderPhysicalWorkflow(physicalState, Number.MAX_SAFE_INTEGER),
           ].join('\n'), 'info')
+        },
+      })
+      pi.registerCommand('physical-setup', {
+        description: 'Explain cached physical setup evidence and gaps with a read-only service check',
+        handler: async (args, ctx) => {
+          if (String(args || '').trim()) { ctx.ui.notify('Usage: /physical-setup', 'warning'); return }
+          const report = await setupInspector.inspect({})
+          ctx.ui.notify(setupReportLines(report).join('\n'), report.inspection.status === 'available' ? 'info' : 'warning')
         },
       })
       pi.registerCommand('physical', {
@@ -502,7 +584,7 @@ export function createTinyEdgePiExtension({
               const proposal = await promptPhysicalCommissioningDraft(ctx, response)
               if (proposal?.decision === 'declined') {
                 transitionPhysical({ type: 'exploration-declined' }, ctx)
-                ctx.ui.notify('Commissioning paused. Physical execution remains locked.', 'warning')
+                ctx.ui.notify('Commissioning paused. An unprepared draft grants no execution authority.', 'warning')
               } else if (proposal) {
                 transitionPhysical({ type: 'exploration', exploration: proposal }, ctx)
                 ctx.ui.notify(
@@ -510,10 +592,10 @@ export function createTinyEdgePiExtension({
                   'info',
                 )
               } else {
-                ctx.ui.notify('Commissioning draft was not prepared. Execution remains locked.', 'warning')
+                ctx.ui.notify('Commissioning draft was not prepared. A draft grants no execution authority.', 'warning')
               }
             } else if (interpretation.status === 'ready') {
-              ctx.ui.notify('Physical workflow grounded. Execution remains locked.', 'info')
+              ctx.ui.notify('Physical workflow grounded, not approved. Review setup with /physical-setup and any available operator run in /workcell.', 'info')
             } else if (interpretation.questions?.length) {
               ctx.ui.notify(interpretation.questions[0], 'warning')
             } else if (interpretation.gaps?.length) {
@@ -531,7 +613,7 @@ export function createTinyEdgePiExtension({
 
     pi.on('before_agent_start', (event, ctx) => {
       latestContext = ctx || latestContext
-      if (physicalEnabled) transitionPhysical({ type: 'reset-intent' })
+      if (physicalEnabled) transitionPhysical({ type: 'reset-intent' }, physicalContext, { retainSetup: true })
       workcell?.agentStart(event.prompt)
       freshBenchmarkTurn = cloudEnabled && isFreshBenchmarkRequest(event.prompt)
       freshDeviceCheckStarted = false
@@ -557,7 +639,9 @@ export function createTinyEdgePiExtension({
       pi.on('model_select', (_event, ctx) => { latestContext = ctx; workcell?.modelChanged() })
       pi.on('session_shutdown', async () => {
         workcellClosing = true
+        replaceSetupContext()
         executionInspector.dispose()
+        setupInspector.dispose()
         await workcellOpening
         const closingServer = workcellServer
         const closingController = workcell
@@ -602,6 +686,7 @@ export function createTinyEdgePiExtension({
 
     pi.on('session_start', async (_event, ctx) => {
       workcellClosing = false
+      replaceSetupContext()
       latestContext = ctx
       pi.setActiveTools([...new Set([
         ASK_CHOICE_TOOL,

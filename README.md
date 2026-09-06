@@ -3,7 +3,7 @@
 Physical Systems is a local Harness for turning an operator's intent into a
 grounded, checked workflow for real equipment. The npm application provides the
 operator interface. A separate local node discovers hardware, exposes device
-capabilities and state, and will ultimately own execution beside the machines.
+capabilities and state, and owns configured execution beside the machines.
 
 ```text
 operator intent
@@ -38,13 +38,26 @@ Today it can:
   capabilities;
 - accept a natural-language outcome from the operator;
 - bind planning to the latest observed state;
-- show missing adapters, configuration and skills before execution; and
-- keep `Run` and `Verify` locked when no authorized executor exists.
+- report setup evidence as present, missing or unverified, with next steps;
+- show the selected implementation and its exact routing blockers;
+- offer operator preparation and separate approval through `/workcell` when
+  the matching execution service and configuration are available; and
+- inspect exact run status and verified historical receipts without replaying
+  an invocation or treating a simulation as physical success.
 
 It does not infer devices from a fixed enrollment file, install arbitrary
 hardware drivers, or move a robot merely because an operator entered a prompt.
-The current npm source has no motion endpoint. Commissioning and controlled
-execution are the next contract boundary, not hidden demo behavior.
+The Node retains preparation, approval, execution and Stop authority. The
+Harness's setup report does not commission equipment or establish physical
+readiness. A real workflow still needs its implementation-specific setup and
+legitimate qualification evidence; no first-trial commissioning wizard is
+provided by this patch.
+
+Use `/physical-setup` for a read-only report of the current session's setup
+evidence. It explains reported configuration, dependency, calibration, artifact,
+state and qualification gaps without opening devices or modifying the setup.
+Unavailable API detail remains unverified. See the
+[setup preflight guide](packages/cli/SETUP-PREFLIGHT.md).
 
 ## Installation status
 
@@ -66,10 +79,11 @@ npx --yes physicalsystems@preview
 added a fail-fast prerequisite check for older Node.js versions and pinned,
 reviewed backend manifests in a small npm artifact. Version `0.2.2` added a
 compact workflow status and separated observed discovery metadata from
-unassessed driver, capture and calibration evidence. Version `0.2.4` retains
-the backend pins and improves basic camera preview guidance, frame replacement,
-Stop handling, browser recovery and planning explanations. See the
-[0.2.4 release notes](packages/cli/RELEASE.md#023-patch-candidate). First launch asks
+unassessed driver, capture and calibration evidence. Version `0.2.5` retains
+the backend pins and adds a read-only setup preflight with actionable evidence
+gaps and consistent terminal guidance. Camera freshness, independent Stop,
+browser recovery and exact execution inspection remain covered. See the
+[release notes](packages/cli/RELEASE.md). First launch asks
 for software setup consent, downloads only the wheel set matching the computer's
 OS, architecture and Python version, checks its exact hashes and sizes, and
 installs it in an isolated user environment, without a Git

@@ -8,6 +8,7 @@ export const PHYSICAL_INTENT_TOOL = 'plan_physical_workflow'
 export const PHYSICAL_CAPABILITIES_TOOL = 'inspect_physical_capabilities'
 export const PHYSICAL_ROUTE_TOOL = 'preview_physical_capability'
 export const PHYSICAL_EXECUTION_INSPECTION_TOOL = 'inspect_physical_execution'
+export const PHYSICAL_SETUP_INSPECTION_TOOL = 'inspect_physical_setup'
 export const PHYSICAL_TOOL_ALLOWLIST = Object.freeze([
   PHYSICAL_DISCOVERY_TOOL,
   PHYSICAL_INTENT_TOOL,
@@ -15,6 +16,7 @@ export const PHYSICAL_TOOL_ALLOWLIST = Object.freeze([
   PHYSICAL_ROUTE_TOOL,
   READ_AGENT_SKILL_TOOL,
   PHYSICAL_EXECUTION_INSPECTION_TOOL,
+  PHYSICAL_SETUP_INSPECTION_TOOL,
 ])
 
 const STEPS = Object.freeze(['Discover', 'Intent', 'Plan', 'Commission', 'Run', 'Verify'])
@@ -159,8 +161,8 @@ function stepStates(state) {
     intentSubmitted ? 'done' : 'waiting',
     planReady ? 'done' : planNeedsWork ? 'blocked' : 'waiting',
     commissioningDraft ? 'draft' : intentSubmitted ? 'blocked' : 'waiting',
-    'locked',
-    'locked',
+    'unassessed',
+    'unassessed',
   ]
 }
 
@@ -170,7 +172,7 @@ const STATUS_MARK = Object.freeze({
   blocked: '!',
   draft: '◇',
   waiting: '○',
-  locked: '—',
+  unassessed: '—',
 })
 
 function fit(value, width) {
@@ -235,7 +237,7 @@ function groundingLine(response) {
 function explorationLines(exploration) {
   if (!exploration) return []
   if (exploration.status === 'declined') {
-    return ['Commissioning · no draft prepared · physical execution remains locked']
+    return ['Commissioning · no draft prepared · no execution authorized by this draft']
   }
   if (exploration.status !== 'draft') return []
   const gaps = (exploration.gapIds || []).map(cleanMessage).join(', ')
@@ -256,7 +258,7 @@ function nextLine(state) {
   if (state.status === 'checking') return 'Checking the local Physical Systems node without opening hardware…'
   if (state.routeError) return `Capability preview blocked · ${state.routeError}`
   if (state.routeReceipt) return state.routeReceipt.decision.decision_status === 'selected'
-    ? 'Implementation proposed · preview only · Run and Verify remain locked.'
+    ? 'Implementation proposed · not approved · review execution in /workcell.'
     : 'No eligible capability implementation · resolve the reported gaps before requesting another preview.'
   if (state.status === 'unavailable') return `Physical Systems node unavailable · ${state.error} · run /physical to retry`
   if (state.error) return `Planning blocked · ${state.error}`
@@ -267,17 +269,17 @@ function nextLine(state) {
   if (!state.response) return 'Describe the physical outcome in the editor, or run /physical.'
   const interpretation = state.response.interpretation
   if (state.exploration?.status === 'draft') {
-    return 'Commissioning draft ready · method and bounds remain unresolved; execution remains locked.'
+    return 'Commissioning draft ready · method and bounds remain unresolved; local review required.'
   }
   if (state.exploration?.status === 'declined') {
-    return 'Commissioning paused · no draft prepared; physical execution remains locked.'
+    return 'Commissioning paused · no draft prepared; local review required.'
   }
   if (interpretation.status === 'ready') {
-    return 'Plan grounded · the physical execution endpoint remains locked.'
+    return 'Plan grounded · route and review an implementation before execution approval.'
   }
   if (interpretation.questions?.length) return `Needs input · ${cleanMessage(interpretation.questions[0])}`
   if (interpretation.gaps?.length) return `Commissioning gap · ${cleanMessage(interpretation.gaps[0].detail)}`
-  return `Plan ${cleanMessage(interpretation.status)} · physical execution is locked.`
+  return `Plan ${cleanMessage(interpretation.status)} · not an execution approval.`
 }
 
 export function renderPhysicalWorkflow(state, width = 100) {
@@ -344,7 +346,7 @@ export function renderPhysicalWorkflowSummary(state, width = 100) {
   return [
     `Physical · ${status}`,
     visibleWidth(progress) <= safeWidth ? progress : `${STATUS_MARK[marks[current]]} ${STEPS[current]}`,
-    safeWidth >= 24 ? '— Run · — Verify · locked' : 'Run/Verify locked',
+    safeWidth >= 24 ? '/workcell · run controls' : 'Run: /workcell',
     next,
     '/physical-details · inventory, plan and gaps',
   ].map((line) => fit(line, safeWidth))

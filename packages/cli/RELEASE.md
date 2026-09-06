@@ -1,58 +1,69 @@
 # Release checklist
 
-## 0.2.4 patch candidate
+## 0.2.5 patch candidate
 
 Harness-only patch candidate. Preparation does not publish the package or
 authorize upgrading an existing installation.
 
 ### Operator changes
 
-- After selecting a capability implementation, the assistant checks the actual
-  execution service and matching local configurations. It directs the operator
-  to `/workcell` to prepare, review and explicitly approve one invocation when
-  supported. A temporarily busy control is not described as a missing executor.
-- The read-only `inspect_physical_execution` tool exposes bounded service and
-  configuration availability, known run identities, recorded phases and verified
-  receipt evidence. It cannot prepare, approve, dispatch, stop or reconcile.
-  Arbitrary run identifiers, paths and execution arguments are rejected.
-- Follow-up questions can inspect a completed run without proposing it again.
-  Inspection failures remain separate from Node's `OUTCOME_UNKNOWN`. Success
-  requires the exact successful run and verified receipt with supporting outcome
-  evidence. Historical evidence is not current readiness; simulation is always
-  distinguished from physical execution.
-- Receipt reads verify run identity, monotonic history, configuration and outcome
-  snapshots. Requests are bounded and reject obsolete session/route/selection
-  results. Raw configuration, credentials, provider diagnostics and images never
-  enter the assistant projection.
-- The system prompt and reviewed transfer Agent Skill describe the supported
-  operator lifecycle. Sequential discovery/catalog inspection avoids invalidating
-  catalog reads. Exact typed routing remains available when the legacy planner
-  lacks object/station grounding; all Node gates still apply.
+- `/physical-setup` and the assistant's `inspect_physical_setup` tool provide
+  the same bounded, read-only setup report. They use retained validated
+  discovery/catalog/route projections and a status-only execution-service read;
+  they do not refresh discovery, route, read arbitrary files, create a browser,
+  inspect run snapshots, open devices or change configuration.
+- The report distinguishes present records, explicitly missing evidence and
+  unverified facts. Known route rejections remain scoped to their exact
+  implementation or request. Dependencies, calibration, implementation
+  artifacts, current-state observations, qualification, execution target and
+  request/policy mismatches receive concrete next steps. Unknown reasons remain
+  visible. Missing API detail is never silently counted as a successful check.
+  Unexposed evidence is not described as absent. Routing-envelope and executable-
+  artifact digests retain their separate meanings; they need not be equal.
+- Physical calibration and taught-position requirements remain unverified when
+  not exposed by the public contract. A selected route, matching digest,
+  available adapter or historical/simulated result never establishes current
+  physical readiness or approval. Multiple implementations retain their own
+  rejection reasons; a rejected alternative does not block a selected one.
+- Setup reads have bounded output and request duration, retain ownership of
+  unsettled reads, and reject cancelled, expired or changed session/route
+  results. Invalid arguments, unavailable services and private diagnostics do
+  not produce misleading setup or success claims.
+- Follow-up questions can explain the preceding assessment from a separate,
+  bounded historical copy. It is marked retired and keeps its original source
+  timestamps; active proposal retirement and all execution gates remain intact.
+  Discovery, catalog, route, camera or session changes clear retained setup
+  evidence instead of reusing it for a different context.
+- The terminal workflow footer directs execution review to `/workcell` instead
+  of asserting that Run and Verify remain locked without execution-state
+  evidence. Workflow progress and commissioning drafts never grant approval.
+- The assistant and reviewed workcell/transfer Agent Skills explain the setup
+  report and existing preparation/approval path. The new setup guide is included
+  in the package; no additional package or provider is required.
 
 ### Compatibility and qualification
 
 Physical Systems Node 0.2.1, Runtime 0.2.0 and the pinned Pi compatibility runtime
-are reused without changes. No new hardware implementation or commissioning
-bootstrap is introduced. A physical setup still requires its implementation's
-calibration, configuration, qualified observations and intervention procedure.
+are reused without changes. The public Node API does not enumerate every
+implementation's calibration, dependency and artifact binding. This Harness
+patch reports that limitation; it does not copy private Node implementation,
+introduce a new endpoint or provide a physical first-trial commissioning wizard.
 
-The camera preview, independent Stop, browser reconnect and blocking-message
-fixes from the previous patch remain covered by their regression suites.
-Basic preview still goes through `/workcell` without commissioning. Frame and
-metadata replacement remains atomic, with freshness expiry and clearing on
-Stop, disconnection and camera/session changes.
+Camera preview remains available through `/workcell` without commissioning.
+Atomic image/metadata replacement, freshness expiry, clearing on Stop or identity
+changes, independent Stop, bounded browser recovery, request-error guidance and
+exact execution-receipt inspection retain their existing regression coverage.
 
-New regression coverage includes read-only authority boundaries, exact receipt
-and snapshot integrity, known-run selection, changed historical configuration,
-service failure, cancellation, concurrent reads and stale contexts. The opt-in
-real Node HTTP test uses explicit simulation and asserts one approved invocation,
-three fake commands and no dispatch from inspection. Local qualification results
-and exact candidate hashes are retained outside the repository for review.
-Protected native package qualification and release approval remain required.
+Regression evidence and exact candidate qualification are retained outside the
+repository for review. Setup tests cover authority boundaries, failure and
+cancellation, scoped reasons, unknown/missing evidence, simulation and historical
+limits. Integration tests use real Node services with explicit fakes; no hardware
+is required. Protected native package qualification and release approval remain
+required before publication.
 
 Earlier controlled camera testing passed headless UI blanking and exact-frame
-metadata checks. **Optical/display flicker was not measured.** No new camera or
-physical execution verification is implied by this patch's simulation tests.
+metadata checks. **Optical/display flicker was not measured.** No new camera,
+physical calibration, robot Stop or physical execution qualification is implied.
 The Avahi timeout partial-results defect remains a separate Node follow-up.
 
 ## Package transition
@@ -111,7 +122,7 @@ approved Windows/Linux x64 Python 3.10–3.12 manifests blocks publication. This
 metadata gate does not replace clean installation tests of the downloaded bytes.
 The same hashes are rechecked from the actual installed npm artifact.
 
-1. Uses `npm run release:prepare` to build `physicalsystems@0.2.4` once on
+1. Uses `npm run release:prepare` to build `physicalsystems@0.2.5` once on
    Windows x64 with the reviewed JS dependency closure, exact backend manifests
    and tarball checksums. Wheel binaries are not included. The normal product
    archive must be at most 50 MiB (a project policy, not a claimed registry limit).
@@ -130,18 +141,18 @@ The same hashes are rechecked from the actual installed npm artifact.
 5. Enters the protected environment only after all platform checks pass and
    requires `NPM_RELEASE_POLICY_VERSION=v3-physicalsystems-preview`.
 6. Verifies the inert namespace bootstrap, the already-published runtime, and
-   that `physicalsystems@0.2.4` is not already public. This update requires the
-   exact existing tags `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.3`;
+   that `physicalsystems@0.2.5` is not already public. This update requires the
+   exact existing tags `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.4`;
    unexpected tag changes block publication rather than being overwritten.
 7. Publishes exactly one tarball:
 
    ```bash
-   npm publish "./release-artifacts/physicalsystems-0.2.4.tgz" \
+   npm publish "./release-artifacts/physicalsystems-0.2.5.tgz" \
      --registry="https://registry.npmjs.org/" \
      --provenance --tag preview --access public
    ```
 
-8. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.4`; compares
+8. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.5`; compares
    registry integrity and shasum with the approved tarball; requires SLSA v1
    provenance; and runs `npm audit signatures`.
 
@@ -270,22 +281,22 @@ After publishing to `preview`, verify from clean Windows and Ubuntu desktop
 environments:
 
 ```bash
-npm view physicalsystems@0.2.4 version dist.integrity dist.shasum dist.attestations --json
+npm view physicalsystems@0.2.5 version dist.integrity dist.shasum dist.attestations --json
 npm view physicalsystems dist-tags --json
-npx --yes physicalsystems@0.2.4 --version
-npm install --global physicalsystems@0.2.4
+npx --yes physicalsystems@0.2.5 --version
+npm install --global physicalsystems@0.2.5
 physicalsystems
 ```
 
 Also create an empty audit directory, install with
-`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.4`, and
+`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.5`, and
 run `npm audit signatures`. Use a disposable account for optional cloud OAuth
 or MCP canaries; package checks are not production-service evidence.
 
 Only after the canary is accepted may a maintainer promote the exact bytes:
 
 ```bash
-npm dist-tag add physicalsystems@0.2.4 latest
+npm dist-tag add physicalsystems@0.2.5 latest
 ```
 
 Promotion requires maintainer presence and npm 2FA. If the preview fails, do

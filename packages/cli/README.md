@@ -9,19 +9,19 @@ The package is designed for Windows x64/ARM64 and Ubuntu 22.04/24.04 desktop
 x64 with Node.js 22.19.0 or newer. Headless Linux, Raspberry Pi, other Linux
 targets and macOS have not yet passed the package qualification boundary.
 
-## Install version 0.2.4
+## Install version 0.2.5
 
 Registry tags can change. Require the following check to succeed before
-treating `0.2.4` as a published application:
+treating `0.2.5` as a published application:
 
 ```bash
-npm view physicalsystems@0.2.4 version --json
+npm view physicalsystems@0.2.5 version --json
 ```
 
 Run that exact version without a persistent installation:
 
 ```bash
-npx physicalsystems@0.2.4
+npx physicalsystems@0.2.5
 ```
 
 `npx` runs an isolated package command; it does not create a global or
@@ -30,12 +30,12 @@ persistent `physicalsystems` installation.
 Or install an exact persistent command:
 
 ```bash
-npm install --global physicalsystems@0.2.4
+npm install --global physicalsystems@0.2.5
 physicalsystems
 ```
 
 The immutable `tinyedge@0.1.3` and `tinyedge@0.1.5` releases are historical
-product identities. They are not part of the `physicalsystems@0.2.4` package
+product identities. They are not part of the `physicalsystems@0.2.5` package
 graph and are not recommended for a new Physical Systems installation.
 
 The package requires Node.js 22.19.0 or newer. On an older runtime, npm may
@@ -219,7 +219,28 @@ Local tests use explicitly synthetic frames and scripted agent responses.
 They establish transport/UI behavior, not live Ubuntu camera qualification or
 a successful physical transfer. The npm registry release is a separate gate.
 
-### Operator invocation lifecycle (TIN-405 source candidate)
+### Read-only setup preflight
+
+Use `/physical-setup`, or ask the assistant what setup evidence is missing for
+the current proposal. The assistant's `inspect_physical_setup` tool reads the
+same report. It combines the session's retained discovery/catalog/route evidence
+with a bounded read of execution-service status. It does not refresh discovery,
+open devices, create a proposal, inspect arbitrary files or change configuration.
+Follow-up questions can explain the previous assessment as explicitly retired
+historical evidence, without restoring its execution eligibility. New discovery,
+routing, camera evidence or session context clears that retained explanation.
+
+The report distinguishes present records, explicitly missing evidence and
+unverified details. Rejections stay attached to the implementation that received
+them; a rejected alternative does not automatically block a selected one.
+Driver behavior, physical calibration, taught positions and qualification remain
+unverified when the current public API does not expose the necessary evidence.
+Matching hashes, simulation and historical observations never establish current
+physical readiness. Each area includes the next operator or integrator action.
+See [the setup preflight guide](SETUP-PREFLIGHT.md) for the evidence limits and
+the separate preparation/approval path.
+
+### Operator invocation lifecycle
 
 The same `/workcell` view includes a **Physical run** panel. A capability is the
 typed operation; its implementation is the controller or policy. A local

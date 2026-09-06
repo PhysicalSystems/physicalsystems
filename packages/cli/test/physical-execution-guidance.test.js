@@ -36,3 +36,34 @@ test('physical prompt preserves typed routing after candidate-only legacy ground
   assert.match(prompt, /all required typed inputs.*current catalog/)
   assert.match(prompt, /Never fabricate commissioning.*bypass.*gate/)
 })
+
+test('physical prompt inspects setup gaps without inferring physical readiness or creating setup', () => {
+  const prompt = physicalSystemsSystemPrompt()
+  assert.match(prompt, /what.*missing.*physical.*inspect_physical_setup/i)
+  assert.match(prompt, /present.*missing.*unverified/)
+  assert.match(prompt, /configuration.*drivers.*calibration.*implementation artifacts.*state.*qualification/)
+  assert.match(prompt, /taught positions only when.*taught-waypoints mechanism/)
+  assert.match(prompt, /sources.route.relationship is retired.*previous proposal.*does not restore a current route/)
+  assert.match(prompt, /cached.*evidence.*live.*readiness/i)
+  assert.match(prompt, /simulation.*configuration.*physical/i)
+  assert.match(prompt, /\/physical-setup/)
+  assert.match(prompt, /setup inspection.*not.*refresh.*route/i)
+  assert.match(prompt, /Never.*commission.*install.*write.*configuration/i)
+})
+
+test('physical prompt preserves unexposed qualification evidence as unknown instead of asserting absence', () => {
+  const prompt = physicalSystemsSystemPrompt()
+  assert.match(prompt, /Never translate not exposed, unverified or unavailable into absent or missing/)
+  assert.match(prompt, /explicit missing status or missing reason code/)
+  assert.match(prompt, /Qualification metadata may be present.*underlying physical evidence remains unverified/)
+  assert.match(prompt, /qualification_missing/)
+})
+
+test('physical prompt distinguishes routing and executable digest scopes while preserving exact Node checks', () => {
+  const prompt = physicalSystemsSystemPrompt()
+  assert.match(prompt, /route implementation digest identifies the routing envelope/)
+  assert.match(prompt, /configuration implementation digest identifies the executable artifact/)
+  assert.match(prompt, /different scopes need not match/)
+  assert.match(prompt, /Compare digests only within the same named scope/)
+  assert.match(prompt, /Node.*exact binding checks.*never.*mismatch/i)
+})

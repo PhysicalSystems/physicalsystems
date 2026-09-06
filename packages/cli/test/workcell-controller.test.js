@@ -106,6 +106,17 @@ test('intent rejects terminal commands, control characters and unavailable model
   assert.equal(busy.calls.intents.length, 0)
 })
 
+test('conversation invalidation is distinguishable from camera evidence changes', async (t) => {
+  const reasons = []
+  const { controller } = setup(t, { invalidateWorkflow: (reason) => reasons.push(reason) })
+  await controller.submitIntent('Explain the setup gaps for the earlier proposal')
+  assert.deepEqual(reasons, ['conversation'])
+  controller.agentSettled()
+  await controller.cameraAction('start', { cameraId: 'synthetic-camera' })
+  assert.ok(reasons.length > 1)
+  assert.ok(reasons.slice(1).every((reason) => reason !== 'conversation'), 'Camera evidence must invalidate retained setup context')
+})
+
 test('a gated terminal preflight with a configured model reports busy rather than missing model', async (t) => {
   const { controller, calls } = setup(t, { canPrompt: () => false, modelLabel: () => 'provider/configured-model' })
   assert.equal(controller.snapshot().agent.status, 'idle')
