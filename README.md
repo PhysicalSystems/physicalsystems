@@ -66,10 +66,10 @@ npx --yes physicalsystems@preview
 added a fail-fast prerequisite check for older Node.js versions and pinned,
 reviewed backend manifests in a small npm artifact. Version `0.2.2` added a
 compact workflow status and separated observed discovery metadata from
-unassessed driver, capture and calibration evidence. Version `0.2.3` retains
+unassessed driver, capture and calibration evidence. Version `0.2.4` retains
 the backend pins and improves basic camera preview guidance, frame replacement,
 Stop handling, browser recovery and planning explanations. See the
-[0.2.3 release notes](packages/cli/RELEASE.md#023-patch-candidate). First launch asks
+[0.2.4 release notes](packages/cli/RELEASE.md#023-patch-candidate). First launch asks
 for software setup consent, downloads only the wheel set matching the computer's
 OS, architecture and Python version, checks its exact hashes and sizes, and
 installs it in an isolated user environment, without a Git

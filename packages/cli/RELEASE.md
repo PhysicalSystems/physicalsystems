@@ -1,53 +1,59 @@
 # Release checklist
 
-## 0.2.3 patch candidate
+## 0.2.4 patch candidate
 
-Patch release candidate. Preparation does not publish the package or authorize
-upgrading an existing installation.
+Harness-only patch candidate. Preparation does not publish the package or
+authorize upgrading an existing installation.
 
 ### Operator changes
 
-- Basic camera preview guidance directs the operator to `/workcell`, camera
-  selection and Start preview without requiring commissioning (TIN-421).
-- A valid camera image stays visible while its replacement is fetched and
-  decoded. Image and exact-frame metadata swap together. Freshness expiry,
-  observation expiry and clearing on Stop or identity/session changes remain
-  enforced (TIN-422).
-- Camera Stop is independent of assistant work and ordinary view requests.
-  Requests are bounded; unconfirmed Stop retains the exact capture identity
-  for retry and owned-session cleanup. Cancelling pending Start never guesses
-  a camera session. The view distinguishes cancellation, stopping and an
-  unconfirmed result, and rejects obsolete responses.
-- Browser reconnection recovers after intermittent drops and detects silent
-  connections. Exhausted retries expose Reconnect and terminal recovery
-  guidance. Successful recovery clears obsolete connection errors without
-  hiding unrelated action failures.
-- Planning displays missing configuration, every reported question/gap and
-  actual rejection reasons. Stale evidence is not generically described as a
-  commissioning requirement. Busy requests and expired questions receive
-  fixed, actionable errors while arbitrary internal errors remain redacted.
+- After selecting a capability implementation, the assistant checks the actual
+  execution service and matching local configurations. It directs the operator
+  to `/workcell` to prepare, review and explicitly approve one invocation when
+  supported. A temporarily busy control is not described as a missing executor.
+- The read-only `inspect_physical_execution` tool exposes bounded service and
+  configuration availability, known run identities, recorded phases and verified
+  receipt evidence. It cannot prepare, approve, dispatch, stop or reconcile.
+  Arbitrary run identifiers, paths and execution arguments are rejected.
+- Follow-up questions can inspect a completed run without proposing it again.
+  Inspection failures remain separate from Node's `OUTCOME_UNKNOWN`. Success
+  requires the exact successful run and verified receipt with supporting outcome
+  evidence. Historical evidence is not current readiness; simulation is always
+  distinguished from physical execution.
+- Receipt reads verify run identity, monotonic history, configuration and outcome
+  snapshots. Requests are bounded and reject obsolete session/route/selection
+  results. Raw configuration, credentials, provider diagnostics and images never
+  enter the assistant projection.
+- The system prompt and reviewed transfer Agent Skill describe the supported
+  operator lifecycle. Sequential discovery/catalog inspection avoids invalidating
+  catalog reads. Exact typed routing remains available when the legacy planner
+  lacks object/station grounding; all Node gates still apply.
 
 ### Compatibility and qualification
 
-This is a Harness-only update. The existing Physical Systems Node 0.2.1,
-Runtime 0.2.0 and pinned Pi compatibility runtime are reused. Discovery,
-planning and proposals do not authorize movement. Execution still requires an
-exact configured invocation, explicit unexpired operator approval and verified
-outcome evidence; uncertain outcomes are never retried as motion.
+Physical Systems Node 0.2.1, Runtime 0.2.0 and the pinned Pi compatibility runtime
+are reused without changes. No new hardware implementation or commissioning
+bootstrap is introduced. A physical setup still requires its implementation's
+calibration, configuration, qualified observations and intervention procedure.
 
-Regression coverage includes synthetic delayed/failed frames, Stop races,
-session changes, stream recovery, planning blockers and request conflicts.
-Browser controls were exercised in real headless Firefox with simulated
-clients. Execution lifecycle and recovery were exercised only in simulation.
-These results do not qualify physical hardware or a commissioned workcell.
+The camera preview, independent Stop, browser reconnect and blocking-message
+fixes from the previous patch remain covered by their regression suites.
+Basic preview still goes through `/workcell` without commissioning. Frame and
+metadata replacement remains atomic, with freshness expiry and clearing on
+Stop, disconnection and camera/session changes.
 
-The earlier controlled TIN-422 test passed headless UI blanking and exact-frame
-metadata checks. **Optical/display flicker was not measured.** Do not interpret
-the frame replacement fix as an optical-flicker qualification.
+New regression coverage includes read-only authority boundaries, exact receipt
+and snapshot integrity, known-run selection, changed historical configuration,
+service failure, cancellation, concurrent reads and stale contexts. The opt-in
+real Node HTTP test uses explicit simulation and asserts one approved invocation,
+three fake commands and no dispatch from inspection. Local qualification results
+and exact candidate hashes are retained outside the repository for review.
+Protected native package qualification and release approval remain required.
 
-The Avahi timeout partial-results defect belongs to the separately owned Node
-implementation and is not changed in this release. Protected native package
-qualification and release approval remain required before publication.
+Earlier controlled camera testing passed headless UI blanking and exact-frame
+metadata checks. **Optical/display flicker was not measured.** No new camera or
+physical execution verification is implied by this patch's simulation tests.
+The Avahi timeout partial-results defect remains a separate Node follow-up.
 
 ## Package transition
 
@@ -105,7 +111,7 @@ approved Windows/Linux x64 Python 3.10–3.12 manifests blocks publication. This
 metadata gate does not replace clean installation tests of the downloaded bytes.
 The same hashes are rechecked from the actual installed npm artifact.
 
-1. Uses `npm run release:prepare` to build `physicalsystems@0.2.3` once on
+1. Uses `npm run release:prepare` to build `physicalsystems@0.2.4` once on
    Windows x64 with the reviewed JS dependency closure, exact backend manifests
    and tarball checksums. Wheel binaries are not included. The normal product
    archive must be at most 50 MiB (a project policy, not a claimed registry limit).
@@ -124,18 +130,18 @@ The same hashes are rechecked from the actual installed npm artifact.
 5. Enters the protected environment only after all platform checks pass and
    requires `NPM_RELEASE_POLICY_VERSION=v3-physicalsystems-preview`.
 6. Verifies the inert namespace bootstrap, the already-published runtime, and
-   that `physicalsystems@0.2.3` is not already public. This update requires the
-   exact existing tags `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.2`;
+   that `physicalsystems@0.2.4` is not already public. This update requires the
+   exact existing tags `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.3`;
    unexpected tag changes block publication rather than being overwritten.
 7. Publishes exactly one tarball:
 
    ```bash
-   npm publish "./release-artifacts/physicalsystems-0.2.3.tgz" \
+   npm publish "./release-artifacts/physicalsystems-0.2.4.tgz" \
      --registry="https://registry.npmjs.org/" \
      --provenance --tag preview --access public
    ```
 
-8. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.3`; compares
+8. Confirms `bootstrap=0.0.0`, `latest=0.0.0`, and `preview=0.2.4`; compares
    registry integrity and shasum with the approved tarball; requires SLSA v1
    provenance; and runs `npm audit signatures`.
 
@@ -264,22 +270,22 @@ After publishing to `preview`, verify from clean Windows and Ubuntu desktop
 environments:
 
 ```bash
-npm view physicalsystems@0.2.3 version dist.integrity dist.shasum dist.attestations --json
+npm view physicalsystems@0.2.4 version dist.integrity dist.shasum dist.attestations --json
 npm view physicalsystems dist-tags --json
-npx --yes physicalsystems@0.2.3 --version
-npm install --global physicalsystems@0.2.3
+npx --yes physicalsystems@0.2.4 --version
+npm install --global physicalsystems@0.2.4
 physicalsystems
 ```
 
 Also create an empty audit directory, install with
-`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.3`, and
+`npm install --ignore-scripts --no-audit --no-fund physicalsystems@0.2.4`, and
 run `npm audit signatures`. Use a disposable account for optional cloud OAuth
 or MCP canaries; package checks are not production-service evidence.
 
 Only after the canary is accepted may a maintainer promote the exact bytes:
 
 ```bash
-npm dist-tag add physicalsystems@0.2.3 latest
+npm dist-tag add physicalsystems@0.2.4 latest
 ```
 
 Promotion requires maintainer presence and npm 2FA. If the preview fails, do
