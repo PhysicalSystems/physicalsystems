@@ -97,11 +97,11 @@ test('the real pre-publish checksum gate refuses oversized archives and falsifie
     writeFixtureFile(fixture, 'package.json', '{"type":"module"}\n')
     writeFixtureFile(fixture, policy, readFileSync(path.join(root, policy)))
     mkdirSync(path.join(fixture, 'candidate'))
-    writeFixtureFile(fixture, 'release/product.json', JSON.stringify({ product: { version: '0.2.5' } }))
+    writeFixtureFile(fixture, 'release/product.json', JSON.stringify({ product: { version: '0.2.6' } }))
     const commit = 'a'.repeat(40)
     const artifacts = [
       { key: 'pi-runtime', name: '@tinyedge/pi-runtime', version: '0.84.2-tinyedge.1', filename: 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz' },
-      { key: 'physicalsystems', name: 'physicalsystems', version: '0.2.5', filename: 'physicalsystems-0.2.5.tgz' },
+      { key: 'physicalsystems', name: 'physicalsystems', version: '0.2.6', filename: 'physicalsystems-0.2.6.tgz' },
     ]
     const setPayload = (index, bytes) => {
       const artifact = artifacts[index]
@@ -111,11 +111,11 @@ test('the real pre-publish checksum gate refuses oversized archives and falsifie
         integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}` })
     }
     const check = () => {
-      const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, version: '0.2.5', commit, artifacts }))
+      const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, version: '0.2.6', commit, artifacts }))
       writeFixtureFile(fixture, 'candidate/release-manifest.json', bytes)
       return spawnSync(process.execPath, ['--input-type=module'], { cwd: fixture,
         input: match[1].replace(/^          /gm, ''), encoding: 'utf8', timeout: 15_000,
-        env: { ...process.env, GITHUB_SHA: commit, RELEASE_VERSION: '0.2.5',
+        env: { ...process.env, GITHUB_SHA: commit, RELEASE_VERSION: '0.2.6',
           PI_RUNTIME_VERSION: '0.84.2-tinyedge.1', RELEASE_ARTIFACT_DIRECTORY: 'candidate',
           EXPECTED_MANIFEST_SHA256: createHash('sha256').update(bytes).digest('hex') } })
     }
@@ -187,7 +187,7 @@ test('CI dependency hydration refuses traversal and links before extracting any 
     writeFixtureFile(fixture, 'scripts/hydrate-review-dependencies.mjs', readFileSync(path.join(root, 'scripts/hydrate-review-dependencies.mjs')))
     mkdirSync(path.join(fixture, 'candidate'))
     mkdirSync(path.join(fixture, 'packages/cli'), { recursive: true })
-    const filename = 'physicalsystems-0.2.5.tgz', commit = 'a'.repeat(40)
+    const filename = 'physicalsystems-0.2.6.tgz', commit = 'a'.repeat(40)
     for (const unsafe of [tarEntry('package/node_modules/../../escape.txt'),
       tarEntry('package/node_modules/demo/link', '2', '../../../../escape.txt')]) {
       // tar recognizes this deliberately tiny uncompressed ustar fixture by
@@ -360,7 +360,7 @@ function setFixtureReleaseState(fixtureRoot, { licenseIsPending, npmReleaseIsPen
     const frozen = packageName !== 'cli'
     const legalFiles = ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'SBOM.cdx.json']
     writeFixtureFile(fixtureRoot, `packages/${packageName}/package.json`, JSON.stringify({
-      version: frozen ? '0.1.3' : '0.2.5',
+      version: frozen ? '0.1.3' : '0.2.6',
       private: frozen || npmReleaseIsPending,
       license: licenseIsPending ? 'UNLICENSED' : 'Apache-2.0',
       repository: frozen ? frozenRepository : repository,
@@ -720,7 +720,7 @@ test('preview update preflight accepts the existing release and rejects unexpect
   for (const rejected of [
     { bootstrap: '0.0.0', latest: '0.0.0' },
     { ...prior, preview: '0.2.0' },
-    { ...prior, preview: '0.2.5' },
+    { ...prior, preview: '0.2.6' },
     { ...prior, latest: '0.2.0' },
     { ...prior, bootstrap: '0.2.0' },
     { ...prior, unexpected: '0.2.0' },
@@ -1287,7 +1287,7 @@ test('released documentation is truthful and the export boundary is executable',
   assert.match(releaseGuide, /Package transition/)
   assert.match(releaseGuide, /rollback/)
   assert.match(releaseGuide, /npm audit signatures/)
-  assert.match(releaseGuide, /npm install --ignore-scripts --no-audit --no-fund physicalsystems@0\.2\.5/)
+  assert.match(releaseGuide, /npm install --ignore-scripts --no-audit --no-fund physicalsystems@0\.2\.6/)
   assert.match(releaseGuide, /Configure the npm trusted publisher/)
   assert.match(dependencyGuide, /npm 12 ignores a dependency[\s\S]{0,30}package's shrinkwrap/)
   assert.match(dependencyGuide, /empty caches under npm 11\.19\.0 and npm 12\.0\.2/)
@@ -1306,16 +1306,16 @@ test('released documentation is truthful and the export boundary is executable',
   assert.match(cliWorkflow, /node scripts\/check-export-boundary\.mjs/)
 })
 
-test('the packed README describes the one-package physicalsystems 0.2.5 release', () => {
+test('the packed README describes the one-package physicalsystems 0.2.6 release', () => {
   assert.match(packedReadme, /tinyedge@0\.1\.3|`0\.1\.3` release/)
   assert.match(packedReadme, /0\.1\.5/)
   assert.doesNotMatch(
     packedReadme,
-    /0\.2\.5[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
+    /0\.2\.6[\s\S]{0,100}\b(?:candidate|unavailable|unpublished|not published)\b/i,
   )
-  assert.match(packedReadme, /npx physicalsystems@0\.2\.5/)
-  assert.match(packedReadme, /npm view physicalsystems@0\.2\.5 version --json/)
-  assert.match(packedReadme, /npm install --global physicalsystems@0\.2\.5/)
+  assert.match(packedReadme, /npx physicalsystems@0\.2\.6/)
+  assert.match(packedReadme, /npm view physicalsystems@0\.2\.6 version --json/)
+  assert.match(packedReadme, /npm install --global physicalsystems@0\.2\.6/)
   assert.match(packedReadme, /command opens the local-first operator Harness/i)
 })
 
