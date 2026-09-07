@@ -160,3 +160,60 @@ inspection; absence is not retry permission.
 Workflow artifacts expire after 90 days. Preserve their safe receipts and
 digests in the release evidence archive before expiration; missing/expired
 evidence must not be reported as a newly verified successful migration.
+# Automatic patch preparation in the existing npm workflow
+
+After merging product changes, open **Actions → Publish Physical Systems npm
+preview → Run workflow**, select `main`, and leave `operation=auto` and
+`next_version` blank. This is the existing npm workflow, with a preparation
+step before its existing qualification and protected publisher.
+
+- If main still has the published preview version and release inputs changed,
+  it prepares the next patch (for example, 0.2.5 → 0.2.6) and opens a release PR.
+  To request a minor or major release, enter an explicit stable version such as
+  `0.3.0` in `next_version`.
+- Review the generated diff and release notes. Approve the **Physical Systems
+  CLI** checks if GitHub requests approval for the bot-created PR. If no checks
+  appear, run that existing workflow manually on the release branch. Merge the
+  PR only after its required checks and review.
+- Run **Publish Physical Systems npm preview** again on `main`, using the same
+  defaults. It recognizes the already prepared version, builds one candidate,
+  performs the existing native checks, and reaches the existing protected npm
+  approval/publishing step. It does not increment the version again.
+- With no new release inputs and no explicit version request, it reports a
+  no-op. A repeated preparation request reuses an exact open release PR, or
+  refuses a conflicting/closed PR or branch without overwriting it.
+
+`release/product.json` owns the reviewed product version, component pins and
+previous tags. Preparation reuses `scripts/prepare-release-version.mjs` to
+update required literal package metadata, documentation and fixtures, then
+regenerates SBOM/provenance. Workflow versions and tarball names read that
+descriptor through the checked preparation output; a version bump does not
+edit workflow files. The qualified toolchain matrix remains explicitly pinned.
+
+The change comparison uses the published npm preview's registry provenance to
+identify an ancestor on main. This is a bounded HTTPS registry lookup for
+change detection, not an independent cryptographic attestation verification.
+Missing/malformed provenance, registry errors, non-ancestor history, occupied
+versions and stale previous tags stop preparation. Existing exact-artifact and
+registry readback checks remain the publication authority.
+
+Preparation uses the repository's short-lived `GITHUB_TOKEN`, with contents
+and pull-request write permissions only in the preparation job. It neither
+approves nor merges PRs and has no OIDC permission. A repository owner must
+allow Actions to create pull requests in **Settings → Actions → General** for
+automatic PR creation. Organization policy may restrict that setting. The
+workflow never changes the setting or requests a personal token. On failure,
+the `release-preparation-*` artifact retains `release.patch` and the request
+record; inspect the branch/PR and failure before retrying. A branch pushed
+before a failed PR request can be recovered when its tree and base match.
+
+This automates npm product preparation, not private component publication.
+The private Node candidate and public Node/Runtime publishers remain their
+existing separate workflows. Publish changed components and adopt their real
+readback manifests and hashes through the reviewed process below **before**
+requesting the product release. Preparation never reads private Node source,
+bumps a backend dependency speculatively, or fabricates a future wheel URL.
+It blocks changed public Runtime source still pinned to the previous Runtime.
+Private Node changes cannot be detected from this public checkout; maintainers
+must review that component's readiness. `operation=publish` (also used by the
+existing maintainer coordinator) only accepts an already prepared version.
