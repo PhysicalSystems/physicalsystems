@@ -515,9 +515,12 @@ test('the export boundary accepts the guarded source-license transition without 
   const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'tinyedge-release-locks-'))
   try {
     mkdirSync(path.join(fixtureRoot, 'scripts'), { recursive: true })
-    for (const script of ['check-export-boundary.mjs', 'check-source-imports.mjs', 'release-migration.mjs']) {
+    for (const script of ['check-export-boundary.mjs', 'check-desktop-boundary.mjs', 'check-source-imports.mjs', 'release-migration.mjs']) {
       copyFileSync(path.join(root, 'scripts', script), path.join(fixtureRoot, 'scripts', script))
     }
+    // Preserve the separate private desktop guard while exercising npm/source
+    // licensing transitions; it never inherits the product publication state.
+    for (const component of ['desktop', 'operator-core', 'operator-service']) writeFixtureFile(fixtureRoot, `packages/${component}/package.json`, readFileSync(path.join(root, `packages/${component}/package.json`)))
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/Apache-2.0.txt', apacheLicenseTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.txt', noticeTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.pi-runtime.txt', runtimeNoticeTemplate)

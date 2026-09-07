@@ -1,0 +1,117 @@
+# Desktop validation scope
+
+Automated tests cover the shared Pi host, desktop catalog and IPC boundary,
+local/SSH attachment with fakes, application ownership and reconnect races,
+renderer lifecycle, and the scripted simulation's complete operator flow.
+The actual pinned Pi SDK is exercised offline with inert physical clients.
+
+On 2026-09-06, the source app was exercised in Electron 44.2.0 on Ubuntu through X11/
+Xwayland with sandboxing and context isolation enabled. Its real renderer, main
+process and utility host completed discovery, a conversation question, proposal,
+exact preparation/approval, three scripted state transitions, receipt verification,
+typed JPEG transport/decoding and Stop clearing/release. Ordinary window closure
+passed the cleanup handshake, exited successfully and released the catalog lock.
+No Node integration or arbitrary command was available to the renderer. This is
+source-app evidence, not an installer or native Wayland qualification.
+
+The repeatable native test is opt-in:
+
+```sh
+PHYSICALSYSTEMS_DESKTOP_NATIVE_TESTS=1 node --test packages/desktop/test/native-electron.test.js
+```
+
+It requires the already installed pinned Electron and an existing Linux X11
+desktop session with its display authorization. It creates isolated app data,
+uses only the scripted simulation and synthetic preview, and checks ordinary
+window shutdown and owned-process cleanup. The optional absolute
+`PHYSICALSYSTEMS_DESKTOP_NATIVE_EVIDENCE` directory must be outside the repository.
+It records source startup timing and point samples of Electron process working
+sets; those are neither live-model streaming benchmarks nor peak-memory figures.
+On 2026-09-07, the existing Ubuntu desktop session was located and the repeatable
+test passed on the follow-up application code. It uses native mouse events in
+the owned renderer, waits for the scripted planning response to settle, and
+inherits the desktop display/session connection while keeping app data and
+Node/model credentials isolated. Earlier attempts using programmatic DOM clicks
+timed out at several UI stages and are preserved as failed automation evidence;
+they are not counted as passing qualification. The test resolves only an already
+installed pinned Electron binary and cannot implicitly invoke its downloader.
+
+The later provider-sign-in and model-picker changes are covered by deterministic
+application fakes and the actual renderer in headless Firefox. Reproductions
+cover an authorization URL immediately followed by manual input, a URL arriving
+after input begins, cancellation/expiry during delayed provider cleanup, browser
+opening failure/retry, exact provider/model selection, search and empty catalogs.
+These checks do not open a real provider URL or complete live sign-in. The earlier
+native simulation result does not qualify these provider changes as a live login.
+
+Composer shortcut tests exercise the local /model → provider → model flow,
+keyboard and pointer selection, preserved prose drafts, error recovery and
+conversation changes. Application regressions reject stale model requests before
+they can change a newer conversation. Sidebar checks cover heading/row icons,
+whole-row status details, scoped device navigation and disconnected scan results.
+These additions use fakes and headless Firefox, with no real provider calls,
+device discovery or native installation changes.
+
+Compositor screenshots are a separate opt-in with
+`PHYSICALSYSTEMS_DESKTOP_NATIVE_SCREENSHOT=1` and an evidence directory. Functional
+native UI/IPC validation does not imply compositor capture or optical/display
+flicker measurement. Renderer reload is covered; full native application relaunch
+and active-execution Stop remain separate native checks. Controller/application
+regressions cover saved-session reopening and independent execution Stop.
+
+The browser tests include responsive light/dark layouts, empty onboarding,
+project expansion without connection changes, conversation selection, scoped
+requests, questions and cancellation, saved drafts, and host-loss projection.
+Camera regressions preserve decoded-frame/metadata atomicity, expiry under slow
+or failed reads, clearing on disconnect/session changes and independent bounded
+Stop. Execution regressions retain exact configuration/run/approval bindings,
+expiry and independent Stop. Simulation receipts and interrupted histories are
+validated without dispatch to real equipment.
+Run ownership regressions additionally select completed history while another
+invocation remains unresolved. Quit, disconnect and session changes must stay
+blocked, and the global Stop must target that exact owner without replacing
+the selected history or receipt. Incomplete run lists and unconfirmed Stops
+must retain ownership.
+Browser viewport checks cover 500, 736, 1024 and 1440 pixels; Firefox's minimum
+window width prevented a native 360-pixel check. The app-backed browser test
+uses the actual catalog, coordinator, shared controllers and simulation host.
+
+No live camera, robot, commissioning or executor configuration is accessed by
+these tests. Synthetic preview and headless UI checks do not measure optical or
+display flicker. A successful simulation is not a physical execution result.
+
+Experiment regressions exercise an offline conversation with the actual shared
+synthetic controller: exact operator approval, malformed/stale request rejection,
+request deduplication, bounded offsets and trial budgets, recorded best results,
+independent Stop during an assistant question and pending trial, cross-project
+ownership, unapproved-proposal reopening and host-loss historical projection.
+The app-backed headless Firefox journey sends the scripted alignment request,
+approves it through the rendered controls, reloads the renderer during a trial,
+compares four measured offsets, stops a second experiment and inspects history.
+It asserts zero model, credential, local Node or SSH calls. Existing camera and
+physical-run simulation controls are exercised in the same browser journey.
+This qualifies synthetic UI/controller integration only; no real model-driven
+experimentation, VLA behavior, physics or SO-101 trial is established.
+
+The conversation now owns a visible experiment review card. Its explicit
+Approve & continue action uses the exact controller plan and then submits a
+single scoped assistant request. Fakes and headless Firefox cover approval
+failure, request deduplication, timeout/status recovery, expired/changed plans,
+detached controls, independent Stop, results in chat and optional detail
+navigation. The actual application-backed browser journey approves in chat,
+reloads during a scripted trial and reads the completed measurements in chat.
+Assistant Markdown formatting is tested as inert DOM text with bold, headings,
+lists and code; raw HTML, links and images grant no renderer capabilities.
+The user demonstrated a three-trial model-driven synthetic result on the earlier
+UI; that observation does not qualify the new inline controls in native Electron.
+
+Release qualification still requires:
+
+- An authorized live local and SSH Node assessment, including authentication,
+  provider sign-in, transport recovery and confirmed hardware release.
+- Optical/display flicker measurement on an approved camera/display setup.
+- Target-platform installer, sandbox, signing and uninstall qualification.
+- A shipped-binary dependency/license inventory and desktop update policy.
+
+There is no desktop publishing workflow, installer or automatic updater in this
+change. Existing product-package checks do not qualify those future artifacts.

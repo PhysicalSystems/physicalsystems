@@ -1,0 +1,16 @@
+{
+  "name": "@physicalsystems/desktop-development",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Development-only Physical Systems desktop workspace",
+  "type": "module",
+  "main": "src/main.js",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/main.js && node --check src/preload.cjs && node --check src/host.js && node scripts/audit-dependencies.mjs --check"
+  },
+  "devDependencies": { "electron": "44.2.0" }
+}

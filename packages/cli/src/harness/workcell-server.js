@@ -4,6 +4,7 @@ import { lstat, readFile, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { workcellRequestFailure, WORKCELL_VIEW_MAX_BYTES } from './workcell-controller.js'
+import { experimentRequestFailure } from './experiments/controller.js'
 
 const MAX_BODY_BYTES = 8 * 1024
 const MAX_STATE_BYTES = WORKCELL_VIEW_MAX_BYTES
@@ -23,6 +24,7 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/
 const FRAME_PATH = /^\/api\/camera\/frame\/([0-9a-f]{64})$/
 const EXECUTION_PATH = /^\/api\/execution\/(refresh|prepare|approve|stop|reconcile|select|receipt)$/
+const EXPERIMENT_PATH = /^\/api\/experiments\/(propose|approve|stop)$/
 const RUN_ID = /^run-[0-9a-f]{32}$/
 const FORBIDDEN_TEXT = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
@@ -90,7 +92,7 @@ function sendError(response, error) {
     return
   }
   // Only controller-owned codes select fixed text; arbitrary errors stay generic.
-  const known = workcellRequestFailure(error)
+  const known = workcellRequestFailure(error) || experimentRequestFailure(error)
   const own = error instanceof HttpError
   const status = own ? error.status : known?.status || ([400, 404, 409, 422, 429, 503].includes(error?.status) ? error.status : 503)
   const code = own ? error.code : known?.code || (status === 409 ? 'workcell_conflict' : 'workcell_action_failed')
@@ -155,6 +157,17 @@ function readBody(request) {
 }
 
 function validateAction(path, body) {
+  if (EXPERIMENT_PATH.test(path)) {
+    const kind = path.split('/').at(-1)
+    exact(body, { propose: ['goal', 'mode', 'trialLimit', 'requestId'], approve: ['experimentId', 'expectedDigest'], stop: ['experimentId'] }[kind])
+    if (kind === 'propose') {
+      boundedText(body.goal, 1000, 'Experiment goal')
+      identifier(body.requestId, 'Request ID')
+      if (body.mode !== 'simulation' || !Number.isInteger(body.trialLimit) || body.trialLimit < 1 || body.trialLimit > 10) throw new HttpError(400, 'invalid_body', 'Choose simulation mode and a trial limit between 1 and 10')
+    } else identifier(body.experimentId, 'Experiment ID')
+    if (kind === 'approve' && (typeof body.expectedDigest !== 'string' || !/^[0-9a-f]{64}$/.test(body.expectedDigest))) throw new HttpError(400, 'invalid_body', 'The exact current experiment plan digest is required')
+    return body
+  }
   if (EXECUTION_PATH.test(path)) {
     const kind = path.split('/').at(-1)
     const keys = { refresh: [], prepare: ['configurationId', 'expectedConfigurationDigest', 'routeReceiptDigest'],
@@ -361,7 +374,7 @@ export async function createWorkcellServer({ host, assetsDir = join(dirname(file
         response.writeHead(200, { 'Content-Type': value.contentType, 'Content-Length': value.bytes.byteLength })
         return response.end(Buffer.from(value.bytes.buffer, value.bytes.byteOffset, value.bytes.byteLength))
       }
-      if (request.method === 'POST' && (['/api/refresh', '/api/setup/inspect', '/api/intent', '/api/choice', '/api/camera/start', '/api/camera/stop'].includes(path) || EXECUTION_PATH.test(path))) {
+      if (request.method === 'POST' && (['/api/refresh', '/api/setup/inspect', '/api/intent', '/api/choice', '/api/camera/start', '/api/camera/stop'].includes(path) || EXECUTION_PATH.test(path) || EXPERIMENT_PATH.test(path))) {
         const body = validateAction(path, await readBody(request))
         let result
         if (path === '/api/refresh') result = await host.refresh()
@@ -371,6 +384,10 @@ export async function createWorkcellServer({ host, assetsDir = join(dirname(file
         }
         else if (path === '/api/intent') result = await host.submitIntent(body.text)
         else if (path === '/api/choice') result = await host.answerChoice(body)
+        else if (EXPERIMENT_PATH.test(path)) {
+          if (typeof host.experimentAction !== 'function') throw new HttpError(503, 'experiment_unavailable', 'Local experiments are unavailable in this Harness conversation')
+          result = await host.experimentAction(path.split('/').at(-1), body)
+        }
         else if (EXECUTION_PATH.test(path)) {
           if (typeof host.executionAction !== 'function') throw new HttpError(503, 'execution_unavailable', 'Execution integration is unavailable')
           result = await host.executionAction(path.split('/').at(-1), body)

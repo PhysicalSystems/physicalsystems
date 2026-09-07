@@ -1,4 +1,8 @@
+import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { createAuthenticatedMcp } from './auth/session.js'
+import { createExperimentController, experimentRequestFailure } from './harness/experiments/controller.js'
+import { createExperimentTools, EXPERIMENT_TOOL_ALLOWLIST } from './harness/experiments/tools.js'
 import { createNativeSecretStore } from './auth/secret-store.js'
 import { createTokenStore } from './auth/token-store.js'
 import {
@@ -45,6 +49,7 @@ const EXISTING_WORK_INTENT = /\b(?:resume|continue)\b|\b(?:existing|previous|sav
 const NEW_INTAKE_TOOL_BLOCK = 'Start this new benchmark by verifying the named device and asking one question. Do not inspect saved work or select artifacts yet.'
 const REPEATED_DEVICE_CHECK_BLOCK = 'The device was already checked for this request. Ask the user one concise intake question now.'
 const defineTool = (definition) => definition
+class ExperimentCommandUsageError extends Error {}
 
 export function isFreshBenchmarkRequest(value) {
   const prompt = String(value || '')
@@ -179,6 +184,11 @@ export function createTinyEdgePiExtension({
   agentSkillRegistry = null,
   submitWorkcellIntent = null,
   canSubmitWorkcellIntent = null,
+  onWorkcell = null,
+  onExperiments = null,
+  createExperimentControllerImpl = createExperimentController,
+  onSetupInspector = null,
+  isWorkcellModelConfigured = null,
   createWorkcellServerImpl = createWorkcellServer,
   createCameraPreviewClientImpl = createCameraPreviewClient,
   createExecutionClientImpl = createExecutionClient,
@@ -198,6 +208,19 @@ export function createTinyEdgePiExtension({
     let workcellOpening = null
     let latestContext = null
     let workcellClosing = false
+    let experiments = null
+    let experimentUnsubscribe = null
+    function ensureExperiments() {
+      if (workcellClosing) throw new Error('Harness session ended')
+      if (experiments) return experiments
+      const sessionId = latestContext?.sessionManager?.getSessionId?.()
+      if (!sessionId) throw new Error('Experiment storage requires this Harness conversation’s session identity')
+      const experimentConfig = config || createConfigImpl(env, platform)
+      experiments = createExperimentControllerImpl({ sessionId, storageDir: path.join(experimentConfig.configDir, 'experiments') })
+      experimentUnsubscribe = experiments.subscribe(() => workcell?.experimentsChanged())
+      onExperiments?.(experiments)
+      return experiments
+    }
     const askChoiceTool = createAskChoiceTool(defineToolImpl)
     pi.registerTool({
       ...askChoiceTool,
@@ -216,7 +239,7 @@ export function createTinyEdgePiExtension({
     })
     const physicalEnabled = standalone
     const physicalActiveTools = physicalEnabled
-      ? PHYSICAL_TOOL_ALLOWLIST.filter((name) => name !== READ_AGENT_SKILL_TOOL || agentSkillRegistry !== null)
+      ? [...PHYSICAL_TOOL_ALLOWLIST.filter((name) => name !== READ_AGENT_SKILL_TOOL || agentSkillRegistry !== null), ...EXPERIMENT_TOOL_ALLOWLIST]
       : []
     const physicalClient = physicalEnabled
       ? createPhysicalNodeClientImpl({
@@ -280,6 +303,9 @@ export function createTinyEdgePiExtension({
       } }),
       getContext: () => setupContext,
     }) : null
+    // The application receives only this bounded read-only operation, never the
+    // execution client or any preparation, approval or dispatch authority.
+    if (setupInspector) onSetupInspector?.(() => setupInspector.inspect({}))
     setupView = physicalEnabled ? createSetupView({ inspector: setupInspector,
       getContext: () => setupContext, onChange: () => workcell?.setupChanged() }) : null
     let physicalContext
@@ -335,6 +361,7 @@ export function createTinyEdgePiExtension({
     }
 
     if (physicalEnabled) {
+      for (const tool of createExperimentTools({ getController: ensureExperiments, defineTool: defineToolImpl })) pi.registerTool(tool)
       if (agentSkillRegistry) {
         const reader = createReadAgentSkillTool({ registry: agentSkillRegistry, defineTool: defineToolImpl })
         pi.registerTool({
@@ -436,7 +463,7 @@ export function createTinyEdgePiExtension({
       for (const tool of tools) pi.registerTool(tool)
       registeredTools = tools.map((tool) => tool.name)
       const active = standalone
-        ? [ASK_CHOICE_TOOL, ...PHYSICAL_TOOL_ALLOWLIST, ...registeredTools]
+        ? [ASK_CHOICE_TOOL, ...physicalActiveTools, ...registeredTools]
         : [...new Set([...pi.getActiveTools(), ASK_CHOICE_TOOL, ...registeredTools])]
       pi.setActiveTools(active)
       if (announce) ctx.ui.notify(`TinyEdge connected: ${registeredTools.length} tools available`, 'info')
@@ -503,7 +530,68 @@ export function createTinyEdgePiExtension({
       },
     })
 
+    function ensureWorkcell() {
+      if (workcellClosing) throw new Error('Harness session ended')
+      if (workcell) return workcell
+      const model = () => typeof isWorkcellModelConfigured === 'function' && !isWorkcellModelConfigured() ? null : latestContext?.model
+      workcell = createWorkcellController({
+        workflow: physicalState,
+        refreshWorkflow: async () => {
+          await refreshPhysicalSystem(latestContext)
+          transitionPhysical({ type: 'catalog-checking' })
+          const generation = physicalState.generation
+          try { transitionPhysical({ type: 'capability-catalog', catalog: await physicalClient.capabilities(), generation }) }
+          catch (error) { transitionPhysical({ type: 'route-error', error, generation }) }
+        },
+        invalidateWorkflow: (reason) => transitionPhysical({ type: 'reset-intent' }, physicalContext,
+          { retainSetup: reason === 'conversation' }),
+        sendIntent: (text) => {
+          if (typeof submitWorkcellIntent !== 'function') throw new Error('This host cannot submit to the shared Harness session')
+          return submitWorkcellIntent(text)
+        },
+        canPrompt: () => Boolean(model() && latestContext?.isIdle?.()
+          && !latestContext?.hasPendingMessages?.() && typeof submitWorkcellIntent === 'function'
+          && typeof canSubmitWorkcellIntent === 'function' && canSubmitWorkcellIntent() === true),
+        modelLabel: () => model() ? `${model().provider}/${model().id}` : null,
+        cameraClient: createCameraPreviewClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_CAMERA_TOKEN, fetchImpl: physicalFetchImpl }),
+        executionClient: getExecutionClient(),
+        inspectSetup: () => setupView.inspect({}),
+        getSetupView: () => setupView.snapshot(),
+        getExperiments: () => experiments,
+      })
+      onWorkcell?.(workcell)
+      return workcell
+    }
+
     if (physicalEnabled) {
+      pi.registerCommand('experiment', {
+        description: 'Inspect, propose, approve or stop a local synthetic experiment',
+        handler: async (args, ctx) => {
+          latestContext = ctx
+          const [command = 'status', ...rest] = String(args || '').trim().split(/\s+/).filter(Boolean)
+          try {
+            const controller = ensureExperiments()
+            if (command === 'plan' && rest.length) {
+              await controller.propose({ goal: rest.join(' '), mode: 'simulation', trialLimit: 4, requestId: randomUUID() })
+            } else if (command === 'approve') {
+              if (rest.length !== 2) throw new ExperimentCommandUsageError('Usage: /experiment approve <experimentId> <planDigest>. Copy the exact identifiers from /experiment status, or review the Experiments panel in /workcell.')
+              await controller.approve({ experimentId: rest[0], expectedDigest: rest[1] })
+            } else if (command === 'stop') {
+              const current = controller.snapshot().current
+              if (rest.length || !current) throw new ExperimentCommandUsageError('Usage: /experiment stop, with a current local experiment')
+              await controller.stop({ experimentId: current.id })
+            } else if (command !== 'status' || rest.length) throw new ExperimentCommandUsageError('Usage: /experiment [status | plan <goal> | approve <experimentId> <planDigest> | stop]')
+            const current = controller.snapshot().current
+            ctx.ui.notify(current ? [
+              `Local experiment · simulation only · ${current.phase}`, current.goal,
+              `Synthetic alignment fixture; at most ${current.trialLimit} trials, offset [-10, 10] mm. This is not robot physics or learned behaviour.`,
+              `Recorded trials: ${current.trials.length}. Plan expires: ${new Date(current.expiresAt).toISOString()}.`,
+              ...(current.phase === 'PROPOSED' ? [`Review in /workcell → Experiments, or approve this exact plan: /experiment approve ${current.id} ${current.planDigest}`] : []),
+              ...(current.phase === 'READY' ? ['Resume the assistant with an ordinary message to run the approved synthetic trials. No hardware is authorized.'] : []),
+            ].join('\n') : 'No local experiment yet. Use /experiment plan <goal>, or ask the assistant to propose a synthetic alignment experiment. Review it in /workcell → Experiments. Hardware experimentation is not supported.', 'info')
+          } catch (error) { ctx.ui.notify(error instanceof ExperimentCommandUsageError ? error.message : experimentRequestFailure(error)?.message || 'The local experiment request could not complete. Inspect its current state before retrying; existing files were preserved.', 'warning') }
+        },
+      })
       pi.registerCommand('workcell', {
         description: 'Open the camera and workflow view for this same Harness session',
         handler: async (args, ctx) => {
@@ -514,30 +602,7 @@ export function createTinyEdgePiExtension({
           workcellOpening = (async () => {
             try {
               if (!workcellServer) {
-                workcell = createWorkcellController({
-                  workflow: physicalState,
-                  refreshWorkflow: async () => {
-                    await refreshPhysicalSystem(latestContext)
-                    transitionPhysical({ type: 'catalog-checking' })
-                    const generation = physicalState.generation
-                    try { transitionPhysical({ type: 'capability-catalog', catalog: await physicalClient.capabilities(), generation }) }
-                    catch (error) { transitionPhysical({ type: 'route-error', error, generation }) }
-                  },
-                  invalidateWorkflow: (reason) => transitionPhysical({ type: 'reset-intent' }, physicalContext,
-                    { retainSetup: reason === 'conversation' }),
-                  sendIntent: (text) => {
-                    if (typeof submitWorkcellIntent !== 'function') throw new Error('This host cannot submit to the shared Harness session')
-                    return submitWorkcellIntent(text)
-                  },
-                  canPrompt: () => Boolean(latestContext?.model && latestContext?.isIdle?.()
-                    && !latestContext?.hasPendingMessages?.() && typeof submitWorkcellIntent === 'function'
-                    && typeof canSubmitWorkcellIntent === 'function' && canSubmitWorkcellIntent() === true),
-                  modelLabel: () => latestContext?.model ? `${latestContext.model.provider}/${latestContext.model.id}` : null,
-                  cameraClient: createCameraPreviewClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_CAMERA_TOKEN, fetchImpl: physicalFetchImpl }),
-                  executionClient: getExecutionClient(),
-                  inspectSetup: () => setupView.inspect({}),
-                  getSetupView: () => setupView.snapshot(),
-                })
+                ensureWorkcell()
                 workcellServer = await createWorkcellServerImpl({ host: workcell })
               }
               if (workcellClosing) return
@@ -673,18 +738,27 @@ export function createTinyEdgePiExtension({
       pi.on('model_select', (_event, ctx) => { latestContext = ctx; workcell?.modelChanged() })
       pi.on('session_shutdown', async () => {
         workcellClosing = true
+        experimentUnsubscribe?.(); experimentUnsubscribe = null
+        const closingExperiments = experiments
+        experiments = null
+        onExperiments?.(null)
+        let experimentCloseError
+        try { await closingExperiments?.dispose() } catch (error) { experimentCloseError = error }
         replaceSetupContext()
         executionInspector.dispose()
         setupView.dispose()
         setupInspector.dispose()
+        onSetupInspector?.(null)
         await workcellOpening
         const closingServer = workcellServer
         const closingController = workcell
         workcellServer = null
         workcell = null
+        onWorkcell?.(null)
         latestContext = null
         try { await closingServer?.close() }
         finally { await closingController?.dispose() }
+        if (experimentCloseError) throw experimentCloseError
       })
     }
 
@@ -723,6 +797,11 @@ export function createTinyEdgePiExtension({
       workcellClosing = false
       replaceSetupContext()
       latestContext = ctx
+      if (physicalEnabled && ctx?.sessionManager?.getSessionId?.()) {
+        try { ensureExperiments() }
+        catch (error) { ctx.ui.notify(experimentRequestFailure(error)?.message || 'Local experiment storage is unavailable. Existing experiment files were preserved.', 'warning') }
+      }
+      if (physicalEnabled && onWorkcell) ensureWorkcell()
       pi.setActiveTools([...new Set([
         ASK_CHOICE_TOOL,
         ...physicalActiveTools,

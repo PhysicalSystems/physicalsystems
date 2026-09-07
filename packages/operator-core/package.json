@@ -1,0 +1,9 @@
+{
+  "name": "@physicalsystems/operator-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": { ".": "./src/index.js" },
+  "engines": { "node": ">=22.19.0" }
+}

@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "scope": "private-desktop-development-tooling",
+  "redistributionApproved": false,
+  "components": [
+    {
+      "name": "@electron-internal/extract-zip",
+      "version": "1.0.5",
+      "license": "BSD-2-Clause",
+      "resolved": "https://registry.npmjs.org/@electron-internal/extract-zip/-/extract-zip-1.0.5.tgz",
+      "integrity": "sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==",
+      "licenseEvidence": "missing-named-license-file",
+      "licenses": []
+    },
+    {
+      "name": "@electron/get",
+      "version": "5.1.0",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@electron/get/-/get-5.1.0.tgz",
+      "integrity": "sha512-3kSBtG8ObcTVfXanm5vVJ6UnBLEVmVsRk1M+vGqCuMBV+XLCbJYuWQful+yIy0GQDsSlK0kHEriEHn7SPk4EnA==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/electron__get-5.1.0-LICENSE",
+          "bytes": 1088,
+          "sha256": "edab8abb78d9c5b36944c3e00aebf6a90eb32378993f49ac8a3904007029c629"
+        }
+      ]
+    },
+    {
+      "name": "@types/node",
+      "version": "24.13.3",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@types/node/-/node-24.13.3.tgz",
+      "integrity": "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/types__node-24.13.3-LICENSE",
+          "bytes": 1141,
+          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        }
+      ]
+    },
+    {
+      "name": "debug",
+      "version": "4.4.3",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+      "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/debug-4.4.3-LICENSE",
+          "bytes": 1139,
+          "sha256": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95"
+        }
+      ]
+    },
+    {
+      "name": "electron",
+      "version": "44.2.0",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/electron/-/electron-44.2.0.tgz",
+      "integrity": "sha512-oK1icjhapp3xsUZycO9WZaLmd3hJnA7ieobC4mpdtO1pEN+PPGWpA3m1Mgzzuc1wzSD2Wai4zcH4yfpGJqxFMA==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/electron-44.2.0-LICENSE",
+          "bytes": 1096,
+          "sha256": "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d"
+        }
+      ]
+    },
+    {
+      "name": "env-paths",
+      "version": "3.0.0",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/env-paths/-/env-paths-3.0.0.tgz",
+      "integrity": "sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "license",
+          "collectedFile": "licenses/npm/env-paths-3.0.0-license",
+          "bytes": 1117,
+          "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+        }
+      ]
+    },
+    {
+      "name": "graceful-fs",
+      "version": "4.2.11",
+      "license": "ISC",
+      "resolved": "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.11.tgz",
+      "integrity": "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/graceful-fs-4.2.11-LICENSE",
+          "bytes": 791,
+          "sha256": "f65c5d9f22a317b2a10803bd1868461ce6499c2ed7217bc80c0cc772a748789c"
+        }
+      ]
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "license.md",
+          "collectedFile": "licenses/npm/ms-2.1.3-license.md",
+          "bytes": 1079,
+          "sha256": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801"
+        }
+      ]
+    },
+    {
+      "name": "progress",
+      "version": "2.0.3",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/progress/-/progress-2.0.3.tgz",
+      "integrity": "sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/progress-2.0.3-LICENSE",
+          "bytes": 1098,
+          "sha256": "d7d2a7786de7c7cfd96f920c6f12927d74e1d2a861ca4498bf465c3bc3f4c21c"
+        }
+      ]
+    },
+    {
+      "name": "semver",
+      "version": "7.8.5",
+      "license": "ISC",
+      "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz",
+      "integrity": "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/semver-7.8.5-LICENSE",
+          "bytes": 765,
+          "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+        }
+      ]
+    },
+    {
+      "name": "sumchecker",
+      "version": "3.0.1",
+      "license": "Apache-2.0",
+      "resolved": "https://registry.npmjs.org/sumchecker/-/sumchecker-3.0.1.tgz",
+      "integrity": "sha512-MvjXzkz/BOfyVDkG0oFOtBxHX2u3gKbMHIF/dXblZsgD3BWOFLmHovIpZY7BykJdAjcqRCBi1WYBNdEC9yI7vg==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/sumchecker-3.0.1-LICENSE",
+          "bytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "name": "undici",
+      "version": "7.29.1",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/undici/-/undici-7.29.1.tgz",
+      "integrity": "sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/undici-7.29.1-LICENSE",
+          "bytes": 1090,
+          "sha256": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27"
+        }
+      ]
+    },
+    {
+      "name": "undici-types",
+      "version": "7.18.2",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-7.18.2.tgz",
+      "integrity": "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==",
+      "licenseEvidence": "named-files-collected",
+      "licenses": [
+        {
+          "sourceFile": "LICENSE",
+          "collectedFile": "licenses/npm/undici-types-7.18.2-LICENSE",
+          "bytes": 1090,
+          "sha256": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27"
+        }
+      ]
+    }
+  ],
+  "electronArtifactNotices": [
+    {
+      "sourceFile": "electron/dist/LICENSE",
+      "bytes": 1096,
+      "sha256": "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d"
+    },
+    {
+      "sourceFile": "electron/dist/LICENSES.chromium.html",
+      "bytes": 20111209,
+      "sha256": "a62dabd1c6ef1327365b2a3fdffb806222684a746dcb8f4afd1c1f690eba5535"
+    }
+  ],
+  "blockers": [
+    {
+      "component": "@electron-internal/extract-zip@1.0.5",
+      "role": "development-installation-tooling",
+      "issue": "No named license file ships in the npm artifact. Redistribution of this tooling or its native binaries requires complete copyright/license evidence and review of the embedded dependency closure. The desktop application does not import it; a future candidate must demonstrate whether it is excluded.",
+      "sourceCommit": "b83e459fd04c53b0a1c8438a6792df8f64be47fc",
+      "sourceRepository": "https://github.com/electron/extract-zip"
+    },
+    {
+      "component": "electron@44.2.0",
+      "role": "desktop-runtime",
+      "issue": "The installed Linux x64 artifact notices are hash-recorded, not a complete qualified installer inventory. Review the exact candidate binary/native notices and platform distribution before creating any installer."
+    }
+  ]
+}

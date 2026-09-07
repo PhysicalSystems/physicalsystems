@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { runInNewContext } from 'node:vm'
 import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from '../../src/harness/workcell-view/view-state.js'
 
@@ -100,7 +101,7 @@ export async function view(t, options = {}) {
     Image: class extends Element { constructor() { super('img') } },
     URL: { createObjectURL(blob) { assert.equal(blob.type, 'image/jpeg'); const url = `blob:test-${++nextUrl}`; created.push(url); return url },
       revokeObjectURL(url) { revoked.push(url) } },
-    URLSearchParams, AbortController, AbortSignal, TextDecoder, Date: ClockDate,
+    crypto: { randomUUID }, URLSearchParams, AbortController, AbortSignal, TextDecoder, Date: ClockDate,
     cameraIsFresh: (value, at = now) => cameraIsFresh(value, at),
     executionReadIsFresh: (value, at = now) => executionReadIsFresh(value, at),
     executionApprovalAvailable: (value, at = now) => executionApprovalAvailable(value, at),
@@ -115,7 +116,7 @@ export async function view(t, options = {}) {
         if (response !== undefined) return response
         return path === '/api/state' ? Response.json(state) : new Response(makeStream(options.signal))
       }
-      if (['/api/camera/start', '/api/camera/stop', '/api/refresh', '/api/intent', '/api/choice', '/api/setup/inspect'].includes(path)) {
+      if (['/api/camera/start', '/api/camera/stop', '/api/refresh', '/api/intent', '/api/choice', '/api/setup/inspect', '/api/experiments/propose', '/api/experiments/approve', '/api/experiments/stop'].includes(path)) {
         assert.equal(options.method, 'POST')
         const pending = deferred(); actions.push({ path, options, ...pending }); return pending.promise
       }

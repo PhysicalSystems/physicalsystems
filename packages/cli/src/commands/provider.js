@@ -8,19 +8,23 @@ function providerLabel(provider) {
   return provider.name || provider.id
 }
 
-export async function createProviderRuntime({ config, sdk: suppliedSdk, secretStore }) {
+export async function createProviderRuntime({ config, sdk: suppliedSdk, secretStore, modelsPath }) {
   const sdk = suppliedSdk || await loadOfficialPiSdk()
   const credentials = createPiCredentialStore({ configDir: config.configDir, secretStore })
   const runtime = await sdk.ModelRuntime.create({
     credentials,
+    ...(modelsPath !== undefined ? { modelsPath } : {}),
     allowModelNetwork: false,
     refreshOnCreate: false,
   })
   return { runtime, credentials }
 }
 
-export async function listProvidersCommand({ config, io = console, sdk, secretStore }) {
-  const { runtime } = await createProviderRuntime({ config, sdk, secretStore })
+export async function listProvidersCommand({ config, io = console, sdk, secretStore, modelsPath }) {
+  const { runtime } = await createProviderRuntime({ config, sdk, secretStore, modelsPath })
+  // getAvailable refreshes auth metadata from the credential store without
+  // fetching provider catalogs. A new runtime initially has an empty snapshot.
+  if (modelsPath !== undefined) await runtime.getAvailable()
   const providers = runtime.getProviders().map((provider) => ({
     id: provider.id,
     name: providerLabel(provider),
@@ -36,9 +40,9 @@ export async function listProvidersCommand({ config, io = console, sdk, secretSt
 }
 
 export async function listProviderModelsCommand({
-  config, providerId, io = console, sdk, secretStore,
+  config, providerId, io = console, sdk, secretStore, modelsPath,
 }) {
-  const { runtime } = await createProviderRuntime({ config, sdk, secretStore })
+  const { runtime } = await createProviderRuntime({ config, sdk, secretStore, modelsPath })
   const models = await runtime.getAvailable(providerId)
   for (const model of models) io.log(`${model.provider}/${model.id}`)
   return models.map((model) => `${model.provider}/${model.id}`)
@@ -53,10 +57,11 @@ export async function providerLoginCommand({
   output = process.stdout,
   sdk,
   secretStore,
+  modelsPath,
   openBrowser = openSystemBrowser,
   interactionFactory,
 }) {
-  const { runtime } = await createProviderRuntime({ config, sdk, secretStore })
+  const { runtime } = await createProviderRuntime({ config, sdk, secretStore, modelsPath })
   const provider = runtime.getProvider(providerId)
   if (!provider) throw new Error(`Unknown Pi provider: ${providerId}`)
   const selectedType = authType || (provider.auth?.oauth ? 'oauth' : 'api_key')
@@ -100,8 +105,8 @@ export async function providerLoginCommand({
   }
 }
 
-export async function providerLogoutCommand({ config, providerId, io = console, sdk, secretStore }) {
-  const { runtime } = await createProviderRuntime({ config, sdk, secretStore })
+export async function providerLogoutCommand({ config, providerId, io = console, sdk, secretStore, modelsPath }) {
+  const { runtime } = await createProviderRuntime({ config, sdk, secretStore, modelsPath })
   if (!runtime.getProvider(providerId)) throw new Error(`Unknown Pi provider: ${providerId}`)
   await runtime.logout(providerId)
   io.log(`${providerId} disconnected.`)

@@ -14,6 +14,12 @@ remain outside this repository.
 - The frozen MIT Pi terminal compatibility runtime used by the text-first
   Harness, with optional native Clipboard and image-processing peers absent by
   default.
+- `packages/desktop`: an Apache-2.0 operator client in a private development
+  package. It embeds the same Harness behind an isolated Electron renderer,
+  attaches to existing authorized Node services, and includes a clearly labeled
+  scripted simulation. It contains no private Node implementation. This source
+  addition does not authorize an installer, npm publication, managed remote
+  provisioning, automatic updates or a new release workflow.
 - Tests, packaging checks, security expectations and reproducible release CI
   needed to audit what runs on an operator's computer.
 - `packages/runtime`: the already-public Apache-2.0 execution kernel, versioned
