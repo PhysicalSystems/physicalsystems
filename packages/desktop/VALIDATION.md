@@ -36,6 +36,14 @@ timed out at several UI stages and are preserved as failed automation evidence;
 they are not counted as passing qualification. The test resolves only an already
 installed pinned Electron binary and cannot implicitly invoke its downloader.
 
+The later provider-sign-in and model-picker changes are covered by deterministic
+application fakes and the actual renderer in headless Firefox. Reproductions
+cover an authorization URL immediately followed by manual input, a URL arriving
+after input begins, cancellation/expiry during delayed provider cleanup, browser
+opening failure/retry, exact provider/model selection, search and empty catalogs.
+These checks do not open a real provider URL or complete live sign-in. The earlier
+native simulation result does not qualify these provider changes as a live login.
+
 Compositor screenshots are a separate opt-in with
 `PHYSICALSYSTEMS_DESKTOP_NATIVE_SCREENSHOT=1` and an evidence directory. Functional
 native UI/IPC validation does not imply compositor capture or optical/display

@@ -171,6 +171,92 @@ test('provider question answers are exact, secrets never echoed, cancellation re
   assert.equal(f.app.snapshot().settings.loginPending, false)
 })
 
+test('provider browser destination survives the immediate manual-answer prompt and stays scoped to its question', async (t) => {
+  for (const event of [
+    { type: 'auth_url', url: 'https://provider.example/authorize?state=fixture', instructions: 'Use the fixture account.' },
+    { type: 'device_code', verificationUri: 'https://provider.example/device', userCode: 'FIXTURE-CODE', instructions: 'Enter the displayed code.' },
+  ]) await t.test(event.type, async (t) => {
+    let received, complete, initialQuestion
+    const completing = new Promise((resolve) => { complete = resolve })
+    t.after(complete)
+    const f = await fixture(t, { providerCommands: { list: async () => [], logout: async () => {}, login: async ({ interactionFactory }) => {
+      const interaction = interactionFactory()
+      interaction.notify(event)
+      initialQuestion = f.app.snapshot().settings.loginQuestion
+      received = await interaction.prompt({ type: 'manual_code', message: 'Complete login in your browser, or paste the authorization code / redirect URL here:' })
+      await completing
+    } } })
+    await f.create()
+    await f.app.command('settings.providerLogin', { providerId: 'fixture', authType: 'oauth' })
+    const question = f.app.snapshot().settings.loginQuestion
+    assert.equal(question.kind, 'manual_code')
+    assert.equal(question.url, event.url || event.verificationUri)
+    assert.equal(question.instructions, event.instructions)
+    assert.equal(question.userCode, event.userCode || null)
+    assert.notEqual(question.id, initialQuestion.id)
+    assert.deepEqual(await f.app.command('settings.openAuthUrl', { questionId: question.id, url: 'https://untrusted.example' }), { url: question.url })
+    await assert.rejects(f.app.command('settings.openAuthUrl', { questionId: initialQuestion.id }), /expired/)
+    await f.app.command('settings.providerAnswer', { questionId: question.id, answer: 'fixture-manual-response' })
+    const waiting = f.app.snapshot().settings.loginQuestion
+    assert.equal(waiting.kind, 'oauth')
+    assert.equal(waiting.url, question.url)
+    assert.equal(f.app.snapshot().settings.loginPending, true)
+    await assert.rejects(f.app.command('settings.providerAnswer', { questionId: question.id, answer: 'duplicate' }), /expired/)
+    await assert.rejects(f.app.command('settings.openAuthUrl', { questionId: question.id }), /expired/)
+    assert.doesNotMatch(JSON.stringify(f.app.snapshot()), /fixture-manual-response/)
+    assert.doesNotMatch(await readFile(path.join(f.dataDir, 'catalog.json'), 'utf8'), /fixture-manual-response|provider\.example/)
+    complete(); await delay(10)
+    assert.equal(received, 'fixture-manual-response')
+    assert.equal(f.app.snapshot().settings.loginQuestion, null)
+    await assert.rejects(f.app.command('settings.openAuthUrl', { questionId: waiting.id }), /expired/)
+  })
+})
+
+test('a later provider URL notification preserves the pending answer and its identity', async (t) => {
+  let interaction, received
+  const f = await fixture(t, { providerCommands: { list: async () => [], logout: async () => {}, login: async ({ interactionFactory }) => {
+    interaction = interactionFactory()
+    received = await interaction.prompt({ type: 'manual_code', message: 'Paste the fixture code.' })
+  } } })
+  await f.app.command('settings.providerLogin', { providerId: 'fixture', authType: 'oauth' })
+  const before = f.app.snapshot().settings.loginQuestion
+  interaction.notify({ type: 'auth_url', url: 'https://provider.example/authorize', instructions: 'Continue in the browser.' })
+  const current = f.app.snapshot().settings.loginQuestion
+  assert.equal(current.id, before.id)
+  assert.equal(current.kind, 'manual_code')
+  assert.equal(current.question, before.question)
+  assert.equal((await f.app.command('settings.openAuthUrl', { questionId: current.id })).url, current.url)
+  await f.app.command('settings.providerAnswer', { questionId: before.id, answer: 'fixture-answer' }); await delay(10)
+  assert.equal(received, 'fixture-answer')
+})
+
+test('provider cancellation and expiry invalidate browser destinations before delayed cleanup finishes', async (t) => {
+  for (const method of ['cancel', 'expire']) await t.test(method, async (t) => {
+    let interaction, complete
+    const completing = new Promise((resolve) => { complete = resolve })
+    t.after(complete)
+    const f = await fixture(t, { loginTimeoutMs: method === 'expire' ? 20 : 300_000,
+      providerCommands: { list: async () => [], logout: async () => {}, login: async ({ interactionFactory }) => {
+        interaction = interactionFactory()
+        interaction.notify({ type: 'auth_url', url: 'https://provider.example/authorize' })
+        await completing
+      } } })
+    await f.app.command('settings.providerLogin', { providerId: 'fixture', authType: 'oauth' })
+    const question = f.app.snapshot().settings.loginQuestion
+    if (method === 'cancel') await f.app.command('settings.providerCancel')
+    for (let i = 0; i < 100 && !interaction.signal.aborted; i++) await delay(5)
+    assert.equal(interaction.signal.aborted, true)
+    assert.equal(f.app.snapshot().settings.loginPending, true, 'the provider operation still owns its cleanup')
+    assert.equal(f.app.snapshot().settings.loginQuestion, null)
+    await assert.rejects(f.app.command('settings.openAuthUrl', { questionId: question.id }), /expired/)
+    interaction.notify({ type: 'auth_url', url: 'https://provider.example/late' })
+    assert.equal(f.app.snapshot().settings.loginQuestion, null)
+    complete(); await delay(10)
+    assert.equal(f.app.snapshot().settings.loginPending, false)
+    assert.doesNotMatch(f.app.snapshot().notice, /Provider connected/)
+  })
+})
+
 test('a late health reply cannot resurrect a disconnected project or reclaim its Node', async (t) => {
   let resolveProbe, probes = 0
   const identity = { authenticated: true, nodeId: 'fixture-node' }

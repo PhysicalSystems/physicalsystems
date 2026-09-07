@@ -65,6 +65,18 @@ are in **Model & app settings**, using the same reviewed Pi provider runtime.
 Provider sign-in URLs open in the system browser only after an explicit click;
 the renderer cannot supply an arbitrary URL to open.
 
+The model button in the composer opens a searchable picker grouped by provider.
+Search accepts model/provider names and identifiers; the selected model is marked.
+**Manage providers** opens searchable provider settings, with configured providers
+first and sign-in actions revealed when a provider is expanded. An empty catalog
+explains the missing setup; a Simulation project explains that its guide is
+scripted and needs no AI model or provider sign-in.
+
+During browser sign-in, **Open sign-in page** and a copyable address remain
+available alongside a manual authorization-code prompt. Browser-opening errors
+appear in that dialog with a retry and copy-address fallback. Sign-in addresses
+expire with the active attempt and are never saved in conversation history.
+
 **Connect** checks both Node discovery identity and authenticated camera status;
 it does not start capture. A green dot requires a recent successful check.
 Detected does not mean commissioned or ready to move. “In use” currently counts

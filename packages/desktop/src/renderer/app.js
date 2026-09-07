@@ -17,6 +17,7 @@ const cleanStatus = (value) => String(value || 'disconnected').replaceAll('_', '
 let state = null, disposed = false, unsubscribe = null, sidebarKey = '', transcriptKey = '', questionKey = '', bannerKey = '', setupKey = ''
 let inspectorTab = 'devices', panelOpen = innerWidth > 950, navOpen = false, expanded = new Set(), popoverProject = null
 let pendingSend = false, dialogBusy = false, noticeMessage = '', currentContext = '', loginQuestionKey = '', draftTimer = null
+let dialogGeneration = 0, refreshDialog = null
 let draftSave = Promise.resolve()
 const drafts = new Map(), pendingOwnedStops = new Set()
 const activeProject = () => state?.projects?.find((project) => project.id === state.activeProjectId)
@@ -318,10 +319,12 @@ function update(next) {
   }
   workcell.update(next.workcell, activeProject()?.connection?.status === 'connected', context)
   renderSidebar(); renderTranscript(); renderQuestion(); renderSetup(); renderControls(); renderProviderQuestion(); layout()
+  if (byId('dialog').open) refreshDialog?.()
   if (popoverProject) { const current = state.projects.find((item) => item.id === popoverProject), anchor = [...document.querySelectorAll('.project-row')].find((row) => row.dataset.projectId === popoverProject); if (current && anchor) showProject(current, anchor, byId('project-popover').dataset.pinned === 'true'); else closePopover() }
   if (next.notice && next.notice !== noticeMessage) notice(next.notice)
 }
 function dialog(title) {
+  dialogGeneration++; refreshDialog = null; byId('dialog').dataset.providerQuestion = ''
   closePopover(); const content = byId('dialog-content'); content.replaceChildren(make('h2', title)); if (!byId('dialog').open) byId('dialog').showModal(); return content
 }
 function field(form, label, name, value = '', type = 'text') {
@@ -392,61 +395,247 @@ function confirmArchive(kind, project, conversation) {
   byId('dialog').close(); const form = dialog(`Archive ${kind}?`); form.append(make('p', 'The saved history is preserved. Archiving does not stop equipment or terminate a run.'))
   footer(form, 'Archive', () => command(`${kind}.archive`, { projectId: project.id, ...(conversation ? { conversationId: conversation.id } : {}) }))
 }
-function showSettings() {
-  const form = dialog('Model & app settings')
-  const models = state?.models || []
-  const selection = selectField(form, 'Assistant model', 'model', [['', 'Select a model'], ...models.map((model) => [`${model.provider}:${model.id}`, `${model.name || model.id} · ${model.provider}`])], state?.conversation?.model ? `${state.conversation.model.provider}:${state.conversation.model.id}` : '')
-  if (!models.length) form.append(make('p', 'No available model has been reported. Sign in to a provider, then refresh the model list.', 'help'))
-  const providers = state?.settings?.providers || []
-  for (const provider of providers) {
-    const providerId = typeof provider === 'string' ? provider : provider.id
-    const row = make('div', undefined, 'settings-row'); row.append(make('strong', provider.name || providerId), make('span', provider.configured ? ' · Connected' : '', 'small muted'))
-    const actions = make('div', undefined, 'actions')
-    if (provider.oauth) actions.append(button('Browser sign in', () => run('settings.providerLogin', { providerId, authType: 'oauth' })))
-    if (provider.apiKey) actions.append(button('Use API key', () => run('settings.providerLogin', { providerId, authType: 'api_key' })))
-    if (provider.configured) actions.append(button('Sign out', () => run('settings.providerLogout', { providerId }), 'plain'))
-    if (!actions.childElementCount) row.append(make('p', 'Use this provider’s supported environment credential setup.', 'help'))
-    row.append(actions); form.append(row)
+function dialogError(form, message, id = 'settings-error') {
+  let error = form.querySelector('#' + id)
+  if (!error) { error = make('p', undefined, 'error'); error.id = id; error.setAttribute('role', 'alert'); form.append(error) }
+  error.textContent = message
+}
+const providerId = (provider) => typeof provider === 'string' ? provider : provider.id
+const providerName = (id) => (state?.settings?.providers || []).find((item) => providerId(item) === id)?.name || id
+const availableModels = () => (state?.models || []).filter((model) => typeof model.provider === 'string' && typeof model.id === 'string')
+const simulationSelected = () => state?.settings?.simulation || activeProject()?.connection?.kind === 'simulation'
+function modelEmptyMessage() {
+  if (simulationSelected()) return 'Simulation uses a scripted guide. No AI model or provider sign-in is needed for this project.'
+  if (!activeConversation()) return 'Choose a project and conversation to select its assistant model.'
+  return 'No models available. Connect a provider below, then refresh the list. If credentials are already configured, check that provider’s setup.'
+}
+function showModels() {
+  const form = dialog('Choose a model'), generation = dialogGeneration, context = currentContext
+  const search = field(form, 'Search models', 'model-search', '', 'search')
+  search.placeholder = 'Search by model or provider'; search.autocomplete = 'off'
+  const count = make('p', undefined, 'help'); count.id = 'model-result-count'; count.setAttribute('role', 'status')
+  const list = make('div', undefined, 'choice-list'); list.id = 'model-list'; list.setAttribute('aria-label', 'Available models')
+  form.append(count, list)
+  const actions = make('div', undefined, 'actions settings-actions')
+  const manage = button('Manage providers', showSettings, 'plain'); manage.id = 'model-manage'
+  const refresh = button('Refresh models', async () => {
+    refresh.disabled = true
+    try { await command('settings.models', {}, { quiet: true }); if (generation === dialogGeneration) redraw(true) }
+    catch (error) { if (generation === dialogGeneration) dialogError(form, error.message) }
+    finally { refresh.disabled = false }
+  }, 'plain')
+  actions.append(manage, refresh, button('Done', () => byId('dialog').close(), 'plain')); form.append(actions)
+  let signature = '', selecting = false
+  const redraw = (force = false) => {
+    const models = availableModels(), current = state?.conversation?.model
+    const next = JSON.stringify([models, state?.settings?.providers, current, search.value, state?.hostUnavailable, state?.conversation?.busy, currentContext, simulationSelected()])
+    if (!force && next === signature) return
+    signature = next; list.replaceChildren()
+    if (currentContext !== context) {
+      count.textContent = 'The conversation changed. Close this picker and reopen it for the current conversation.'
+      search.disabled = true; return
+    }
+    search.disabled = !models.length
+    search.hidden = !models.length; form.querySelector('label[for="field-model-search"]').hidden = !models.length
+    if (!models.length) {
+      count.textContent = modelEmptyMessage()
+      manage.textContent = simulationSelected() ? 'Provider settings' : 'Manage providers'
+      return
+    }
+    const words = search.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+    const filtered = models.filter((model) => words.every((word) => [model.name, model.id, model.provider, providerName(model.provider)].join(' ').toLocaleLowerCase().includes(word)))
+    count.textContent = filtered.length ? filtered.length + ' available ' + (filtered.length === 1 ? 'model' : 'models') : 'No models match your search.'
+    if (state?.hostUnavailable) count.textContent += ' The workspace host is unavailable. Reopen the app to recover.'
+    else if (state?.conversation?.busy) count.textContent += ' Wait for the response or cancel it before changing models.'
+    const groups = new Map()
+    for (const model of filtered) {
+      if (!groups.has(model.provider)) groups.set(model.provider, [])
+      groups.get(model.provider).push(model)
+    }
+    for (const [id, entries] of [...groups].sort(([a], [b]) => providerName(a).localeCompare(providerName(b)))) {
+      const group = make('section', undefined, 'model-group'); group.append(make('h3', providerName(id)))
+      for (const model of entries.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))) {
+        const selected = current?.provider === model.provider && current?.id === model.id
+        const option = button('', async () => {
+          if (selecting || generation !== dialogGeneration || context !== currentContext) return
+          selecting = true
+          for (const item of list.querySelectorAll('button')) item.disabled = true
+          try {
+            await command('settings.selectModel', { provider: model.provider, modelId: model.id }, { quiet: true })
+            if (generation === dialogGeneration) byId('dialog').close()
+          } catch (error) { if (generation === dialogGeneration) dialogError(form, error.message) }
+          finally { selecting = false; if (generation === dialogGeneration) redraw(true) }
+        }, 'model-option')
+        option.dataset.provider = model.provider; option.dataset.modelId = model.id
+        option.setAttribute('aria-pressed', String(selected))
+        option.disabled = selecting || state?.hostUnavailable || state?.conversation?.busy
+        const label = make('span', undefined, 'model-label'); label.append(make('strong', model.name || model.id), make('small', model.id, 'muted'))
+        option.append(label, make('span', selected ? 'Selected' : '', 'model-selected')); group.append(option)
+      }
+      list.append(group)
+    }
   }
-  form.append(button('Refresh models', async () => { try { await command('settings.models'); byId('dialog').close(); showSettings() } catch {} }, 'plain'))
-  form.append(make('p', 'Assistant cancellation affects the conversation only. Camera and run Stop remain separate controls.', 'help'))
-  footer(form, 'Use selected model', () => {
-    const model = models.find((item) => `${item.provider}:${item.id}` === selection.value)
-    if (!model) throw new Error('Choose an available model first.')
-    return command('settings.selectModel', { provider: model.provider, modelId: model.id })
-  })
+  search.oninput = () => redraw()
+  search.onkeydown = (event) => { if (event.key === 'ArrowDown') { event.preventDefault(); list.querySelector('button:not(:disabled)')?.focus() } }
+  list.onkeydown = (event) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    const items = [...list.querySelectorAll('button:not(:disabled)')], index = items.indexOf(document.activeElement)
+    if (!items.length) return
+    event.preventDefault()
+    const target = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : Math.max(0, Math.min(items.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))
+    items[target].focus()
+  }
+  refreshDialog = redraw; redraw(); if (!search.hidden) search.focus()
+}
+function showSettings() {
+  if (state?.settings?.loginQuestion) { loginQuestionKey = ''; renderProviderQuestion(); return }
+  const form = dialog('Model & app settings'), generation = dialogGeneration
+  const summary = make('div', undefined, 'model-summary'); form.append(summary)
+  const heading = make('h3', 'Providers'); form.append(heading)
+  const search = field(form, 'Search providers', 'provider-search', '', 'search')
+  search.placeholder = 'Find your provider'; search.autocomplete = 'off'
+  const list = make('div', undefined, 'choice-list'); list.id = 'provider-list'; list.setAttribute('aria-label', 'Providers'); form.append(list)
+  const refresh = button('Refresh providers', async () => {
+    refresh.disabled = true
+    try { await command('settings.get', {}, { quiet: true }); if (generation === dialogGeneration) redraw(true) }
+    catch (error) { if (generation === dialogGeneration) dialogError(form, error.message) }
+    finally { refresh.disabled = false }
+  }, 'plain')
+  const actions = make('div', undefined, 'actions settings-actions'); actions.append(refresh, button('Done', () => byId('dialog').close(), 'plain')); form.append(actions)
+  let signature = ''
+  const redraw = (force = false) => {
+    const providers = state?.settings?.providers || [], current = state?.conversation?.model
+    const next = JSON.stringify([providers, availableModels(), current, search.value, state?.settings?.loginPending, state?.hostUnavailable, simulationSelected(), currentContext])
+    if (!force && signature === next) return
+    signature = next
+    const expandedProviders = new Set([...list.querySelectorAll('details[open]')].map((item) => item.dataset.providerId))
+    summary.replaceChildren()
+    summary.append(make('p', simulationSelected() ? modelEmptyMessage() : current ? 'Current model: ' + (current.name || current.id) : availableModels().length ? 'Choose a model for this conversation.' : modelEmptyMessage(), 'help'))
+    if (availableModels().length && !simulationSelected()) summary.append(button('Choose model', showModels))
+    list.replaceChildren()
+    const query = search.value.trim().toLocaleLowerCase()
+    const matches = providers.filter((item) => [providerId(item), item.name].join(' ').toLocaleLowerCase().includes(query))
+      .sort((a, b) => Number(Boolean(b.configured)) - Number(Boolean(a.configured)) || (a.name || providerId(a)).localeCompare(b.name || providerId(b)))
+    if (state?.settings?.loginPending) {
+      const pending = make('p', 'Waiting for provider sign-in to finish or cancel. Provider actions will become available when it settles.', 'help'); pending.setAttribute('role', 'status'); summary.append(pending)
+      const cancel = button('Cancel sign in', async () => {
+        cancel.disabled = true
+        try { await command('settings.providerCancel', {}, { quiet: true }); if (generation === dialogGeneration) pending.textContent = 'Cancellation requested. Waiting for the provider to finish cleanup.' }
+        catch (error) { if (generation === dialogGeneration) { dialogError(form, error.message); cancel.disabled = Boolean(state?.hostUnavailable) } }
+      }, 'plain')
+      cancel.id = 'provider-pending-cancel'; cancel.disabled = Boolean(state?.hostUnavailable); summary.append(cancel)
+    }
+    if (!matches.length) list.append(make('p', providers.length ? 'No providers match your search.' : 'No providers have been reported. Refresh providers to try again.', 'help'))
+    for (const provider of matches) {
+      const id = providerId(provider), row = make('details', undefined, 'provider-row'); row.dataset.providerId = id; row.open = expandedProviders.has(id)
+      const title = make('summary'), label = make('span', undefined, 'provider-label')
+      label.append(make('strong', provider.name || id))
+      if (provider.name && provider.name !== id) label.append(make('small', id, 'muted'))
+      title.append(label, make('span', provider.configured ? 'Configured' : 'Connect', 'provider-status')); row.append(title)
+      const actions = make('div', undefined, 'actions')
+      const act = (text, name, payload, style = '') => {
+        const control = button(text, async () => {
+          control.disabled = true
+          try { await command(name, payload, { quiet: true }) }
+          catch (error) { if (generation === dialogGeneration) dialogError(form, error.message) }
+          finally { if (generation === dialogGeneration) control.disabled = Boolean(state?.settings?.loginPending || state?.hostUnavailable) }
+        }, style)
+        control.disabled = Boolean(state?.settings?.loginPending) || state?.hostUnavailable; actions.append(control)
+      }
+      if (provider.oauth) act('Browser sign in', 'settings.providerLogin', { providerId: id, authType: 'oauth' })
+      if (provider.apiKey) act('Use API key', 'settings.providerLogin', { providerId: id, authType: 'api_key' })
+      if (provider.configured) act('Sign out', 'settings.providerLogout', { providerId: id }, 'plain')
+      if (!actions.childElementCount) row.append(make('p', 'This provider uses environment credentials. Configure it through its supported setup, then refresh.', 'help'))
+      row.append(actions); list.append(row)
+    }
+  }
+  search.oninput = () => redraw(); refreshDialog = redraw; redraw()
 }
 function renderProviderQuestion() {
   const question = state?.settings?.loginQuestion
-  const key = question?.id || ''
+  const key = question ? JSON.stringify(question) : ''
   if (key === loginQuestionKey) return
   const prior = loginQuestionKey; loginQuestionKey = key
   if (!question) {
-    if (prior && byId('dialog').dataset.providerQuestion === 'true') { byId('dialog').dataset.providerQuestion = ''; byId('dialog').close(); showSettings() }
+    if (prior && byId('dialog').dataset.providerQuestion === 'true') {
+      byId('dialog').dataset.providerQuestion = ''; byId('dialog').close(); showSettings()
+      if (state?.notice) { const status = make('p', state.notice, 'help'); status.setAttribute('role', 'status'); byId('dialog-content').append(status) }
+    }
     return
   }
-  const form = dialog('Provider sign in'); byId('dialog').dataset.providerQuestion = 'true'
+  // A later auth URL can update the same manual prompt. Preserve its input;
+  // unrelated state notifications must not erase a code while it is being typed.
+  const previous = byId('field-provider-answer')
+  const preserve = byId('dialog').dataset.providerQuestionId === question.id
+  const answerValue = preserve ? previous?.value || '' : ''
+  const answerFocused = preserve && document.activeElement === previous
+  const selection = answerFocused && previous?.type === 'text' ? [previous.selectionStart, previous.selectionEnd] : null
+  const form = dialog('Provider sign in'), generation = dialogGeneration
+  byId('dialog').dataset.providerQuestion = 'true'; byId('dialog').dataset.providerQuestionId = question.id
+  const status = make('p', undefined, 'help'); status.id = 'provider-login-status'; status.setAttribute('role', 'status')
+  if (question.url) {
+    form.append(make('p', 'Open the sign-in page and complete authorization in your browser.', 'help'))
+    const open = button('Open sign-in page', async () => {
+      open.disabled = true
+      try {
+        await command('settings.openAuthUrl', { questionId: question.id }, { quiet: true })
+        if (generation === dialogGeneration) {
+          form.querySelector('#provider-login-error')?.remove()
+          status.textContent = 'Sign-in page opened. Complete authorization in your browser.'
+        }
+      } catch (error) {
+        if (generation === dialogGeneration) {
+          status.textContent = ''
+          dialogError(form, 'Could not open the sign-in page. Copy the address below into your browser. ' + error.message, 'provider-login-error')
+        }
+      } finally { if (generation === dialogGeneration) open.disabled = false }
+    }, 'auth-open')
+    open.id = 'provider-open-auth'; form.append(open)
+    const label = make('label', 'Sign-in address — copy if the browser does not open')
+    label.htmlFor = 'provider-auth-url'
+    const address = make('input'); address.id = 'provider-auth-url'; address.type = 'text'; address.readOnly = true; address.value = question.url; address.className = 'credential'; address.onclick = () => address.select()
+    form.append(label, address)
+  }
+  if (question.userCode) form.append(make('p', 'Code: ' + question.userCode, 'credential'))
+  if (question.instructions) form.append(make('p', question.instructions, 'help'))
+  form.append(status)
+  const cancel = button('Cancel sign in', async () => {
+    try { await command('settings.providerCancel', {}, { quiet: true }) }
+    catch (error) { if (generation === dialogGeneration) dialogError(form, error.message, 'provider-login-error') }
+  }, 'plain')
   if (question.kind === 'oauth') {
-    form.append(make('p', 'Continue sign-in in your browser.', 'help'))
-    if (question.url) { form.append(make('p', question.url, 'credential')); form.append(button('Open sign-in page', () => run('settings.openAuthUrl', { questionId: question.id }))) }
-    if (question.userCode) form.append(make('p', `Code: ${question.userCode}`, 'credential'))
-    form.append(button('Cancel sign in', () => run('settings.providerCancel')))
-    return
+    status.textContent = 'Waiting for provider authorization. You can reopen the sign-in page if needed.'
+    const actions = make('div', undefined, 'actions'); actions.append(cancel); form.append(actions); return
   }
   form.append(make('p', question.question || 'Provider information is required.'))
   let input
-  if (question.options?.length) input = selectField(form, 'Answer', 'provider-answer', question.options.map((option) => typeof option === 'string' ? [option, option] : [option.id, option.label]))
-  else { input = field(form, 'Answer', 'provider-answer', '', question.kind === 'secret' ? 'password' : 'text'); input.autocomplete = 'off'; input.required = true }
+  if (question.options?.length) input = selectField(form, 'Answer', 'provider-answer', question.options.map((option) => typeof option === 'string' ? [option, option] : [option.id, option.label]), answerValue)
+  else {
+    input = field(form, question.kind === 'manual_code' ? 'Authorization code or redirect URL' : question.kind === 'secret' ? 'API key' : 'Answer', 'provider-answer', answerValue, question.kind === 'secret' ? 'password' : 'text')
+    input.autocomplete = 'off'; input.spellcheck = false; input.required = true; input.maxLength = 16000
+  }
   const actions = make('div', undefined, 'actions')
-  actions.append(button('Cancel sign in', () => run('settings.providerCancel'), 'plain'), button('Continue', async () => {
-    if (!input.reportValidity()) return
-    const answer = input.value; input.value = ''
-    try { await command('settings.providerAnswer', { questionId: question.id, answer }) } catch {}
-  }, 'primary')); form.append(actions); input.focus()
+  const submit = button('Continue', async () => {
+    if (submit.disabled || !input.reportValidity()) return
+    const answer = input.value; input.value = ''; submit.disabled = true
+    try { await command('settings.providerAnswer', { questionId: question.id, answer }, { quiet: true }) }
+    catch (error) { if (generation === dialogGeneration) dialogError(form, error.message, 'provider-login-error') }
+    finally { if (generation === dialogGeneration) submit.disabled = false }
+  }, 'primary')
+  input.onkeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); submit.click() } }
+  actions.append(cancel, submit); form.append(actions)
+  if (answerFocused || !question.url) { input.focus(); if (selection) input.setSelectionRange(...selection) }
+}
+async function openSettingsView(show) {
+  if (state?.settings?.loginQuestion) { loginQuestionKey = ''; renderProviderQuestion(); return }
+  show()
+  const generation = dialogGeneration
+  try { await command('settings.get', {}, { quiet: true }) }
+  catch (error) { if (generation === dialogGeneration) dialogError(byId('dialog-content'), error.message) }
 }
 byId('new-project').onclick = createProject
-byId('settings-open').onclick = () => { showSettings(); void command('settings.get').then(() => { if (byId('dialog').open && !state?.settings?.loginQuestion) showSettings() }).catch(() => {}) }
-byId('model-settings').onclick = byId('settings-open').onclick
+byId('settings-open').onclick = () => { void openSettingsView(showSettings) }
+byId('model-settings').onclick = () => { void openSettingsView(showModels) }
 byId('conversation-menu').onclick = () => { if (activeProject() && activeConversation()) conversationSettings(activeProject(), activeConversation()) }
 byId('message').oninput = () => { renderControls(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { void saveDraft() }, 600) }
 byId('message').onkeydown = (event) => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); byId('composer').requestSubmit() } }

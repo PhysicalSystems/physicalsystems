@@ -11,6 +11,7 @@ import { workcellRequestFailure } from '../../cli/src/harness/workcell-controlle
 import { listProvidersCommand, providerLoginCommand, providerLogoutCommand } from '../../cli/src/commands/provider.js'
 import * as connectionAdapters from './connections.js'
 import { createSimulationHost } from './simulation.js'
+import { validateAuthDestination } from './bridge-contract.js'
 
 const TERMINAL = new Set(['VERIFIED_SUCCESS', 'FAILED', 'CANCELLED', 'BLOCKED'])
 const text = (value, label, max = 160) => {
@@ -347,43 +348,69 @@ export async function createApplication({ dataDir, catalog, connections = connec
       if (!['api_key', 'oauth'].includes(authType)) throw fail('Choose an available provider sign-in method.')
       const controller = new AbortController()
       loginPending = controller
+      const active = () => loginPending === controller && !controller.signal.aborted
+      const waitingQuestion = () => active() && controller.auth ? { id: randomUUID(), kind: 'oauth', ...controller.auth } : null
+      controller.signal.addEventListener('abort', () => {
+        controller.answer = null; controller.auth = null
+        if (loginPending === controller) {
+          loginQuestion = null
+          notice = controller.signal.reason?.publicMessage || 'Provider sign-in cancelled.'
+          emit()
+        }
+      }, { once: true })
       const timer = setTimeout(() => controller.abort(fail('Provider sign-in expired. Start a new sign-in in Settings.')), loginTimeoutMs)
       timer.unref?.()
       const operation = providerCommands.login({ config, modelsPath: null, providerId, authType, secretStore: secrets, io: { log() {} },
         interactionFactory: () => ({ signal: controller.signal, prompt: async (question) => {
           controller.signal.throwIfAborted()
+          if (!active()) throw fail('This sign-in question expired. Start a new sign-in in Settings.')
           if (question.type === 'secret' && body.apiKey) return body.apiKey
           const signal = question.signal ? AbortSignal.any([controller.signal, question.signal]) : controller.signal
+          signal.throwIfAborted()
           return new Promise((resolve, reject) => {
-            const abort = () => { controller.answer = null; reject(signal.reason) }
+            const id = randomUUID()
+            const abort = () => {
+              if (controller.answer === answer) controller.answer = null
+              if (loginQuestion?.id === id) { loginQuestion = waitingQuestion(); emit() }
+              reject(signal.reason)
+            }
+            const answer = (value) => {
+              signal.removeEventListener('abort', abort); controller.answer = null
+              loginQuestion = waitingQuestion(); resolve(value); emit()
+            }
             signal.addEventListener('abort', abort, { once: true })
-            loginQuestion = { id: randomUUID(), question: question.message, kind: question.type, options: question.options || [] }
-            controller.answer = (answer) => { signal.removeEventListener('abort', abort); controller.answer = null; loginQuestion = null; resolve(answer); emit() }
-            if (signal.aborted) abort()
+            // OAuth adapters may notify and request manual input in the same
+            // turn. The browser destination belongs to the whole login flow.
+            loginQuestion = { id, question: question.message, kind: question.type, options: question.options || [], ...controller.auth }
+            controller.answer = answer
             emit()
           })
         }, notify(event) {
-          if (controller.signal.aborted) return
+          if (!active()) return
           if (event.type === 'auth_url' || event.type === 'device_code') {
-            const url = new URL(event.url || event.verificationUri)
-            if (url.protocol !== 'https:' || url.username || url.password) throw fail('The provider supplied an unsupported sign-in URL.')
-            loginQuestion = { id: randomUUID(), kind: 'oauth', url: url.href, userCode: event.userCode || null }; emit()
+            let url
+            try { url = validateAuthDestination(event.url || event.verificationUri) }
+            catch { throw fail('The provider supplied an unsupported sign-in URL.') }
+            controller.auth = { url, userCode: typeof event.userCode === 'string' ? event.userCode.slice(0, 512) : null,
+              instructions: typeof event.instructions === 'string' ? event.instructions.slice(0, 4000) : null }
+            loginQuestion = controller.answer && loginQuestion ? { ...loginQuestion, ...controller.auth } : waitingQuestion()
+            emit()
           }
         } })
-      }).then(async () => { notice = 'Provider connected. Select an available model.'; await runCommand('settings.get') })
+      }).then(async () => { controller.signal.throwIfAborted(); notice = 'Provider connected. Select an available model.'; await runCommand('settings.get') })
         .catch((error) => { notice = controller.signal.aborted ? controller.signal.reason?.publicMessage || 'Provider sign-in cancelled.' : safeFailure(error) })
         .finally(() => { clearTimeout(timer); if (loginPending === controller) { loginPending = null; loginQuestion = null }; emit() })
       controller.operation = operation
       emit(); return { accepted: true }
     }
     if (name === 'settings.providerAnswer') {
-      if (!loginPending?.answer || body.questionId !== loginQuestion?.id) throw fail('This sign-in question expired. Use the current question in Settings.')
+      if (!loginPending?.answer || loginPending.signal.aborted || body.questionId !== loginQuestion?.id) throw fail('This sign-in question expired. Use the current question in Settings.')
       if (typeof body.answer !== 'string' || body.answer.length > 16_000) throw fail('Enter a bounded sign-in answer.')
       loginPending.answer(body.answer); return { accepted: true }
     }
     if (name === 'settings.providerCancel') { loginPending?.abort(fail('Provider sign-in cancelled.')); return { accepted: true } }
     if (name === 'settings.openAuthUrl') {
-      if (!loginPending || loginQuestion?.kind !== 'oauth' || body.questionId !== loginQuestion.id) throw fail('This sign-in link expired. Start a new sign-in in Settings.')
+      if (!loginPending || loginPending.signal.aborted || !loginQuestion?.url || body.questionId !== loginQuestion.id) throw fail('This sign-in link expired. Start a new sign-in in Settings.')
       return { url: loginQuestion.url }
     }
     if (name === 'settings.providerLogout') {
