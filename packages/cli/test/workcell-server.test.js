@@ -7,6 +7,7 @@ import test from 'node:test'
 
 import { createWorkcellServer } from '../src/harness/workcell-server.js'
 import { createWorkcellController } from '../src/harness/workcell-controller.js'
+import { createExperimentController } from '../src/harness/experiments/controller.js'
 
 const DIGEST = `sha256:${'a'.repeat(64)}`
 const FRAME_ID = 'b'.repeat(64)
@@ -99,6 +100,34 @@ test('setup endpoint requires this session bearer, same origin and exactly an em
   assert.equal(JSON.parse(result.text).physicalExecutionAuthorized, false)
   host.inspectSetup = undefined
   assert.equal((await raw(server.origin, endpoint, { method: 'POST', headers: auth, body: {} })).status, 503)
+})
+
+test('synthetic experiment HTTP actions require exact session approval, expose safe conflicts and never dispatch trial or hardware tools', async t => {
+  const storageDir = await mkdtemp(join(tmpdir(), 'experiment-http-'))
+  const experiments = createExperimentController({ sessionId: 'http-session', storageDir })
+  const workcell = createWorkcellController({ workflow: {}, getExperiments: () => experiments })
+  t.after(async () => { await workcell.dispose(); await experiments.dispose(); await rm(storageDir, { recursive: true, force: true }) })
+  const { server, auth } = await setup(t, workcell)
+  const post = (kind, body, headers = auth) => raw(server.origin, `/api/experiments/${kind}`, { method: 'POST', headers, body })
+  const proposal = { goal: 'align fixture', mode: 'simulation', trialLimit: 3, requestId: 'http-proposal' }
+  assert.equal((await post('propose', proposal, {})).status, 401)
+  assert.equal((await post('propose', { ...proposal, mode: 'physical' })).status, 400)
+  assert.equal((await post('propose', { ...proposal, approved: true })).status, 400)
+  const response = await post('propose', proposal)
+  assert.equal(response.status, 200)
+  const current = JSON.parse(response.text).experiments.current
+  const request = { experimentId: current.id, expectedDigest: current.planDigest }
+  const stale = await post('approve', { ...request, expectedDigest: '0'.repeat(64) })
+  assert.equal(stale.status, 409)
+  assert.equal(JSON.parse(stale.text).code, 'PLAN_CHANGED')
+  assert.match(JSON.parse(stale.text).error, /review/i)
+  assert.equal((await post('approve', request)).status, 200)
+  assert.equal(experiments.snapshot().current.phase, 'READY')
+  assert.equal((await post('trial', { experimentId: current.id, requestId: 'forged', offsetMm: 3 })).status, 404)
+  workcell.agentStart('assistant busy')
+  assert.equal((await post('stop', { experimentId: current.id })).status, 200)
+  assert.equal(experiments.snapshot().current.phase, 'STOPPED')
+  assert.equal(experiments.snapshot().physicalExecutionAuthorized, false)
 })
 
 test('local view serves only static allowlist with restrictive security headers and no embedded bearer', async (t) => {

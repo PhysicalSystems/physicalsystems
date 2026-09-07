@@ -52,6 +52,23 @@ Its tiny virtual tray/gripper model helps exercise the operator workflow; it
 provides no evidence of collision avoidance, robot kinematics, actuator stopping
 or physical qualification.
 
+The Experiments inspector presents a separate conversation-owned controller
+from the shared Harness. Both real Pi sessions and the scripted guide use its
+same synthetic fixture, persisted bounded proposals, exact operator approval,
+deduplicated trials and recorded comparisons. It has no Node client, robot
+adapter, camera input or physical dispatch authority. The renderer can request
+only the allowlisted propose/approve/trial/finish/stop actions with explicit
+project and conversation identities. Approval requires the exact plan digest
+and an operator confirmation; the assistant cannot approve its own plan.
+
+An active experiment keeps its host and conversation owner across project
+navigation. Independent Stop is available during an ordinary pending request.
+Renderer reload attaches to the current controller without replaying commands;
+host loss retains historical records and clears actionable status. Restart
+never resumes approval or an interrupted trial. Unconfirmed outcomes and
+storage failures stay explicit. Session evidence lives under the desktop's
+isolated Harness data directory, outside the repository and existing CLI state.
+
 This package is excluded from npm publication. Electron is a pinned development
 dependency in its own lockfile; the published CLI closure and component versions
 remain unchanged. Any future installer needs an explicit source/dependency

@@ -52,6 +52,10 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
   let setupError = ''
   let setupKey = ''
   let retiredSetupReport = ''
+  let experimentPending = false
+  let experimentStopping = false
+  let experimentKey = ''
+  let experimentApprovalKey = ''
   function notice(message = '', category = 'action') {
     notices[category] = message
     const value = Object.values(notices).filter(Boolean).join(' ')
@@ -198,6 +202,61 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     byId('run-reconcile').disabled = executionBusy || !fresh || !execution?.canReconcile
     byId('run-receipt').disabled = executionBusy || !execution?.run
     byId('setup-inspect').disabled = !connected || stopped || Boolean(setupRequest) || Boolean(state?.setup?.pending)
+    const experiment = state?.experiments?.current
+    const experimentFresh = experiment?.phase === 'PROPOSED' && experiment.expiresAt > Date.now()
+    const experimentUnavailable = state?.experiments?.availability !== 'simulation-only' || Boolean(state?.experiments?.error)
+    byId('experiment-propose').disabled = experimentUnavailable || !connected || stopped || experimentPending || ['PROPOSED', 'READY', 'RUNNING', 'OUTCOME_UNKNOWN'].includes(experiment?.phase)
+    byId('experiment-confirm').disabled = experimentUnavailable || !connected || stopped || experimentPending || !experimentFresh
+    byId('experiment-approve').disabled = byId('experiment-confirm').disabled || !byId('experiment-confirm').checked
+    byId('experiment-stop').disabled = !token || stopped || experimentStopping || !['PROPOSED', 'READY', 'RUNNING', 'OUTCOME_UNKNOWN'].includes(experiment?.phase)
+  }
+  async function experimentAction(kind, body) {
+    const stopping = kind === 'stop'
+    if (stopped || !token || (stopping ? experimentStopping : experimentPending || !connected)) return
+    if (stopping) experimentStopping = true; else experimentPending = true
+    const sessionId = state?.sessionId
+    notice(''); controls()
+    try {
+      const result = await boundedJson(`/api/experiments/${kind}`, body)
+      if (!stopped && state?.sessionId === sessionId) render(result)
+    } catch (error) {
+      if (!stopped && state?.sessionId === sessionId) notice(error.message)
+    } finally {
+      if (stopping) experimentStopping = false; else experimentPending = false
+      byId('experiment-confirm').checked = false; controls()
+    }
+  }
+  function renderExperiments() {
+    const experiments = state?.experiments
+    const current = experiments?.current
+    text('experiment-state', current ? `${current.phase} · SIMULATION` : experiments?.availability === 'simulation-only' && !experiments.error ? 'SIMULATION ONLY' : 'UNAVAILABLE')
+    const approvalKey = JSON.stringify([experiments?.sessionId, current?.id, current?.planDigest, current?.phase])
+    if (experimentApprovalKey !== approvalKey) { experimentApprovalKey = approvalKey; byId('experiment-confirm').checked = false }
+    byId('experiment-confirmation').hidden = current?.phase !== 'PROPOSED'
+    const key = JSON.stringify(experiments)
+    if (key === experimentKey) return
+    experimentKey = key
+    const details = byId('experiment-details'); details.replaceChildren()
+    if (!experiments) { details.append(make('p', 'Local experiments are unavailable. Preserve existing experiment files, check local storage and reopen this Harness conversation.', 'quiet')); return }
+    // Controller-owned recovery explanations are plain text, including when
+    // startup failed before an experiment could be selected.
+    if (experiments.error) details.append(make('p', experiments.error, 'warning'))
+    if (!current) {
+      details.append(make('p', experiments.availability === 'simulation-only' && !experiments.error
+        ? 'Ask the assistant to propose a simulated experiment, or enter a goal here.'
+        : 'Preserve existing experiment files, repair local storage and reopen this Harness conversation before proposing another experiment.', 'quiet'))
+      return
+    }
+    if (current.recoveryReason) details.append(make('p', current.recoveryReason, 'warning'))
+    details.append(make('h3', current.goal), make('p', `${current.trials.length} / ${current.trialLimit} trials recorded · offset range [-10, 10] mm`))
+    details.append(make('p', `Exact plan: ${current.planDigest}`, 'experiment-digest'))
+    details.append(make('p', `Approval expires ${new Date(current.expiresAt).toISOString()}`))
+    if (current.phase === 'READY') details.append(make('p', 'Approved. Ask the assistant to continue with the synthetic trials.'))
+    for (const trial of current.trials) {
+      details.append(make('p', `Trial ${current.trials.indexOf(trial) + 1} · offset ${trial.offsetMm} mm · ${trial.status}${trial.result ? ` · alignment error ${trial.result.alignmentErrorMm} mm` : ''}${trial.error ? ` · ${trial.error}` : ''}`))
+    }
+    if (current.summary) details.append(make('p', current.summary.interpretation))
+    if (experiments.history?.length) details.append(make('p', `${experiments.history.length} previous experiments retained in this conversation.`))
   }
   function setupContext(value) {
     const workflow = value?.workflow, camera = value?.camera?.status
@@ -606,7 +665,7 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     }
     state = next
     connection(true, 'Connected to Harness')
-    renderCamera(next.camera); renderAgent(next.agent); renderWorkflow(next.workflow); renderExecution(next.execution); renderSetup(); controls()
+    renderCamera(next.camera); renderAgent(next.agent); renderWorkflow(next.workflow); renderExecution(next.execution); renderSetup(); renderExperiments(); controls()
   }
   function renderExecution(execution = {}) {
     const run = execution.run
@@ -802,6 +861,20 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     }
   }
   byId('reconnect').onclick = () => { void stream() }
+  byId('experiment-form').onsubmit = (event) => {
+    event.preventDefault()
+    void experimentAction('propose', { goal: byId('experiment-goal').value, mode: 'simulation',
+      trialLimit: Number(byId('experiment-budget').value), requestId: crypto.randomUUID() })
+  }
+  byId('experiment-confirm').onchange = controls
+  byId('experiment-approve').onclick = () => {
+    const current = state?.experiments?.current
+    if (current && byId('experiment-confirm').checked) void experimentAction('approve', { experimentId: current.id, expectedDigest: current.planDigest })
+  }
+  byId('experiment-stop').onclick = () => {
+    const current = state?.experiments?.current
+    if (current) void experimentAction('stop', { experimentId: current.id })
+  }
   setInterval(() => {
     if (!executionApprovalAvailable(state?.execution)) byId('run-confirm').checked = false
     controls()

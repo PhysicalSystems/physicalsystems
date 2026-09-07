@@ -34,7 +34,7 @@ test('actual desktop application completes the browser simulation journey with a
       }
       if (request.url === '/fixture.js') { response.writeHead(200, { 'Content-Type': 'text/javascript' }); response.end(fixture); return }
       const requested = request.url === '/' ? 'index.html' : request.url.slice(1)
-      if (!['index.html','styles.css','app.js','workcell.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
+      if (!['index.html','styles.css','app.js','workcell.js','experiments.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
       const file = requested === 'view-state.js' ? new URL('../../cli/src/harness/workcell-view/view-state.js', import.meta.url) : new URL(`../src/renderer/${requested}`, import.meta.url)
       let data = await readFile(file)
       if (requested === 'index.html') data = Buffer.from(data.toString().replace("connect-src 'none'", "connect-src 'self'").replace('<script type="module"', '<script src="./fixture.js"></script><script type="module"'))
@@ -55,6 +55,7 @@ test('actual desktop application completes the browser simulation journey with a
     if (state.conversation?.busy) await application.command('conversation.cancel', { projectId: state.activeProjectId, conversationId: state.activeConversationId }).catch(() => {})
     for (const owner of state.activeCaptures || []) await application.command('workcell.camera.stop', { projectId: owner.projectId, connectionGeneration: owner.connectionGeneration, expectedCaptureSessionId: owner.captureSessionId }).catch(() => {})
     for (const owner of state.activeRuns || []) await application.command('workcell.execution.stop', { projectId: owner.projectId, connectionGeneration: owner.connectionGeneration, runId: owner.run.runId, reason: 'operator-requested-stop' }).catch(() => {})
+    for (const owner of state.activeExperiments || []) await application.command('experiment.stop', { projectId: owner.projectId, conversationId: owner.conversationId, experimentId: owner.experiment.id }).catch(() => {})
     await sleep(100); await application.close(); await catalog.close(); await rm(dataDir, { recursive: true, force: true })
   })
   async function wd(path, body, method = body === undefined ? 'GET' : 'POST') {
@@ -138,6 +139,40 @@ test('actual desktop application completes the browser simulation journey with a
   await until(() => js('return [...document.querySelector("#run-select").options].some(o=>o.value===arguments[0])', [runId]), 'persistent run history restored')
   await set('#run-select', runId)
   await until(() => js('return document.querySelector("#execution-state").textContent.includes("VERIFIED SUCCESS")'), 'stored run selected')
+  await set('#message', 'Find an alignment approach'); await click('#send-message')
+  await until(() => application.snapshot().experiments?.current?.phase === 'PROPOSED' && !application.snapshot().conversation.busy, 'scripted experiment proposal')
+  await click('[data-tab="experiments"]')
+  assert.equal(await js('return document.querySelector("#experiments").hidden'), false)
+  assert.equal(await js('return document.querySelector("#workcell").hidden'), true)
+  assert.match(await js('return document.querySelector("#experiments").textContent'), /SIMULATION ONLY/)
+  assert.equal(await js('return document.querySelector("#experiment-approve").disabled'), true)
+  assert.equal(application.snapshot().experiments.current.trials.length, 0)
+  const experimentId = application.snapshot().experiments.current.id
+  await click('#experiment-confirm'); await click('#experiment-approve')
+  await until(() => application.snapshot().experiments.current.phase === 'RUNNING', 'approved synthetic trial running')
+  await wd(`/session/${session}/refresh`, {})
+  await until(() => js('return Boolean(document.querySelector("[data-tab=experiments]"))'), 'renderer reloaded during experiment')
+  await click('[data-tab="experiments"]')
+  await until(() => application.snapshot().experiments.current.phase === 'COMPLETED', 'bounded scripted experiment completed')
+  await until(() => js('return document.querySelectorAll("#experiment-trials tbody tr").length===4 && document.querySelector("#experiment-best")?.textContent.includes("0.375 mm error")'), 'all completed trial comparisons visible')
+  assert.deepEqual(application.snapshot().experiments.current.trials.map((trial) => trial.offsetMm), [0, 1.5, 2.25, 2.625])
+  assert.match(await js('return document.querySelector("#experiment-best").textContent'), /0.375 mm error at 2.625 mm offset/)
+  assert.equal(commands.filter((name) => name === 'experiment.approve').length, 1, 'renderer reload never replays approval')
+  assert.equal(application.snapshot().workcell.execution.runs.length, 2, 'synthetic experiments never dispatch physical run commands')
+  if (evidence) { const shot = await wd(`/session/${session}/screenshot`); await writeFile(`${evidence}/desktop-synthetic-experiment-completed.png`, Buffer.from(shot, 'base64')) }
+  await click('#experiment-propose')
+  await until(() => js('return Boolean(document.querySelector("#experiment-confirm"))'), 'new experiment proposal rendered')
+  await click('#experiment-confirm'); await click('#experiment-approve')
+  await until(() => application.snapshot().experiments.current.phase === 'RUNNING', 'second experiment trial active')
+  await click('#experiment-stop')
+  await until(() => application.snapshot().experiments.current.phase === 'STOPPED', 'independent experiment Stop confirmed')
+  const stoppedTrials = application.snapshot().experiments.current.trials.length
+  await sleep(850)
+  assert.equal(application.snapshot().experiments.current.trials.length, stoppedTrials, 'Stop prevents all subsequent scripted trials')
+  await until(() => js('return Boolean(document.querySelector("#experiment-history"))'), 'experiment history rendered')
+  await set('#experiment-history', experimentId)
+  assert.equal(await js('return document.querySelectorAll("#experiment-history-trials tbody tr").length'), 4)
+  assert.match(await js('return document.querySelector("#experiment-history-best").textContent'), /0.375 mm error/)
   assert.deepEqual(unexpected, []); assert.deepEqual(await js('return window.__errors'), [])
-  if (evidence) await writeFile(`${evidence}/renderer-application-result.json`, JSON.stringify({ status: 'PASS', scope: 'Actual renderer + createApplication + catalog + existing Workcell/execution controllers + scripted simulation host; no Electron transport, AI model or physical hardware verification.', checks: ['empty onboarding has no commands', 'explicit simulation project', 'discovery', 'conversation and destination question', 'proposal', 'prepare waits for separate exact approval', 'three scripted transitions', 'receipt integrity', 'synthetic image decode and Stop clearing/release', 'rename and new conversation', 'saved transcript and run history after browser reload'], commands, unexpectedExternalCalls: unexpected }, null, 2))
+  if (evidence) await writeFile(`${evidence}/renderer-application-result.json`, JSON.stringify({ status: 'PASS', scope: 'Actual renderer + createApplication + catalog + existing Workcell/execution controllers + scripted simulation host; no Electron transport, AI model or physical hardware verification.', checks: ['empty onboarding has no commands', 'explicit simulation project', 'discovery', 'conversation and destination question', 'proposal', 'prepare waits for separate exact approval', 'three scripted transitions', 'receipt integrity', 'synthetic image decode and Stop clearing/release', 'rename and new conversation', 'saved transcript and run history after browser reload', 'chat experiment proposal', 'operator exact trial-budget approval', 'four signed-measurement revisions', 'reload during trial without approval replay', 'recorded best comparison', 'independent experiment Stop and history'], commands, unexpectedExternalCalls: unexpected }, null, 2))
 })

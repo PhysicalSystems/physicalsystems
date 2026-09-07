@@ -11,6 +11,7 @@ export const COMMANDS = new Set([
   'workcell.execution.stop', 'workcell.execution.reconcile', 'workcell.execution.select',
   'workcell.execution.receipt', 'settings.get', 'settings.models', 'settings.selectModel',
   'settings.providerLogin', 'settings.providerLogout', 'settings.providerAnswer', 'settings.providerCancel', 'settings.openAuthUrl',
+  'experiment.propose', 'experiment.approve', 'experiment.trial', 'experiment.finish', 'experiment.stop',
 ]);
 
 export function validateCommand(name, payload = {}) {
@@ -28,6 +29,13 @@ export function validateCommand(name, payload = {}) {
     }
   };
   visit(clean);
+  if (name.startsWith('experiment.')) {
+    const operations = { propose: ['goal', 'trialLimit', 'requestId', 'mode'], approve: ['experimentId', 'expectedDigest', 'approved'],
+      trial: ['experimentId', 'requestId', 'offsetMm'], finish: ['experimentId'], stop: ['experimentId'] };
+    const allowed = new Set(['projectId', 'conversationId', 'connectionGeneration', ...operations[name.slice('experiment.'.length)]]);
+    if (Object.keys(clean).some((key) => !allowed.has(key))) throw new Error('This experiment request contains unsupported fields.');
+    if (!clean.projectId || !clean.conversationId) throw new Error('An explicit project and conversation are required for experiments.');
+  }
   return clean;
 }
 
@@ -42,7 +50,7 @@ export function assetName(requestUrl) {
   const url = new URL(requestUrl);
   if (url.protocol !== 'physicalsystems:' || url.host !== 'desktop' || url.search || url.hash) return null;
   // An explicit allowlist prevents access to application code, metadata, or local files.
-  const allowed = new Set(['/index.html', '/styles.css', '/app.js', '/workcell.js', '/view-state.js']);
+  const allowed = new Set(['/index.html', '/styles.css', '/app.js', '/workcell.js', '/experiments.js', '/view-state.js']);
   return allowed.has(url.pathname) ? url.pathname.slice(1) : null;
 }
 
@@ -55,11 +63,13 @@ export function unavailableSnapshot(previous = {}) {
     notice: message,
     workcell: null,
     setupReport: null,
+    experiments: previous.experiments ? { ...previous.experiments, availability: 'unavailable', historical: true } : null,
     settings: previous.settings ? { ...previous.settings, loginPending: false, loginQuestion: null } : undefined,
     projects: (previous.projects ?? []).map((project) => ({ ...project, connection: { ...project.connection, status: 'offline', error: message, deviceCount: null, inUseCount: null } })),
     conversation: previous.conversation ? { ...previous.conversation, busy: false, error: message } : null,
     activeRuns: (previous.activeRuns ?? []).map((run) => ({ ...run, statusUnavailable: true, canStop: false })),
     activeCaptures: (previous.activeCaptures ?? []).map((capture) => ({ ...capture, statusUnavailable: true, canStop: false })),
+    activeExperiments: (previous.activeExperiments ?? []).map((experiment) => ({ ...experiment, statusUnavailable: true, canStop: false })),
   };
 }
 

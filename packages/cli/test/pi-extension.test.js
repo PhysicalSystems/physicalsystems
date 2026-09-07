@@ -120,14 +120,21 @@ test('standalone Harness is local-only and blocks shell and unreviewed tools', a
     defineToolImpl: (value) => value,
   })(pi)
 
-  assert.deepEqual([...pi.commands.keys()], ['workcell', 'physical-details', 'physical-setup', 'physical'])
+  assert.deepEqual([...pi.commands.keys()], ['experiment', 'workcell', 'physical-details', 'physical-setup', 'physical'])
   assert.deepEqual([...pi.tools.keys()], [
-    'ask_choice', 'inspect_physical_system', 'inspect_physical_capabilities',
+    'ask_choice', 'inspect_local_experiment', 'propose_local_experiment', 'run_simulated_trial', 'finish_local_experiment', 'inspect_physical_system', 'inspect_physical_capabilities',
     'preview_physical_capability', 'plan_physical_workflow',
     'inspect_physical_execution',
     'inspect_physical_setup',
   ])
   assert.equal(pi.tools.has(READ_AGENT_SKILL_TOOL), false)
+  for (const toolName of ['inspect_local_experiment', 'propose_local_experiment', 'run_simulated_trial', 'finish_local_experiment']) {
+    assert.equal(pi.handlers.get('tool_call')({ toolName }), undefined)
+  }
+  for (const toolName of ['approve_local_experiment', 'run_physical_trial', 'execute_physical_capability']) {
+    assert.equal(pi.handlers.get('tool_call')({ toolName }).block, true)
+    assert.equal(pi.tools.has(toolName), false)
+  }
 
   assert.deepEqual(await pi.handlers.get('user_bash')({ command: 'whoami' }), {
     result: {

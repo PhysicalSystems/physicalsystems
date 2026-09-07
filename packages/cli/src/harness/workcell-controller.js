@@ -16,6 +16,7 @@ const REQUEST_ERRORS = Object.freeze({
   camera_stop_unconfirmed: [503, 'Camera stop is not confirmed; retry Stop for this capture and check the terminal'],
   setup_busy: [409, 'Setup inspection is already pending; wait for its result before retrying'],
   setup_unavailable: [503, 'Setup inspection is unavailable; reopen /workcell from the Harness'],
+  experiment_unavailable: [503, 'Local experiments are unavailable; reopen this Harness conversation'],
 })
 class WorkcellRequestError extends Error {
   constructor(code) { super(REQUEST_ERRORS[code][1]); this.code = code }
@@ -42,6 +43,7 @@ export function createWorkcellController({
   sendIntent, canPrompt = () => true, modelLabel = () => null,
   cameraClient, executionClient, now = () => new Date().toISOString(), pollMs = 200,
   inspectSetup, getSetupView = () => ({ pending: false, report: null, error: null }),
+  getExperiments = () => null,
   choiceTimeoutMs = 180_000,
 } = {}) {
   const sessionId = randomUUID()
@@ -82,6 +84,7 @@ export function createWorkcellController({
         stopUnconfirmed: unconfirmedStops.size > 0,
         stopCaptureSessionId: stopCaptureSessionId || ownedCaptureSessions.values().next().value || null },
       execution: execution.snapshot(),
+      experiments: getExperiments()?.snapshot() || null,
     }
     const setup = getSetupView()
     const result = { ...base, setup }
@@ -216,6 +219,14 @@ export function createWorkcellController({
   return {
     snapshot, setWorkflow,
     setupChanged: emit,
+    experimentsChanged: emit,
+    async experimentAction(kind, body) {
+      if (disposed || !getExperiments()) throw new WorkcellRequestError('experiment_unavailable')
+      if (!['propose', 'approve', 'stop'].includes(kind)) throw new TypeError('Unsupported local experiment action')
+      // Independent of the assistant, choices, camera and ordinary action channel.
+      await getExperiments()[kind](body)
+      return snapshot()
+    },
     async inspectSetup() {
       if (disposed || typeof inspectSetup !== 'function') throw new WorkcellRequestError('setup_unavailable')
       if (getSetupView().pending) throw new WorkcellRequestError('setup_busy')

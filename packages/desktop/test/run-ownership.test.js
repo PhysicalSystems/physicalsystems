@@ -50,7 +50,7 @@ test('viewing completed history retains every unresolved simulation run and exac
   await assert.rejects(app.command('connection.disconnect', scope()), /Stop or resolve/)
   await assert.rejects(app.command('project.archive', scope()), /Stop or resolve/)
   await assert.rejects(app.command('conversation.archive', scope()), /Stop or resolve/)
-  await assert.rejects(app.command('conversation.create', scope()), /resolve the current camera or run/)
+  await assert.rejects(app.command('conversation.create', scope()), /resolve the current camera, run or experiment/)
   await app.command('conversation.send', { ...scope(), text: 'Plan another tray transfer', requestId: 'ownership_plan_busy' })
   assert.equal(app.snapshot().conversation.busy, true)
   await assert.rejects(app.command('workcell.execution.stop', { ...scope(), runId: 'run-ffffffffffffffffffffffffffffffff', reason: 'operator-requested-stop' }))

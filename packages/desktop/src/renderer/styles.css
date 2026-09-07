@@ -24,3 +24,21 @@ details.device-row{display:block}details.device-row>summary{display:flex;gap:9px
 .sidebar .project-row:hover .new-conversation,.sidebar .project-row:focus-within .new-conversation{opacity:1}.sidebar .project-row:hover,.sidebar .project-row:focus-within{background:var(--panel)}
 .project-popover-title{display:flex;align-items:center;gap:9px;margin-bottom:9px}.project-popover-title h3{margin:0;min-width:0;overflow-wrap:anywhere}
 @media(hover:none),(pointer:coarse){.sidebar .project-add,.sidebar .project-row .new-conversation{opacity:1}}
+
+/* Conversation-owned synthetic experiments use the existing inspector. */
+.experiments-panel { padding: 18px; display: grid; gap: 16px; }
+.experiments-panel[hidden] { display: none; }
+.experiment-intro h2 { margin: 10px 0 4px; }
+.experiment-title { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.experiment-title h3 { margin: 0; overflow-wrap: anywhere; }
+.experiment-title .badge { flex-shrink: 0; }
+.experiment-proposal-form, .experiment-trial-form, .experiment-approval { display: grid; gap: 10px; }
+.experiment-approval label { display: flex; gap: 8px; align-items: flex-start; }
+.experiment-approval input { width: auto; margin-top: 4px; }
+.experiment-trials { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 12px; }
+.experiment-trials caption { text-align: left; color: var(--muted); margin-bottom: 8px; }
+.experiment-trials th, .experiment-trials td { text-align: left; padding: 8px 5px; border-bottom: 1px solid var(--line); }
+.experiment-trials td:nth-child(2), .experiment-trials td:nth-child(3) { white-space: nowrap; }
+.experiment-best { border: 1px solid var(--line); padding: 12px; border-radius: 10px; }
+.experiment-result .technical-evidence { overflow-wrap: anywhere; }
+.inspector .tabs { overflow-x: auto; }

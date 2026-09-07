@@ -48,14 +48,15 @@ function configuredModel(session, modelRuntime) {
 }
 
 const DESKTOP_OPERATOR_CONTEXT = `Desktop interface context:
-This session runs in the Physical Systems desktop application. Map every /workcell reference above or in a bundled Agent Skill to the Devices panel in this application; direct the operator to that panel, without requiring a terminal command. For basic camera preview, open Devices, select the intended observed camera and click Start preview. Opening Devices does not start capture. Basic preview does not require commissioning. Only the operator may start or stop preview; the assistant cannot see the preview image.
+This session runs in the Physical Systems desktop application. Map /workcell camera, setup and physical run references above or in a bundled Agent Skill to the Devices panel in this application; direct the operator to that panel, without requiring a terminal command. For basic camera preview, open Devices, select the intended observed camera and click Start preview. Opening Devices does not start capture. Basic preview does not require commissioning. Only the operator may start or stop preview; the assistant cannot see the preview image.
+Local synthetic experiments use the Experiments tab in the right panel. Direct the operator there to review and approve the exact simulation plan, inspect trials or Stop experiment. Do not direct desktop users to terminal /experiment commands. Synthetic trial approval grants no hardware authority; after approval the operator may resume the assistant with an ordinary message.
 Provider sign-in and model selection are in Model & app settings. Conversation messages discuss and plan a task. A proposal is not approval: the separate Run tab contains the existing configuration selection, preparation, explicit approval of the exact unexpired invocation, Stop and receipt controls. Cancel response cancels the assistant only; it never stops a camera or equipment. Use Stop preview or the run Stop control for those separate operations. These interface labels grant no additional tools, hardware authority or configuration permission.`
 
 /** Shared reviewed Pi initialization; no terminal, Node startup, browser or discovery. */
 export async function createHarnessRuntime({
   config, secretStore, sdk: suppliedSdk, cwd = process.cwd(),
   createExtension = createTinyEdgePiExtension, env = process.env, showHeader = false,
-  sessionDir: suppliedSessionDir, sessionManager: suppliedSessionManager, onWorkcell, onSetupInspector,
+  sessionDir: suppliedSessionDir, sessionManager: suppliedSessionManager, onWorkcell, onSetupInspector, onExperiments,
   extensionOptions = {}, submitWorkcellIntentImpl, interfaceMode = 'terminal',
 }) {
   const sdk = suppliedSdk || await loadOfficialPiSdk()
@@ -84,6 +85,7 @@ export async function createHarnessRuntime({
     cloudEnabled: false,
     showHeader,
     ...(onWorkcell ? { onWorkcell } : {}),
+    ...(onExperiments ? { onExperiments } : {}),
     ...(onSetupInspector ? { onSetupInspector } : {}),
     ...(interfaceMode === 'desktop' ? { isWorkcellModelConfigured: () => Boolean(configuredModel(runtime?.session, modelRuntime)) } : {}),
     agentSkillRegistry,
@@ -231,7 +233,7 @@ export async function createHarnessHost(options) {
   persistNewSession(sessionManager)
   const listeners = new Set()
   const requests = new Map()
-  let host, workcell, inspectSetup, unsubscribeWorkcell, unsubscribeSession
+  let host, workcell, experiments, inspectSetup, unsubscribeWorkcell, unsubscribeSession, unsubscribeExperiments
   let disposed = false, transition = false, failed = false, pending = null, streamingMessage = null, error = null, revision = 0
   let disposing = null, pendingCancellation = null
   const busy = () => Boolean(transition || pending || host?.promptGates.get(host.runtime.session)?.isBusy())
@@ -246,6 +248,7 @@ export async function createHarnessHost(options) {
         name: cleanText(model.name || model.id, 160) } : null,
       messages: session ? projectHarnessTranscript(session, streamingMessage) : [],
       workcellSessionId: workcell?.snapshot().sessionId || null,
+      experiments: experiments?.snapshot() || null,
     }
   }
   const emit = (type = 'change') => {
@@ -263,6 +266,9 @@ export async function createHarnessHost(options) {
     if (busy()) throw requestError('ERR_HARNESS_PROMPT_BUSY', 'Wait for the current assistant request to finish, or use Cancel before changing conversations or models.')
   }
   function assertNoPhysicalOperation() {
+    if (['RUNNING', 'OUTCOME_UNKNOWN'].includes(experiments?.snapshot().current?.phase)) {
+      throw requestError('ERR_HARNESS_OPERATION_ACTIVE', 'Stop the running simulated trial and confirm its outcome before changing conversations.')
+    }
     const state = workcell?.snapshot()
     const camera = state?.camera
     const execution = state?.execution
@@ -279,6 +285,13 @@ export async function createHarnessHost(options) {
     workcell = controller
     unsubscribeWorkcell = controller?.subscribe(() => emit('workcell'))
     options.onWorkcell?.(controller)
+  }
+  const onExperiments = (controller) => {
+    unsubscribeExperiments?.()
+    experiments = controller
+    unsubscribeExperiments = controller?.subscribe(() => emit('experiments'))
+    options.onExperiments?.(controller)
+    emit('experiments')
   }
   const uiContext = {
     select: (question, answers, opts) => workcell?.ask({ kind: 'select', question, options: answers, signal: opts?.signal }),
@@ -314,7 +327,7 @@ export async function createHarnessHost(options) {
   // is a bounded startup scope, not a lifetime mutation of desktop process.env.
   const restoreStartup = acquireOfflineStartup()
   try {
-    host = await createHarnessRuntime({ ...options, sdk, cwd, sessionDir, sessionManager, showHeader: false, interfaceMode: 'desktop', onWorkcell,
+    host = await createHarnessRuntime({ ...options, sdk, cwd, sessionDir, sessionManager, showHeader: false, interfaceMode: 'desktop', onWorkcell, onExperiments,
       onSetupInspector: (inspect) => { inspectSetup = inspect },
       submitWorkcellIntentImpl: (text) => prompt(text, `browser-${randomUUID()}`) })
     host.runtime.setRebindSession(bindSession)
@@ -383,6 +396,7 @@ export async function createHarnessHost(options) {
     // The coordinator still needs the retained status to render recovery after
     // a failed session replacement. Controller actions enforce their own lifetime.
     getWorkcell() { return workcell },
+    getExperiments() { return experiments },
     async inspectSetup() {
       assertReady()
       if (!inspectSetup) throw new Error('Setup inspection is unavailable for this conversation')
@@ -457,7 +471,7 @@ export async function createHarnessHost(options) {
         await host.runtime.session.abort()
         await pending?.catch(() => {})
         await host.runtime.dispose()
-        unsubscribeSession?.(); unsubscribeWorkcell?.(); listeners.clear()
+        unsubscribeSession?.(); unsubscribeWorkcell?.(); unsubscribeExperiments?.(); listeners.clear()
       })()
       return disposing
     },

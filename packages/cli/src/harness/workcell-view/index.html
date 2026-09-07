@@ -49,6 +49,15 @@
         <div class="setup-controls"><button id="setup-inspect" class="secondary" disabled>Inspect setup</button></div>
         <div id="setup-report" class="setup-report" aria-live="polite"><p class="quiet">Setup inspection is shared with the Harness terminal. No inspection starts automatically.</p></div>
       </section>
+      <section class="panel experiments-panel" aria-labelledby="experiment-title">
+        <div class="panel-heading"><div><p class="eyebrow">LOCAL EXPERIMENTATION</p><h2 id="experiment-title">Experiments</h2></div><span class="badge" id="experiment-state">SIMULATION ONLY</span></div>
+        <p class="panel-note">A synthetic alignment fixture for testing the experiment workflow. It does not simulate robot physics, run a learned policy, connect to Node or access hardware.</p>
+        <form id="experiment-form"><label for="experiment-goal">Experiment goal</label><input id="experiment-goal" maxlength="1000" required placeholder="Find an offset that aligns the synthetic target"><label for="experiment-budget">Maximum synthetic trials</label><input id="experiment-budget" type="number" min="1" max="10" value="4" required><button id="experiment-propose" disabled>Propose simulated experiment</button></form>
+        <div id="experiment-details" aria-live="polite"><p class="quiet">Ask the assistant to propose a simulated experiment, or enter a goal here.</p></div>
+        <div id="experiment-confirmation" hidden><label><input id="experiment-confirm" type="checkbox"> I approve this exact synthetic fixture, goal and trial budget.</label><button id="experiment-approve" disabled>Approve simulated experiment</button></div>
+        <button id="experiment-stop" class="danger" disabled>Stop experiment</button>
+        <p class="panel-note">Approval does not start an assistant request. After approving, send a message asking the assistant to continue. Experiment Stop is independent of Cancel response and physical run Stop.</p>
+      </section>
       <section class="panel execution-panel" aria-labelledby="execution-title">
         <div class="panel-heading"><div><p class="eyebrow">04 / OPERATOR EXECUTION</p><h2 id="execution-title">Physical run</h2></div><span class="badge" id="execution-state">UNAVAILABLE</span></div>
         <p id="execution-detail" class="panel-note">Checking the local execution service. No execution is assumed available.</p>

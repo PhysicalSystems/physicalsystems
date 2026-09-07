@@ -101,7 +101,7 @@ test('desktop host shares the reviewed allowlist, isolates resources and persist
   assert.equal(fake.calls.modelOptions.refreshOnCreate, false)
   assert.equal(fake.calls.modelOptions.modelsPath, null)
   assert.match(fake.calls.resourceOptions.systemPrompt, /Basic camera preview does not require commissioning/)
-  assert.match(fake.calls.resourceOptions.systemPrompt, /Map every \/workcell reference above or in a bundled Agent Skill to the Devices panel/)
+  assert.match(fake.calls.resourceOptions.systemPrompt, /Map \/workcell camera, setup and physical run references above or in a bundled Agent Skill to the Devices panel/)
   assert.match(fake.calls.resourceOptions.systemPrompt, /Provider sign-in and model selection are in Model & app settings/)
   assert.match(fake.calls.resourceOptions.systemPrompt, /Cancel response cancels the assistant only/)
   assert.match(fake.calls.resourceOptions.systemPrompt, /explicit approval of the exact unexpired invocation/)
@@ -275,12 +275,18 @@ test('actual reviewed Pi SDK creates and resumes a headless host offline with in
   try {
     const first = host.snapshot()
     assert.ok(host.getWorkcell())
+    assert.ok(host.getExperiments())
+    assert.equal(host.snapshot().experiments.sessionId, first.sessionId)
+    const experiment = host.getExperiments().propose({ goal: 'retain synthetic evidence', mode: 'simulation', trialLimit: 2, requestId: 'sdk-proposal' }).current
+    assert.equal(host.getWorkcell().snapshot().experiments.current.id, experiment.id)
     assert.equal(host.getWorkcell().snapshot().camera.availability, 'unchecked')
     await host.renameSession(first.sessionFile, 'Offline actual SDK')
     await host.createSession()
+    assert.equal(host.snapshot().experiments.current, null)
     await host.openSession(first.sessionFile)
     assert.equal(host.snapshot().name, 'Offline actual SDK')
     assert.equal(host.snapshot().sessionId, first.sessionId)
+    assert.equal(host.snapshot().experiments.current.id, experiment.id)
     assert.equal(physicalReads, 0)
   } finally { await host.dispose() }
 })

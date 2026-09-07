@@ -1,4 +1,5 @@
 import { mountWorkcellView } from './workcell.js'
+import { mountExperiments } from './experiments.js'
 
 // The renderer owns presentation only. All persistence, sessions, provider
 // credentials and Node calls cross the constrained main-process bridge.
@@ -41,6 +42,7 @@ async function command(name, payload = {}, options = {}) {
 function run(name, payload = {}) { void command(name, payload).catch(() => {}) }
 let workcellNotice = ''
 const workcell = mountWorkcellView(byId('workcell'), { command: (name, payload) => command(name, payload, { quiet: true }), onControls: renderControls, onNotice: (message) => { if (message || noticeMessage === workcellNotice) notice(message); workcellNotice = message } })
+const experiments = mountExperiments(byId('experiments'), { command: (name, payload) => command(name, payload, { quiet: true }) })
 function folderIcon(remote) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   svg.setAttribute('viewBox', '0 0 24 24'); svg.classList.add('project-icon'); svg.setAttribute('aria-hidden', 'true')
@@ -250,8 +252,9 @@ function renderControls() {
   byId('message').disabled = state?.hostUnavailable || !conversation || busy
   byId('cancel-message').hidden = !conversation?.busy
   byId('model-settings').textContent = state?.conversation?.model?.name || state?.conversation?.model?.id || state?.workcell?.agent?.model || 'Select a model'
-  byId('workcell').hidden = !state?.workcell
-  byId('inspector-empty').hidden = Boolean(state?.workcell)
+  byId('workcell').hidden = !state?.workcell || inspectorTab === 'experiments'
+  byId('experiments').hidden = inspectorTab !== 'experiments'
+  byId('inspector-empty').hidden = Boolean(state?.workcell) || inspectorTab === 'experiments'
   byId('inspector-empty').querySelector('h3').textContent = connection?.status === 'connected' ? 'Waiting for device state' : 'Connect a project'
   const execution = state?.workcell?.execution, runState = execution?.run
   const camera = state?.workcell?.camera
@@ -260,12 +263,25 @@ function renderControls() {
   const banner = byId('active-operation')
   const globalRuns = state?.activeRuns || []
   const globalCaptures = state?.activeCaptures || []
+  const activeExperiments = state?.activeExperiments || []
   const runs = globalRuns.length ? globalRuns : runOwned ? [{ projectId: project.id, projectName: project.name, connectionGeneration: state.connectionGeneration, run: runState, canStop: execution.canStop }] : []
   const captures = globalCaptures.length ? globalCaptures : cameraOwned ? [{ projectId: project.id, projectName: project.name, connectionGeneration: state.connectionGeneration, captureSessionId: camera.stopCaptureSessionId || camera.status?.captureSessionId, stopUnconfirmed: camera.stopUnconfirmed, stopPending: camera.stopPending, canStop: !byId('camera-stop').disabled }] : []
-  const nextBanner = JSON.stringify([runs, captures, [...pendingOwnedStops], state?.hostUnavailable, byId('camera-state').textContent, byId('camera-stop').disabled, byId('run-stop').disabled])
+  const nextBanner = JSON.stringify([runs, captures, activeExperiments, [...pendingOwnedStops], state?.hostUnavailable, byId('camera-state').textContent, byId('camera-stop').disabled, byId('run-stop').disabled])
   if (nextBanner === bannerKey) return
   bannerKey = nextBanner; banner.replaceChildren()
-  banner.hidden = !runs.length && !captures.length
+  banner.hidden = !runs.length && !captures.length && !activeExperiments.length
+  for (const owner of activeExperiments) {
+    const row = make('div', undefined, 'operation-row'), key = `experiment:${owner.projectId}:${owner.experiment.id}`
+    row.append(make('span', `${owner.projectName || 'Project'} · Synthetic experiment · ${owner.statusUnavailable || state.hostUnavailable ? 'last observed ' : ''}${cleanStatus(owner.experiment.phase)}${owner.statusUnavailable || state.hostUnavailable ? ' · current state unavailable' : ''}`))
+    const stop = button(pendingOwnedStops.has(key) ? 'Stopping experiment…' : 'Stop experiment', async () => {
+      if (pendingOwnedStops.has(key)) return
+      pendingOwnedStops.add(key); renderControls()
+      let timer
+      try { await Promise.race([command('experiment.stop', { projectId: owner.projectId, conversationId: owner.conversationId, experimentId: owner.experiment.id }), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Experiment Stop timed out. Inspect its recorded status and retry Stop.')), 6500) })]) }
+      catch (error) { notice(error.message) }
+      finally { clearTimeout(timer); pendingOwnedStops.delete(key); renderControls() }
+    }, 'stop'); stop.disabled = !owner.canStop || state.hostUnavailable || pendingOwnedStops.has(key); row.append(stop); banner.append(row)
+  }
   for (const owner of runs) {
     const row = make('div', undefined, 'operation-row')
     const phase = owner.run?.stopStatus === 'STOP_UNCONFIRMED' ? `Stop unconfirmed · last observed ${cleanStatus(owner.run?.phase)}` : cleanStatus(owner.run?.phase)
@@ -316,8 +332,10 @@ function renderSetup() {
 }
 function setTab(tab) {
   inspectorTab = tab
+  byId('inspector').querySelector('.inspector-heading h2').textContent = { devices: 'Devices', setup: 'Setup', run: 'Runs', experiments: 'Experiments' }[tab] || 'Devices'
   for (const item of document.querySelectorAll('[data-tab]')) item.setAttribute('aria-selected', String(item.dataset.tab === tab))
   for (const item of document.querySelectorAll('[data-workcell-tab]')) item.hidden = item.dataset.workcellTab !== tab
+  renderControls()
 }
 function layout() {
   byId('desktop').classList.toggle('devices-hidden', !panelOpen)
@@ -341,6 +359,7 @@ function update(next) {
     byId('message').value = drafts.get(`${state.activeProjectId}:${state.activeConversationId}`) ?? state.conversation?.draft ?? ''
   }
   workcell.update(next.workcell, activeProject()?.connection?.status === 'connected', context)
+  experiments.update(next, scope())
   renderSidebar(); renderTranscript(); renderQuestion(); renderSetup(); renderControls(); renderProviderQuestion(); layout()
   if (byId('dialog').open) refreshDialog?.()
   if (slash) renderSlash()
@@ -844,7 +863,7 @@ document.addEventListener('pointerdown', (event) => { if (!event.target.closest(
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closePopover(); navOpen = false; if (innerWidth <= 950) panelOpen = false; layout() } })
 byId('dialog').addEventListener('cancel', () => { if (state?.settings?.loginPending && byId('dialog').dataset.providerQuestion === 'true') run('settings.providerCancel') })
 addEventListener('resize', () => { closePopover(); layout() })
-addEventListener('pagehide', () => { clearTimeout(draftTimer); disposed = true; unsubscribe?.(); workcell.dispose() })
+addEventListener('pagehide', () => { clearTimeout(draftTimer); disposed = true; unsubscribe?.(); workcell.dispose(); experiments.dispose() })
 async function start() {
   layout()
   if (!bridge || typeof bridge.snapshot !== 'function' || typeof bridge.command !== 'function' || typeof bridge.subscribe !== 'function') {

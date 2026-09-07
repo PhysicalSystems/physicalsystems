@@ -84,6 +84,26 @@ test('expired simulation approval cannot start any scripted step', async (t) => 
   assert.equal(host.getWorkcell().snapshot().execution.run.phase, 'CANCELLED')
 })
 
+test('reopening a saved approved experiment retires its approval and never replays a trial', async (t) => {
+  const { host, options } = await setup(t)
+  const experiments = host.getExperiments()
+  experiments.propose({ goal: 'Review synthetic alignment', trialLimit: 3, requestId: 'saved-experiment-proposal', mode: 'simulation' })
+  const planned = experiments.snapshot().current
+  experiments.approve({ experimentId: planned.id, expectedDigest: planned.planDigest })
+  const saved = host.snapshot().sessionFile
+  await host.dispose()
+  const reopened = await createSimulationHost({ ...options, sessionFile: saved })
+  t.after(() => reopened.dispose())
+  const current = reopened.getExperiments().snapshot().current
+  assert.equal(current.id, planned.id)
+  assert.equal(current.phase, 'INTERRUPTED')
+  assert.equal(current.trials.length, 0)
+  assert.match(current.recoveryReason, /approval was not resumed|no trial was replayed/)
+  assert.throws(() => reopened.getExperiments().trial({ experimentId: planned.id, requestId: 'no-replay-after-reopen', offsetMm: 3 }), /approve this exact/)
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(reopened.getExperiments().snapshot().current.trials.length, 0)
+})
+
 test('simulation runs require exact approval and create a verified synthetic receipt after three steps', async (t) => {
   const { host, options } = await setup(t)
   await plan(host)

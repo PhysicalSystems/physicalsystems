@@ -80,6 +80,19 @@ No live camera, robot, commissioning or executor configuration is accessed by
 these tests. Synthetic preview and headless UI checks do not measure optical or
 display flicker. A successful simulation is not a physical execution result.
 
+Experiment regressions exercise an offline conversation with the actual shared
+synthetic controller: exact operator approval, malformed/stale request rejection,
+request deduplication, bounded offsets and trial budgets, recorded best results,
+independent Stop during an assistant question and pending trial, cross-project
+ownership, unapproved-proposal reopening and host-loss historical projection.
+The app-backed headless Firefox journey sends the scripted alignment request,
+approves it through the rendered controls, reloads the renderer during a trial,
+compares four measured offsets, stops a second experiment and inspects history.
+It asserts zero model, credential, local Node or SSH calls. Existing camera and
+physical-run simulation controls are exercised in the same browser journey.
+This qualifies synthetic UI/controller integration only; no real model-driven
+experimentation, VLA behavior, physics or SO-101 trial is established.
+
 Release qualification still requires:
 
 - An authorized live local and SSH Node assessment, including authentication,

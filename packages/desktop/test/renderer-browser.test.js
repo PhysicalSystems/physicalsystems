@@ -17,7 +17,7 @@ test('desktop renderer presents saved projects and routes operator interactions 
     try {
       if (request.url === '/fixture.js') { response.writeHead(200, { 'Content-Type': 'text/javascript' }); response.end(fixture); return }
       const requested = request.url === '/' ? 'index.html' : request.url.slice(1)
-      if (!['index.html','styles.css','app.js','workcell.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
+      if (!['index.html','styles.css','app.js','workcell.js','experiments.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
       const file = requested === 'view-state.js' ? new URL('../../cli/src/harness/workcell-view/view-state.js', import.meta.url) : new URL(`../src/renderer/${requested}`, import.meta.url)
       let data = await readFile(file)
       if (requested === 'index.html') data = Buffer.from(data.toString().replace('<script type="module"', '<script src="./fixture.js"></script><script type="module"'))
@@ -547,6 +547,43 @@ test('desktop renderer presents saved projects and routes operator interactions 
   })
   assert.equal(slashChecks.length, 4, 'all composer slash regressions passed')
   assert.equal(sidebarChecks.length, 4, 'all project sidebar regressions passed')
+  await t.test('experiment review remains scoped, expiry blocks approval and unknown evidence stays truthful', async () => {
+    const previous = { experiments: state.experiments, activeConversationId: state.activeConversationId, conversation: state.conversation, settings: state.settings }
+    try {
+      const planned = { id: 'experiment-fixture-one', goal: 'Compare alignment', mode: 'simulation', phase: 'PROPOSED', trialLimit: 2, expiresAt: Date.now() + 60000, planDigest: 'exact-fixture-plan', trials: [] }
+      state.revision++; state.settings = { simulation: false }; state.experiments = { availability: 'simulation-only', revision: 1, current: planned, history: [] }
+      await js('window.__setSnapshot(arguments[0])', [state]); await click('[data-tab="experiments"]')
+      assert.equal(await js('return document.querySelector("#experiment-approve").disabled'), true)
+      await click('#experiment-confirm')
+      await js('window.__staleExperimentApproval=document.querySelector("#experiment-approve")')
+      const beforeChange = (await calls()).length
+      state.revision++; state.activeConversationId = 'conversation-two'; state.conversation = { id: 'conversation-two', messages: [], busy: false }; state.experiments = { availability: 'simulation-only', revision: 1, current: null, history: [] }
+      await js('window.__setSnapshot(arguments[0]);window.__staleExperimentApproval.click()', [state])
+      assert.equal((await calls()).slice(beforeChange).some((item) => item.name.startsWith('experiment.')), false, 'detached approval never targets a different conversation')
+      state.revision++; state.experiments.current = { ...planned, expiresAt: Date.now() - 10 }
+      await js('window.__setSnapshot(arguments[0])', [state])
+      assert.equal(await js('return document.querySelector("#experiment-approve").disabled'), true)
+      assert.match(await js('return document.querySelector("#experiments").textContent'), /proposal expired/)
+      state.revision++; state.conversation.busy = true; state.experiments = { ...state.experiments, revision: 2, error: 'Experiment evidence could not be saved.', current: { ...planned, phase: 'OUTCOME_UNKNOWN', recoveryReason: 'Preserve the local files and inspect recovery.', trials: [{ id: 'unknown-trial', offsetMm: 3, status: 'OUTCOME_UNKNOWN', result: { alignmentErrorMm: 0 }, error: 'Runner cleanup is unconfirmed.' }] } }
+      await js('window.__setSnapshot(arguments[0])', [state])
+      assert.equal(await js('return document.querySelector("#experiment-best")'), null, 'uncertain measurements are never declared best results')
+      assert.match(await js('return document.querySelector("#experiments").textContent'), /evidence could not be saved[\s\S]*Preserve the local files/)
+      assert.match(await js('return document.querySelector("#experiment-trials").textContent'), /Runner cleanup is unconfirmed/)
+      assert.equal(await js('return document.querySelector("#experiment-stop").disabled'), false, 'assistant busy never blocks experiment Stop')
+      await js('window.__commandErrors["experiment.stop"]="Stop remains unconfirmed; inspect the same experiment."')
+      await click('#experiment-stop')
+      await until(() => js('return document.querySelector("#experiment-error")?.textContent.includes("Stop remains unconfirmed")'))
+      const stopped = (await calls()).at(-1)
+      assert.equal(stopped.name, 'experiment.stop'); assert.equal(stopped.payload.conversationId, 'conversation-two'); assert.equal(stopped.payload.experimentId, planned.id)
+      state.revision++; state.hostUnavailable = true; state.experiments.availability = 'unavailable'
+      await js('window.__setSnapshot(arguments[0])', [state])
+      assert.equal(await js('return document.querySelector("#experiment-stop").disabled'), true)
+      assert.match(await js('return document.querySelector("#experiments").textContent'), /Displayed records are historical/)
+    } finally {
+      Object.assign(state, previous); state.revision++; state.hostUnavailable = false; state.conversation.busy = false
+      await js('window.__commandErrors={};delete window.__staleExperimentApproval;window.__setSnapshot(arguments[0])', [state]); await click('[data-tab="devices"]')
+    }
+  })
   state.revision++; state.settings = { providers: [{ id: 'fixture', name: 'Fixture provider', apiKey: true, oauth: false, configured: false }], loginPending: true, loginQuestion: { id: 'login-one', kind: 'secret', question: 'Enter the provider credential' } }; await js('window.__setSnapshot(arguments[0])', [state])
   assert.equal(await js('return document.querySelector("#field-provider-answer").type'), 'password')
   await set('#field-provider-answer', 'fixture-only-not-a-credential'); await click('#dialog .primary')
@@ -559,5 +596,5 @@ test('desktop renderer presents saved projects and routes operator interactions 
   assert.match(await js('return document.querySelector("#active-operation").textContent'), /last observed RUNNING · current state unavailable/)
   assert.equal(await js('return document.querySelector("#active-operation button").disabled'), true)
   assert.deepEqual(await js('return window.__errors'), [])
-  if (evidence) await writeFile(`${evidence}/renderer-browser-result.json`, JSON.stringify({ status: 'PASS', scope: 'Actual renderer in headless Firefox with an injected bridge fixture; no model, Node, camera or robot access.', viewports, checks: ['empty onboarding', 'simulation profile creation', 'folder icons and nested conversation collapse', 'project popover and device count', 'scoped send and cancellation', 'question answer', 'exact camera identity selection and independent Stop', 'cross-project request scope', 'responsive light/dark layouts', 'host-loss stale run status', ...settingsChecks, ...slashChecks, ...sidebarChecks], commands: (await calls()).map(({name})=>name) }, null, 2))
+  if (evidence) await writeFile(`${evidence}/renderer-browser-result.json`, JSON.stringify({ status: 'PASS', scope: 'Actual renderer in headless Firefox with an injected bridge fixture; no model, Node, camera or robot access.', viewports, checks: ['empty onboarding', 'simulation profile creation', 'folder icons and nested conversation collapse', 'project popover and device count', 'scoped send and cancellation', 'question answer', 'exact camera identity selection and independent Stop', 'cross-project request scope', 'responsive light/dark layouts', 'host-loss stale run status', 'experiment scope, expired approval, independent Stop, storage recovery messages and unknown outcomes', ...settingsChecks, ...slashChecks, ...sidebarChecks], commands: (await calls()).map(({name})=>name) }, null, 2))
 })

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { createWorkcellController } from '../../cli/src/harness/workcell-controller.js'
 import { createPhysicalWorkflowState } from '../../cli/src/physical/workflow.js'
 import { createSetupInspector } from '../../cli/src/harness/setup-inspection.js'
+import { createExperimentController } from '../../cli/src/harness/experiments/controller.js'
 import { normalizePhysicalCapabilityCatalog } from '../../cli/src/physical/route-contracts.js'
 import { executionDigest, normalizeExecutionStatus, normalizePhysicalRun, normalizePhysicalRunReceipt, normalizeExecutionSnapshot } from '../../cli/src/physical/execution-contracts.js'
 
@@ -32,6 +33,7 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
   const listeners = new Set(), requests = new Map(), timers = new Set()
   let sessionFile, sessionId, name, messages = [], runs = new Map(), snapshots = new Map(), runSnapshots = new Map()
   let controller, unsubscribeController, workflow, disposed = false, pending = null, revision = 0, error = null
+  let experiments, unsubscribeExperiments, experimentGuide = null
   const stamp = () => new Date(now()).toISOString()
   const configurationBody = { mode: 'simulation', fixture: 'desktop-tray-transfer-v1', source: 'tray-a', destinations: ['tray-b', 'tray-c'] }
   const configurationDigest = executionDigest(configurationBody)
@@ -56,7 +58,7 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
   function snapshot() {
     return { revision, sessionFile, sessionId, name, messages: clone(messages), model: GUIDE,
       busy: Boolean(pending), disposed, error, simulation: true, scripted: true,
-      workcellSessionId: controller?.snapshot().sessionId || null }
+      workcellSessionId: controller?.snapshot().sessionId || null, experiments: experiments?.snapshot() || null }
   }
   function emit(type = 'change') {
     if (disposed) return
@@ -249,7 +251,8 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
     if (pending) throw coded('ERR_HARNESS_PROMPT_BUSY', 'Finish or cancel the simulation guide question before changing conversations.')
     const state = controller.snapshot()
     if (state.camera.pending || state.camera.stopPending || state.camera.stopUnconfirmed || state.camera.stopCaptureSessionId
-      || [...runs.values()].some((run) => !TERMINAL.has(run.phase))) throw coded('ERR_HARNESS_OPERATION_ACTIVE', 'Stop the synthetic preview or unresolved simulation run before changing conversations.')
+      || [...runs.values()].some((run) => !TERMINAL.has(run.phase))
+      || ['READY', 'RUNNING', 'OUTCOME_UNKNOWN'].includes(experiments?.snapshot().current?.phase)) throw coded('ERR_HARNESS_OPERATION_ACTIVE', 'Stop the synthetic preview or unresolved simulation run or experiment before changing conversations.')
   }
   function runPrompt(text, requestId) {
     const abort = new AbortController()
@@ -259,7 +262,10 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
     publishWorkflow({ ...workflow, generation: workflow.generation + 1, routeReceipt: null, requestedIntent: text })
     task.promise = (async () => {
       try {
-        if (/camera|preview/i.test(text) && !/transfer|place|pick/i.test(text)) {
+        if (/experiment|alignment|approach/i.test(text)) {
+          await experiments.propose({ goal: text, trialLimit: 4, requestId: `guide-${requestId}`, mode: 'simulation' })
+          addMessage('assistant', 'Scripted experiment proposal: compare up to four alignment offsets in a numeric synthetic fixture. Open Experiments to review the goal and trial budget, then explicitly approve. The guide measures an error, revises the next offset and records the best result. This is a scripted demonstration, not AI, physics or a robot trial.')
+        } else if (/camera|preview/i.test(text) && !/transfer|place|pick/i.test(text)) {
           addMessage('assistant', 'This is a scripted simulation guide. Choose the synthetic camera in Devices and press Start preview. Basic preview needs no commissioning. The generated 1 × 1 image is a UI test input, not a real camera view.')
         } else if (/transfer|tray|pick|place|plan/i.test(text)) {
           addMessage('assistant', 'This scripted example can transfer a simulated tray from Tray A to one of two destinations. No model or hardware is involved.')
@@ -276,7 +282,7 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
           addMessage('assistant', latest ? `The latest simulation run is ${latest.phase}. Open Run for its exact status and recorded receipt. These results describe synthetic state changes only.`
             : 'No simulation run has been prepared. Ask “Plan a tray transfer” to try the scripted planning and approval flow.')
         } else {
-          addMessage('assistant', 'I am the scripted Simulation guide, not an AI model. Try “Plan a tray transfer”, “Preview the camera”, or “Show the run status”. For general conversation, create a local or SSH project and connect a model provider in Settings.')
+          addMessage('assistant', 'I am the scripted Simulation guide, not an AI model. Try “Find an alignment approach”, “Plan a tray transfer”, “Preview the camera”, or “Show the run status”. For general conversation, create a local or SSH project and connect a model provider in Settings.')
         }
       } catch { error = 'The scripted simulation request could not be completed. No physical action was attempted.' }
       finally {
@@ -287,6 +293,8 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
     return { accepted: true, duplicate: false, requestId }
   }
   function makeController() {
+    experiments = createExperimentController({ sessionId, storageDir: path.join(config.configDir, 'experiments'), now, stepMs })
+    unsubscribeExperiments = experiments.subscribe(() => emit('experiment'))
     workflow = { ...createPhysicalWorkflowState('simulation://local-scripted-example'), status: 'connected', snapshot: discovery(),
       capabilityCatalog }
     controller = createWorkcellController({ workflow, cameraClient, executionClient, now: stamp,
@@ -319,7 +327,7 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
       sessionId = randomUUID(); name = 'Simulation conversation'
       sessionFile = path.join(sessionDir, `${stamp().replaceAll(':', '-').replaceAll('.', '-')}_${sessionId}.jsonl`)
       writeFileSync(sessionFile, JSON.stringify({ type: FORMAT, id: sessionId, cwd, projectId, name, createdAt: stamp() }) + '\n', { flag: 'wx', mode: 0o600 })
-      addMessage('assistant', 'Simulation guide · scripted example. This project uses synthetic devices and local state transitions. Try “Plan a tray transfer” to explore questions, proposals, explicit approval, Stop and receipts. No AI model or hardware is connected.')
+      addMessage('assistant', 'Simulation guide · scripted example. This project uses synthetic devices and local state transitions. Try “Find an alignment approach” for measured experiments, or “Plan a tray transfer” for questions, proposals, explicit approval, Stop and receipts. No AI model or hardware is connected.')
     }
   }
   function prompt(text, requestId) {
@@ -342,12 +350,42 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
     assertSwitchable()
     if (file) validatedFile(file)
     unsubscribeController?.(); await controller.dispose(); onWorkcell?.(null)
+    unsubscribeExperiments?.(); await experiments.dispose(); experimentGuide = null
     cameraSession = null; cameraPhase = 'idle'
     loadSession(file); makeController(); emit('session-changed')
     return snapshot()
   }
   return Object.freeze({ snapshot, prompt,
     getWorkcell: () => controller,
+    getExperiments: () => experiments,
+    startExperimentGuide(experimentId) {
+      if (experimentGuide || experiments.snapshot().current?.id !== experimentId || experiments.snapshot().current.phase !== 'READY') return
+      const owner = experiments, ownerSession = sessionId
+      const guide = { experimentId, promise: null }; experimentGuide = guide
+      guide.promise = (async () => {
+        // A transparent numeric refinement demonstration. The synthetic target
+        // belongs to the fixture, never a position or motion for real equipment.
+        let offsetMm = 0
+        while (!disposed && experiments === owner && sessionId === ownerSession) {
+          const current = owner.snapshot().current
+          if (current?.id !== experimentId || current.phase !== 'READY') break
+          if (current.trials.length >= current.trialLimit) { await owner.finish({ experimentId }); break }
+          await owner.trial({ experimentId, requestId: `guide-${experimentId}-${current.trials.length}`, offsetMm })
+          const measured = owner.snapshot().current
+          if (measured?.id !== experimentId || !['READY', 'COMPLETED'].includes(measured.phase)) break
+          const latest = measured.trials.at(-1), errorMm = latest?.result?.alignmentErrorMm ?? latest?.alignmentErrorMm
+          addMessage('assistant', `Scripted synthetic trial ${measured.trials.length}: offset ${offsetMm} mm${Number.isFinite(errorMm) ? `, alignment error ${errorMm} mm` : ''}.`)
+          if (measured.phase === 'COMPLETED') break
+          // The signed measurement tells the guide which way to revise. A
+          // half correction keeps the measure/revise progression visible.
+          if (!Number.isFinite(latest?.result?.signedErrorMm)) throw new Error('The synthetic signed measurement is unavailable')
+          offsetMm = Number((offsetMm + latest.result.signedErrorMm / 2).toFixed(3))
+        }
+        const final = owner.snapshot().current
+        if (!disposed && sessionId === ownerSession && final?.id === experimentId) addMessage('assistant', `The scripted synthetic experiment is ${final.phase.toLowerCase().replaceAll('_', ' ')}. Review its trials and best measured result in Experiments.`)
+      })().catch(() => { if (!disposed && sessionId === ownerSession) { error = 'The scripted experiment could not continue. Inspect its status and Stop before retrying.'; emit() } })
+        .finally(() => { if (experimentGuide === guide) experimentGuide = null })
+    },
     async inspectSetup() { assertOpen(); return setupInspector.inspect({}) },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
     async cancel() { const task = pending; task?.abort.abort(); await task?.promise; return snapshot() },
@@ -382,7 +420,7 @@ export async function createSimulationHost({ config, cwd, sessionFile: initialFi
       if (disposed) return
       const task = pending; task?.abort.abort(); await task?.promise
       for (const timer of timers) clearTimeout(timer)
-      timers.clear(); disposed = true
+      timers.clear(); await experiments.dispose(); await experimentGuide?.promise; unsubscribeExperiments?.(); disposed = true
       setupInspector.dispose()
       await controller.dispose(); unsubscribeController?.(); onWorkcell?.(null); listeners.clear()
     },

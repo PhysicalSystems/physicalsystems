@@ -54,6 +54,38 @@ after explicit Start. Stop and receipt checks use the existing controllers.
   navigation. Camera Stop stays independent of an assistant response or an
   ordinary pending action.
 
+## Try a bounded experiment
+
+Create a **Simulation** project and send **Find an alignment approach**. Open
+the **Experiments** tab in the right inspector. Review the goal and maximum
+trial count, check the exact-plan confirmation, then choose **Approve & run
+scripted trials**. The guide measures a synthetic alignment error and halves
+the signed correction on each subsequent trial. The table records every offset
+and measurement; the best recorded result and previous experiments remain
+inspectable. This numeric fixture deliberately discloses its target at 3 mm.
+It demonstrates the experiment workflow, not autonomous discovery quality,
+physics, learned policies, VLA behavior or SO-101 readiness.
+
+An ordinary model conversation uses the same simulation-only controller. Its
+assistant can propose, inspect, measure and revise after the operator approves
+the exact budget. After approving, send **Continue the approved synthetic
+experiment** so the model can choose and measure its next trials. Approval
+does not automatically send a model request; only the scripted guide starts
+its loop automatically. Approval is an operator UI action, never an assistant tool.
+The inspector also permits a bounded manual offset trial and early Finish.
+Synthetic experiments work while the project's Node connection is offline;
+they never connect equipment or dispatch a physical invocation.
+
+**Stop experiment** is independent of assistant and ordinary request busy state.
+An approved or active experiment retains its conversation owner across project
+navigation, with a persistent Stop control. Finish or Stop it before changing
+that project's conversation, disconnecting or quitting. An unapproved proposal
+can be left and reopened without approving it. Renderer reloads reattach to
+the existing owner without replay. Reopening an interrupted host never resumes
+its prior approval or trials. Unknown outcomes and unsaved evidence remain
+blocked with their recorded reason; Stop is not a claim that uncertainty was
+resolved. Preserve the evidence and inspect recovery before retrying.
+
 ## Existing local or SSH Node
 
 Creating a real project saves its profile without starting a connection. For a

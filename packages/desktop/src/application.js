@@ -9,12 +9,14 @@ import { createCameraPreviewClient } from '../../cli/src/physical/camera-preview
 import { createHarnessHost } from '../../cli/src/harness/application-host.js'
 import { workcellRequestFailure } from '../../cli/src/harness/workcell-controller.js'
 import { cameraIsFresh } from '../../cli/src/harness/workcell-view/view-state.js'
+import { experimentRequestFailure } from '../../cli/src/harness/experiments/controller.js'
 import { listProvidersCommand, providerLoginCommand, providerLogoutCommand } from '../../cli/src/commands/provider.js'
 import * as connectionAdapters from './connections.js'
 import { createSimulationHost } from './simulation.js'
 import { validateAuthDestination } from './bridge-contract.js'
 
 const TERMINAL = new Set(['VERIFIED_SUCCESS', 'FAILED', 'CANCELLED', 'BLOCKED'])
+const ACTIVE_EXPERIMENT = new Set(['READY', 'RUNNING', 'OUTCOME_UNKNOWN'])
 const text = (value, label, max = 160) => {
   if (typeof value !== 'string' || !value.trim() || value.length > max || /[\u0000-\u001f\u007f]/u.test(value)) throw new Error(`${label} is invalid`)
   return value.trim()
@@ -65,7 +67,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
     if (failure?.code === 'question_expired') return 'This question is no longer current. Use the current question in this conversation.'
     return failure?.message.replace('check the terminal', 'check the selected connection')
   }
-  const safeFailure = (error) => error?.publicMessage || workcellFailure(error)
+  const safeFailure = (error) => error?.publicMessage || experimentRequestFailure(error)?.message || workcellFailure(error)
     || (/^(ERR_HARNESS_|SSH_|NODE_|CONNECTION_|INVALID_PROFILE|TINYEDGE_SECRET_SERVICE_UNAVAILABLE)/.test(error?.code || '') ? error.message
       : 'The request could not be completed. Check the selected connection or model settings and try again.')
   const fail = (message) => { const error = new Error(message); error.publicMessage = message; return error }
@@ -75,7 +77,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
     const wc = host?.getWorkcell()?.snapshot()
     return Boolean(wc?.camera.pending || wc?.camera.stopPending || wc?.camera.stopUnconfirmed
       || wc?.camera.stopCaptureSessionId || wc?.execution.pending || wc?.execution.stopPending
-      || unresolvedRuns(wc?.execution).length)
+      || unresolvedRuns(wc?.execution).length || ACTIVE_EXPERIMENT.has(host?.getExperiments?.()?.snapshot()?.current?.phase))
   }
   function snapshot() {
     const stored = state(), p = project(), c = conversation(), entry = hosts.get(p?.id), current = entry?.host
@@ -108,6 +110,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
       conversation: c ? { id: c.id, title: c.title, messages: hs.messages || hs.transcript || [], busy: Boolean(hs.busy || entry?.switching),
         question: wc?.agent?.pendingChoice || null, error: hs.error || (!consistent && entry && !entry.switching ? 'The saved selection could not be confirmed. Choose a conversation again.' : null), draft: c.draft || '', model: hs.model || null } : null,
       workcell: wc, setupReport: entry?.setupReport || null, models: entry?.models || [],
+      experiments: consistent && !entry?.switching ? current?.getExperiments?.()?.snapshot() || hs.experiments || null : null,
       settings: { providers, loginQuestion, loginPending: Boolean(loginPending), simulation: profile(p)?.type === 'simulation' },
       activeCaptures: [...hosts].flatMap(([id, value]) => {
         const camera = value.host.getWorkcell()?.snapshot()?.camera
@@ -120,6 +123,11 @@ export async function createApplication({ dataDir, catalog, connections = connec
         const view = value.host.getWorkcell()?.snapshot()
         return unresolvedRuns(view?.execution).map((run) => ({ projectId: id, projectName: project(id)?.name, connectionGeneration: generation(id), run,
           statusUnavailable: links.get(id)?.status !== 'connected' || !fresh(links.get(id)?.observedAt) || view.execution.availability !== 'available', canStop: !view.execution.stopPending }))
+      }),
+      activeExperiments: [...hosts].flatMap(([id, value]) => {
+        const experiment = value.host.getExperiments?.()?.snapshot()?.current
+        return ACTIVE_EXPERIMENT.has(experiment?.phase) ? [{ projectId: id, projectName: project(id)?.name,
+          conversationId: value.conversationId, experiment, canStop: true }] : []
       }),
     }
   }
@@ -171,7 +179,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
   async function disposeHost(id) {
     const entry = hosts.get(id)
     if (!entry) return
-    if (unresolved(entry.host)) throw fail('Stop or resolve the current camera capture or run before closing this connection.')
+    if (unresolved(entry.host)) throw fail('Stop or resolve the current camera capture, run or experiment before closing this connection.')
     if (entry.host.snapshot().busy) throw fail('Cancel the current assistant response before closing this connection.')
     await entry.host.dispose(); entry.leave?.(); entry.unsubscribe?.(); hosts.delete(id)
   }
@@ -308,6 +316,8 @@ export async function createApplication({ dataDir, catalog, connections = connec
   async function selectConversation(p, c) {
     const oldHost = hosts.get(state().selection.projectId)?.host
     if (oldHost?.snapshot().busy) throw fail('Finish or cancel the assistant response before switching conversations.')
+    const owner = hosts.get(p.id)
+    if (owner?.conversationId !== c.id && ACTIVE_EXPERIMENT.has(owner?.host.getExperiments?.()?.snapshot()?.current?.phase)) throw fail('Finish or Stop this project’s active experiment before changing its conversation.')
     const host = await ensureHost(p, c)
     const latest = conversation(c.id)
     const entry = hosts.get(p.id), previousId = entry.conversationId, previousFile = host.snapshot().sessionFile
@@ -440,7 +450,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
     if (name === 'conversation.select') { if (!c || c.projectId !== p.id) throw fail('Select a conversation in this project.'); return selectConversation(p, c) }
     if (name === 'conversation.create') {
       const owner = hosts.get(p.id)?.host
-      if (owner?.snapshot().busy || unresolved(owner)) throw fail('Finish or cancel the response and resolve the current camera or run before creating another conversation.')
+      if (owner?.snapshot().busy || unresolved(owner)) throw fail('Finish or cancel the response and resolve the current camera, run or experiment before creating another conversation.')
       const id = `conversation-${randomUUID()}`
       await catalog.transaction((draft) => draft.conversations.push({ id, projectId: p.id, title: body.title ? text(body.title, 'Conversation title') : 'New conversation', archived: false, draft: '', createdAt: now(), updatedAt: now() }))
       return selectConversation(p, conversation(id))
@@ -490,7 +500,33 @@ export async function createApplication({ dataDir, catalog, connections = connec
       await host.setModel(text(body.provider, 'Provider'), text(body.modelId || body.id, 'Model'))
       emit(); return snapshot()
     }
+    if (name.startsWith('experiment.')) {
+      const entry = hosts.get(p.id), independentStop = name === 'experiment.stop'
+      if (body.projectId !== p.id || !c || body.conversationId !== c.id || c.projectId !== p.id || entry?.switching ||
+          (entry && entry.conversationId !== c.id) || (!entry && independentStop) ||
+          (!independentStop && (state().selection.projectId !== p.id || state().selection.conversationId !== c.id))) {
+        throw fail('The experiment conversation changed. Open its conversation and review the current experiment.')
+      }
+    }
     const host = await ensureHost(p, c)
+    if (name.startsWith('experiment.')) {
+      const entry = hosts.get(p.id), operation = name.slice('experiment.'.length)
+      if (body.projectId !== p.id || !c || body.conversationId !== c.id || entry?.conversationId !== c.id || entry.switching ||
+          (operation !== 'stop' && (state().selection.projectId !== p.id || state().selection.conversationId !== c.id))) {
+        throw fail('The experiment conversation changed. Open its conversation and review the current experiment.')
+      }
+      const experiments = host.getExperiments?.()
+      if (!experiments) throw fail('Experiments are unavailable in this host. Reopen the development app to load the experiment controller.')
+      if (!['propose', 'approve', 'trial', 'finish', 'stop'].includes(operation)) throw fail('This experiment action is unsupported.')
+      if (operation === 'approve' && body.approved !== true) throw fail('Review this exact simulation experiment and explicitly approve its trial budget.')
+      const fields = operation === 'propose' ? { goal: body.goal, trialLimit: body.trialLimit, requestId: body.requestId, mode: body.mode }
+        : operation === 'approve' ? { experimentId: body.experimentId, expectedDigest: body.expectedDigest }
+          : operation === 'trial' ? { experimentId: body.experimentId, requestId: body.requestId, offsetMm: body.offsetMm }
+            : { experimentId: body.experimentId }
+      const result = await experiments[operation](fields)
+      if (operation === 'approve') host.startExperimentGuide?.(body.experimentId)
+      emit(); return result
+    }
     if (name === 'conversation.send') {
       if (state().selection.projectId !== p.id || c?.id !== state().selection.conversationId) throw fail('This conversation is no longer selected. Review it before sending.')
       const accepted = host.prompt(body.text, text(body.requestId, 'Request ID', 128))
@@ -527,7 +563,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
     throw fail('This desktop action is unsupported.')
   }
   async function command(name, body) {
-    const independent = ['conversation.cancel', 'conversation.answer', 'settings.providerAnswer', 'settings.providerCancel', 'settings.openAuthUrl', 'workcell.camera.stop', 'workcell.camera.frame', 'workcell.execution.stop'].includes(name)
+    const independent = ['conversation.cancel', 'conversation.answer', 'settings.providerAnswer', 'settings.providerCancel', 'settings.openAuthUrl', 'workcell.camera.stop', 'workcell.camera.frame', 'workcell.execution.stop', 'experiment.stop'].includes(name)
     if (!independent && mutation) throw fail('Another desktop request is in progress. Wait for it to finish; Stop remains available.')
     const latch = {}; if (!independent) mutation = latch
     try { return await runCommand(name, body) }
@@ -536,7 +572,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
   }
   async function close() {
     if (mutation || creating.size) throw fail('A desktop request is still pending. Wait for it to settle before quitting; Stop and Cancel remain available.')
-    if ([...hosts.values()].some(({ host }) => unresolved(host))) throw fail('Stop or resolve the active camera capture or run before quitting.')
+    if ([...hosts.values()].some(({ host }) => unresolved(host))) throw fail('Stop or resolve the active camera capture, run or experiment before quitting.')
     if (loginPending) { loginPending.abort(fail('Provider sign-in cancelled.')); await loginPending.operation }
     closing = true
     try { for (const id of [...hosts.keys()]) await disposeHost(id); for (const id of links.keys()) await closeLink(id) }
