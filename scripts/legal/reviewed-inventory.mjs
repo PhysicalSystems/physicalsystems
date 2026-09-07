@@ -231,9 +231,9 @@ export const TARGETS = Object.freeze({
     key: 'physicalsystems',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: '52d74f49c8ab6ca511f49dc21c53394d0a62f4e46edb0a4816b54b514c66ce84',
+    shrinkwrapSha256: 'a010b11e26825c42cfd1d81126efa808288d2cb8982a65918f1c71e1f171570f',
     rootName: 'physicalsystems',
-    rootVersion: '0.2.5',
+    rootVersion: '0.2.6',
     // Direct publication is limited to preview through the protected OIDC
     // workflow. Promotion to latest remains a separate maintainer action.
     rootLicense: 'Apache-2.0',
@@ -250,7 +250,7 @@ export const WORKSPACE_TARGET = Object.freeze({
   rootVersion: '0.0.0',
   rootLicense: 'Apache-2.0',
   packageRoots: Object.freeze([
-    Object.freeze({ name: 'physicalsystems', version: '0.2.5', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
+    Object.freeze({ name: 'physicalsystems', version: '0.2.6', license: 'Apache-2.0', packageJsonPath: 'packages/cli/package.json' }),
     Object.freeze({ name: '@tinyedge/pi-runtime', version: '0.84.2-tinyedge.1', license: 'MIT', packageJsonPath: 'packages/pi-runtime/package.json' }),
   ]),
 })
