@@ -220,12 +220,14 @@
   "blockers": [
     {
       "component": "@electron-internal/extract-zip@1.0.5",
-      "issue": "No named license file ships in the npm artifact. The package and upstream README declare BSD-2-Clause; obtain complete copyright/license evidence and review the native Rust dependency closure before redistribution.",
+      "role": "development-installation-tooling",
+      "issue": "No named license file ships in the npm artifact. Redistribution of this tooling or its native binaries requires complete copyright/license evidence and review of the embedded dependency closure. The desktop application does not import it; a future candidate must demonstrate whether it is excluded.",
       "sourceCommit": "b83e459fd04c53b0a1c8438a6792df8f64be47fc",
       "sourceRepository": "https://github.com/electron/extract-zip"
     },
     {
       "component": "electron@44.2.0",
+      "role": "desktop-runtime",
       "issue": "The installed Linux x64 artifact notices are hash-recorded, not a complete qualified installer inventory. Review the exact candidate binary/native notices and platform distribution before creating any installer."
     }
   ]

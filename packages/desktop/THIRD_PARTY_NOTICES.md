@@ -14,13 +14,22 @@ node packages/desktop/scripts/audit-dependencies.mjs --check
 ```
 
 After installing this exact local development dependency closure, a maintainer
-can regenerate the records with `--write`. This does not build, publish or
-approve an installer.
+can verify the recorded Linux x64 Electron notice hashes against the installed
+artifact with `--check-installed`, or regenerate the records with `--write`.
+The default `--check` needs no installed Electron and verifies the lockfile and
+collected npm evidence only. These commands do not build, publish or approve an
+installer.
 
 The `@electron-internal/extract-zip@1.0.5` artifact has no named license file.
-Its package and upstream README declare BSD-2-Clause. Complete copyright and
-license evidence, including its native Rust dependency closure, remains a
-redistribution review item; this file does not grant an exception.
+Its package and [pinned upstream README](https://github.com/electron/extract-zip/blob/b83e459fd04c53b0a1c8438a6792df8f64be47fc/README.md)
+declare BSD-2-Clause. This is development installation tooling; the desktop
+application does not import it. Redistribution of its npm artifact or native
+binaries requires complete copyright/license evidence and review of the actual
+embedded dependency closure. Cargo lock entries alone do not establish which
+dependencies ship in each target binary. A future candidate must demonstrate
+whether this tooling is excluded and inventory all shipped Electron/application
+binaries and notices. This file does not grant an exception or assert that the
+tooling must ship in an end-user application.
 
 The installed Electron Linux x64 artifact includes `LICENSE` and
 `LICENSES.chromium.html`; their exact bytes are hash-recorded in the audit.

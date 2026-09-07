@@ -269,7 +269,8 @@ export async function createHarnessHost(options) {
     if (camera?.pending || camera?.stopPending || camera?.stopUnconfirmed
       || camera?.stopCaptureSessionId || (camera?.status?.captureSessionId && !['idle', 'stopped'].includes(camera.status.phase))
       || execution?.pending || execution?.stopPending || execution?.run?.stopStatus === 'STOP_UNCONFIRMED'
-      || [...(execution?.runs || []), ...(execution?.run ? [execution.run] : [])].some((run) => !TERMINAL_PHASES.has(run.phase))) {
+      || [...(execution?.activeRuns || []), ...(execution?.runs || []), ...(execution?.run ? [execution.run] : [])]
+        .some((run) => !TERMINAL_PHASES.has(run.phase) || run.stopStatus === 'STOP_UNCONFIRMED')) {
       throw requestError('ERR_HARNESS_OPERATION_ACTIVE', 'Keep this conversation open until the camera or run is confirmed stopped. Use its Stop control; cancelling the assistant does not stop equipment.')
     }
   }

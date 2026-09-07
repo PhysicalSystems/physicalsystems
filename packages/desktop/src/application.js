@@ -55,11 +55,13 @@ export async function createApplication({ dataDir, catalog, connections = connec
     || (/^(ERR_HARNESS_|SSH_|NODE_|CONNECTION_|INVALID_PROFILE|TINYEDGE_SECRET_SERVICE_UNAVAILABLE)/.test(error?.code || '') ? error.message
       : 'The request could not be completed. Check the selected connection or model settings and try again.')
   const fail = (message) => { const error = new Error(message); error.publicMessage = message; return error }
+  const unresolvedRuns = (execution) => [...new Map([...(execution?.activeRuns || []), ...(execution?.runs || []), ...(execution?.run ? [execution.run] : [])]
+    .filter((run) => !TERMINAL.has(run.phase) || run.stopStatus === 'STOP_UNCONFIRMED').map((run) => [run.runId, run])).values()]
   function unresolved(host) {
     const wc = host?.getWorkcell()?.snapshot()
     return Boolean(wc?.camera.pending || wc?.camera.stopPending || wc?.camera.stopUnconfirmed
       || wc?.camera.stopCaptureSessionId || wc?.execution.pending || wc?.execution.stopPending
-      || wc?.execution.run && !TERMINAL.has(wc.execution.run.phase))
+      || unresolvedRuns(wc?.execution).length)
   }
   function snapshot() {
     const stored = state(), p = project(), c = conversation(), entry = hosts.get(p?.id), current = entry?.host
@@ -101,9 +103,9 @@ export async function createApplication({ dataDir, catalog, connections = connec
           pending: camera.pending, stopPending: camera.stopPending, stopUnconfirmed: camera.stopUnconfirmed, canStop: !camera.stopPending }] : []
       }),
       activeRuns: [...hosts].flatMap(([id, value]) => {
-        const view = value.host.getWorkcell()?.snapshot(), run = view?.execution?.run
-        return run && !TERMINAL.has(run.phase) ? [{ projectId: id, projectName: project(id)?.name, connectionGeneration: generation(id), run,
-          statusUnavailable: links.get(id)?.status !== 'connected' || !fresh(links.get(id)?.observedAt), canStop: view.execution.canStop }] : []
+        const view = value.host.getWorkcell()?.snapshot()
+        return unresolvedRuns(view?.execution).map((run) => ({ projectId: id, projectName: project(id)?.name, connectionGeneration: generation(id), run,
+          statusUnavailable: links.get(id)?.status !== 'connected' || !fresh(links.get(id)?.observedAt) || view.execution.availability !== 'available', canStop: !view.execution.stopPending }))
       }),
     }
   }
@@ -189,25 +191,43 @@ export async function createApplication({ dataDir, catalog, connections = connec
     Object.assign(link, { generation: link.generation + 1, status: 'offline', ready: false, observedAt: null, credential: null, close: null, endpoint: null })
   }
   function monitor(p, connection, link) {
-    clearInterval(link.timer)
+    clearTimeout(link.timer)
     const epoch = link.monitorEpoch = (link.monitorEpoch || 0) + 1
-    link.timer = setInterval(async () => {
-      if (link.checking || closing || links.get(p.id) !== link || link.transportLost) return
-      link.checking = true
+    let failures = 0
+    const current = () => link.monitorEpoch === epoch && !closing && links.get(p.id) === link && !link.transportLost
+    const schedule = (delayMs) => {
+      if (!current()) return
+      link.timer = setTimeout(check, delayMs)
+      link.timer.unref?.()
+    }
+    async function check() {
+      if (!current()) return
       try {
         const identity = connection.type !== 'simulation' ? await probeNode({ endpoint: link.endpoint, credential: link.credential, expectedNodeId: link.identity?.nodeId }) : null
-        if (link.monitorEpoch !== epoch || closing || links.get(p.id) !== link) return
+        if (!current()) return
         if (identity) ownIdentity(p, link, identity)
         else {
           const observed = hosts.get(p.id)?.host.getWorkcell()?.snapshot()?.workflow?.snapshot
           if (observed) link.observation = { ...observed, discovery: { ...observed.discovery, observedAt: now() } }
         }
         // Health checks never reroute or invalidate an operator's proposal.
+        failures = 0
         link.status = 'connected'; link.observedAt = now(); link.error = null
-      } catch { if (link.monitorEpoch === epoch && !closing) { link.status = 'reconnecting'; link.error = 'The connection could not be verified. Retry the connection to recover current device state.' } }
-      finally { link.checking = false; if (link.monitorEpoch === epoch && !closing) emit() }
-    }, healthIntervalMs)
-    link.timer.unref?.()
+      } catch {
+        if (!current()) return
+        failures += 1
+        link.status = failures >= 5 ? 'offline' : 'reconnecting'
+        link.error = failures >= 5
+          ? 'Automatic reconnect stopped after five failed checks. Choose Connect to retry the same Node; Stop remains available for owned captures and runs.'
+          : `The connection could not be verified. Retrying automatically (${failures} of 4); choose Connect to retry now.`
+      }
+      if (!current()) return
+      emit()
+      // Four retries after the first failed check, with capped exponential
+      // backoff. A manual Connect starts a new epoch on the same owned link.
+      if (failures < 5) schedule(failures ? Math.min(healthIntervalMs * 2 ** (failures - 1), 30_000) : healthIntervalMs)
+    }
+    schedule(healthIntervalMs)
   }
   async function connect(p) {
     const connection = profile(p), old = links.get(p.id)
@@ -234,7 +254,14 @@ export async function createApplication({ dataDir, catalog, connections = connec
         old.status = 'connected'; old.error = null; old.observedAt = now()
         if (!old.ready) { await ensureHost(p); await hosts.get(p.id).host.getWorkcell()?.refresh(); old.ready = true }
         monitor(p, connection, old); emit(); return
-      } catch (error) { old.status = 'reconnecting'; old.error = safeFailure(error); emit(); throw fail(old.error) }
+      } catch (error) {
+        const explanation = safeFailure(error)
+        old.status = 'offline'
+        old.error = error?.code === 'SSH_STOP_UNCONFIRMED' || /cleanup is unconfirmed/i.test(explanation)
+          ? explanation
+          : `${explanation} Choose Connect to retry the same Node; Stop remains available for owned captures and runs.`
+        emit(); throw fail(old.error)
+      }
     }
     const identityKey = connection.type === 'ssh' ? `ssh:${connection.username}@${connection.host}:${connection.port || 22}:${connection.remotePort || 8876}`
       : connection.type === 'local' ? connections.normalizeLocalEndpoint(connection.nodeUrl).replace('localhost', '127.0.0.1') : `simulation:${p.id}`
@@ -463,14 +490,13 @@ export async function createApplication({ dataDir, catalog, connections = connec
   // Reading saved history never starts a hardware connection or replays a command.
   const initialProject = project(), initialConversation = conversation()
   if (initialProject && initialConversation) { try { await ensureHost(initialProject, initialConversation) } catch { notice = 'Saved history could not be opened. Check model setup and the local session files.' } }
-  // This preference is explicit per project. Reattachment only checks identity
-  // and reads status; it never replays messages, opens cameras or dispatches runs.
+  // This preference applies only to the saved active project. Reattachment
+  // checks identity and reads status; it never replays messages, opens cameras
+  // or dispatches runs, and other saved projects stay disconnected.
   queueMicrotask(async () => {
-    for (const p of state().projects.filter((item) => !item.archived && profile(item)?.autoConnect)) {
-      if (closing) return
-      try { await command('connection.connect', { projectId: p.id }) }
-      catch (error) { notice = safeFailure(error); emit() }
-    }
+    if (closing || !initialProject || project()?.id !== initialProject.id || !profile(initialProject)?.autoConnect) return
+    try { await command('connection.connect', { projectId: initialProject.id }) }
+    catch (error) { notice = safeFailure(error); emit() }
   })
   return { snapshot, command, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) }, close }
 }

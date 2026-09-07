@@ -5,12 +5,20 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyElectronArtifactNotices } from './dependency-evidence.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
 const dependencies = Object.entries(lock.packages).filter(([relative]) => relative).sort(([a], [b]) => a.localeCompare(b));
 const auditFile = path.join(root, 'DEPENDENCY-AUDIT.json');
+const blockers = [
+  { component: '@electron-internal/extract-zip@1.0.5', role: 'development-installation-tooling',
+    issue: 'No named license file ships in the npm artifact. Redistribution of this tooling or its native binaries requires complete copyright/license evidence and review of the embedded dependency closure. The desktop application does not import it; a future candidate must demonstrate whether it is excluded.',
+    sourceCommit: 'b83e459fd04c53b0a1c8438a6792df8f64be47fc', sourceRepository: 'https://github.com/electron/extract-zip' },
+  { component: 'electron@44.2.0', role: 'desktop-runtime',
+    issue: 'The installed Linux x64 artifact notices are hash-recorded, not a complete qualified installer inventory. Review the exact candidate binary/native notices and platform distribution before creating any installer.' },
+];
 if (process.argv.includes('--write')) {
   const components = [];
   await mkdir(path.join(root, 'licenses/npm'), { recursive: true });
@@ -36,13 +44,11 @@ if (process.argv.includes('--write')) {
     electronArtifactNotices.push({ sourceFile: `electron/dist/${name}`, bytes: bytes.length, sha256: hash(bytes) });
   }
   await writeFile(auditFile, `${JSON.stringify({ schemaVersion: 1, scope: 'private-desktop-development-tooling', redistributionApproved: false,
-    components, electronArtifactNotices, blockers: [
-      { component: '@electron-internal/extract-zip@1.0.5', issue: 'No named license file ships in the npm artifact. The package and upstream README declare BSD-2-Clause; obtain complete copyright/license evidence and review the native Rust dependency closure before redistribution.', sourceCommit: 'b83e459fd04c53b0a1c8438a6792df8f64be47fc', sourceRepository: 'https://github.com/electron/extract-zip' },
-      { component: 'electron@44.2.0', issue: 'The installed Linux x64 artifact notices are hash-recorded, not a complete qualified installer inventory. Review the exact candidate binary/native notices and platform distribution before creating any installer.' },
-    ] }, null, 2)}\n`);
+    components, electronArtifactNotices, blockers }, null, 2)}\n`);
 }
 const audit = JSON.parse(await readFile(auditFile, 'utf8'));
 assert.equal(audit.redistributionApproved, false);
+assert.deepEqual(audit.blockers, blockers, 'Dependency roles and remaining redistribution findings must match the reviewed scope');
 assert.deepEqual(audit.components.map(({ name, version, license, resolved, integrity }) => ({ name, version, license, resolved, integrity })),
   dependencies.map(([relative, { version, license, resolved, integrity }]) => ({ name: relative.replace(/^node_modules\//, ''), version, license, resolved, integrity })));
 for (const component of audit.components) {
@@ -53,3 +59,7 @@ for (const component of audit.components) {
   }
 }
 console.log(`Verified ${audit.components.length} pinned desktop development dependencies and collected license files; redistribution remains unapproved.`);
+if (process.argv.includes('--check-installed') || process.argv.includes('--write')) {
+  await verifyElectronArtifactNotices(root, audit.electronArtifactNotices);
+  console.log('Verified both recorded notice hashes against the installed Electron artifact. This is not a shipped-binary inventory or installer approval.');
+}

@@ -5,6 +5,7 @@ import { projectExecutionObservation } from './execution-evidence.js'
 
 const TERMINAL = new Set(['VERIFIED_SUCCESS', 'FAILED', 'CANCELLED', 'BLOCKED'])
 const MAX_READ_AGE = 5000
+const needsResolution = (run) => !TERMINAL.has(run.phase) || run.stopStatus === 'STOP_UNCONFIRMED'
 const printable = (value, length = 512) => String(value ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, '').slice(0, length)
 const summary = (run) => ({ runId: run.runId, runDigest: run.runDigest, phase: run.phase, stopStatus: run.stopStatus,
   mode: run.mode, capabilityId: run.capabilityId, configurationId: run.configurationId, updatedAt: run.updatedAt })
@@ -38,7 +39,8 @@ export function createExecutionController({ client, currentRoute = () => null, c
     return value && status?.availability === 'available' ? status.configurations.filter((item) => item.capabilityId === value.capabilityId
       && item.implementationId === value.decision.selected_implementation_id) : []
   }
-  const unresolved = () => runs.some((item) => !TERMINAL.has(item.phase)) || (run && !TERMINAL.has(run.phase))
+  const unresolvedRuns = () => [...new Map([...runs, ...(run ? [run] : [])].filter(needsResolution).map((item) => [item.runId, item])).values()]
+  const unresolved = () => unresolvedRuns().length > 0
   const configurationReason = () => {
     if (!status || status.availability !== 'available') return 'No available installed configuration. Configure a trusted local controller and observation source first.'
     if (!status.configurations.length) return 'No local configuration is installed.'
@@ -55,16 +57,19 @@ export function createExecutionController({ client, currentRoute = () => null, c
   const snapshot = () => ({ availability, status: status ? { availability: status.availability, mode: status.mode, reason: status.reason } : null,
     error, receivedAt: observedAt ? new Date(observedAt).toISOString() : null,
     pending: actionPending, stopPending, configurations: eligibleConfigurations(), configurationReason: configurationReason(), runs: runs.slice(0, 32).map(summary), run: projectRun(run), receipt,
+    activeRuns: unresolvedRuns().map((item) => ({ ...summary(item), canStop: !disposed && !stopPending })),
     canPrepare: Boolean(!disposed && fresh() && !actionPending && !stopPending && canPrepare() && !unresolved() && eligibleConfigurations().length),
     canApprove: !disposed && approvalReady(), canStop: Boolean(!disposed && run && (!TERMINAL.has(run.phase) || run.stopStatus === 'STOP_UNCONFIRMED') && !stopPending),
     canReconcile: Boolean(!disposed && fresh() && run?.phase === 'OUTCOME_UNKNOWN' && !actionPending && !stopPending), physicalExecutionAuthorized: false })
   const acceptRun = (value) => {
-    if (run?.runId === value.runId) {
-      if (value.revision < run.revision) return false // A slow poll cannot replace a newer stop/approval result.
-      assertRunMatches(value, run)
+    const known = run?.runId === value.runId ? run : runs.find((item) => item.runId === value.runId)
+    if (known) {
+      if (value.revision < known.revision) return false // A slow poll cannot replace a newer stop/approval result.
+      assertRunMatches(value, known)
     }
     run = value
-    runs = [value, ...runs.filter((item) => item.runId !== value.runId)].slice(0, 128)
+    const history = [value, ...runs.filter((item) => item.runId !== value.runId)]
+    runs = history.filter((item, index) => index < 128 || needsResolution(item))
     if (receipt?.runDigest !== value.runDigest) receipt = null
     return true
   }
@@ -90,8 +95,11 @@ export function createExecutionController({ client, currentRoute = () => null, c
           if (previous) assertRunMatches(item, previous)
           return item
         })
+        // A bounded or temporarily incomplete listing cannot release a known
+        // invocation. Retain its identity until an exact response resolves it.
+        for (const previous of known.values()) if (needsResolution(previous) && !runs.some((item) => item.runId === previous.runId)) runs.push(previous)
         if (run && !runs.some((item) => item.runId === run.runId)) runs.unshift(run)
-        if (!run) run = runs.find((item) => !TERMINAL.has(item.phase)) || null
+        if (!run) run = runs.find(needsResolution) || null
         if (run) {
           const expected = run
           const value = await client.run(expected.runId, expected)
@@ -114,13 +122,25 @@ export function createExecutionController({ client, currentRoute = () => null, c
     if (kind === 'refresh') { executionFields(body, []); await refresh(); return snapshot() }
     if (kind === 'stop') {
       executionFields(body, ['runId', 'reason']); executionRunId(body.runId)
-      if (!run || run.runId !== body.runId || stopPending) throw new Error('Select the known run before requesting stop')
+      const expected = run?.runId === body.runId ? run : runs.find((item) => item.runId === body.runId)
+      if (!expected || !needsResolution(expected) || stopPending) throw new Error('Request Stop for a known unresolved run')
       if (body.reason !== 'operator-requested-stop') throw new TypeError('Unsupported stop reason')
       stopPending = true; emit()
-      const expected = run
       try {
-        const value = await client.stop(run.runId, { reason: body.reason }, expected)
-        if (!disposed && run?.runId === expected.runId) { acceptRun(value); error = null }
+        const value = await client.stop(expected.runId, { reason: body.reason }, expected)
+        assertRunMatches(value, expected)
+        if (!disposed) {
+          if (run?.runId === expected.runId) acceptRun(value)
+          else {
+            const latest = runs.find((item) => item.runId === expected.runId)
+            if (!latest || value.revision >= latest.revision) {
+              if (latest) assertRunMatches(value, latest)
+              // An independent Stop must preserve the selected history and its receipt.
+              runs = runs.map((item) => item.runId === value.runId ? value : item)
+            }
+          }
+          error = null
+        }
       } catch {
         if (!disposed) { availability = 'unavailable'; error = 'Stop could not be confirmed. Treat the outcome as unknown and use the physical stop procedure.' }
         throw new Error('Stop could not be confirmed; use the physical stop procedure')
@@ -136,7 +156,13 @@ export function createExecutionController({ client, currentRoute = () => null, c
       try {
         if (kind === 'select') {
           const value = await client.run(body.runId, known)
-          if (!disposed) { run = null; acceptRun(value); receipt = null }
+          if (!disposed) {
+            const latest = runs.find((item) => item.runId === body.runId)
+            // Complete the operator's selection using an exact newer response
+            // already observed while this history read was in flight.
+            acceptRun(latest && latest.revision > value.revision ? latest : value)
+            receipt = null
+          }
         } else {
           const value = await client.receipt(body.runId, known)
           const configurationDigest = value.snapshot.contractVersion === 'physicalsystems-run-snapshot-v1' ? value.snapshot.configurationSnapshotDigest : null

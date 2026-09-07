@@ -211,6 +211,53 @@ test('opt-in launch reattachment checks authorization again and restores the las
   assert.equal(f.calls.execution, undefined)
 })
 
+test('background health recovery exhausts a bounded retry budget and Connect recovers the same owner', async (t) => {
+  const f = await fixture(t); await f.create(); const scope = await f.connect()
+  const host = f.created.at(-1), attached = f.calls.attach, refreshes = f.calls.refresh
+  host.state.camera = { stopCaptureSessionId: 'capture-owned', stopUnconfirmed: true }
+  f.calls.failProbe = true
+  const probesBeforeFailure = f.calls.probe
+  for (let i = 0; i < 150 && f.app.snapshot().projects[0].connection.status !== 'offline'; i++) await delay(10)
+  const failed = f.app.snapshot().projects[0].connection
+  assert.equal(failed.status, 'offline', 'automatic recovery stops after its bounded retry budget')
+  assert.match(failed.error, /automatic reconnect stopped.*Connect/i)
+  assert.equal(f.calls.probe - probesBeforeFailure, 5, 'one failed health check and four retries')
+  const exhaustedProbes = f.calls.probe
+  await delay(150)
+  assert.equal(f.calls.probe, exhaustedProbes, 'retry exhaustion does not keep probing in the background')
+  assert.equal(f.app.snapshot().activeCaptures[0].captureSessionId, 'capture-owned')
+  assert.equal(f.app.snapshot().activeCaptures[0].statusUnavailable, true)
+  await assert.rejects(f.app.command('connection.connect', scope))
+  assert.equal(f.app.snapshot().projects[0].connection.status, 'offline', 'a failed manual retry does not claim background recovery is still running')
+  assert.match(f.app.snapshot().projects[0].connection.error, /Choose Connect to retry/i)
+  f.calls.failProbe = false
+  await f.app.command('connection.connect', scope)
+  assert.equal(f.app.snapshot().projects[0].connection.status, 'connected')
+  assert.equal(f.app.snapshot().projects[0].connection.error, null)
+  assert.equal(f.created.at(-1), host, 'manual recovery retains the exact controller')
+  assert.equal(f.app.snapshot().connectionGeneration, scope.connectionGeneration)
+  assert.equal(f.calls.attach, attached, 'recovery reuses the same endpoint')
+  assert.equal(f.calls.refresh, refreshes, 'recovery does not retire the proposal')
+  assert.equal(f.calls.camera, undefined, 'recovery never starts or stops capture implicitly')
+})
+
+test('launch reattaches only the selected opted-in project and leaves other saved projects offline', async (t) => {
+  const f = await fixture(t); const inactive = await f.create('Inactive project')
+  await f.app.command('connection.setAutoConnect', { projectId: inactive.projectId, enabled: true })
+  const selected = await f.create('Selected project', 'local', 'http://127.0.0.1:19998')
+  await f.app.command('connection.setAutoConnect', { projectId: selected.projectId, enabled: true })
+  await f.reload()
+  for (let i = 0; i < 100 && f.app.snapshot().projects.find((p) => p.id === selected.projectId).connection.status !== 'connected'; i++) await delay(10)
+  const snapshot = f.app.snapshot()
+  assert.equal(snapshot.projects.find((p) => p.id === inactive.projectId).connection.status, 'offline')
+  assert.equal(snapshot.projects.find((p) => p.id === selected.projectId).connection.status, 'connected')
+  assert.equal(f.calls.attach, 1, 'inactive profiles are never attached during startup')
+  assert.equal(snapshot.activeConversationId, selected.conversationId)
+  assert.deepEqual(snapshot.conversation.messages, [])
+  assert.equal(f.calls.camera, undefined)
+  assert.equal(f.calls.execution, undefined)
+})
+
 test('conversation transitions never label a new transcript with the previous conversation identity', async (t) => {
   const f = await fixture(t); const old = await f.create()
   const seen = []; f.app.subscribe((value) => { seen.push(value) })

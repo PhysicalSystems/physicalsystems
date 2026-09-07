@@ -74,13 +74,17 @@ device identities. The app pins the first authenticated name and conservatively
 allows only one owner per responding name/endpoint. Distinct Nodes with the same
 name must be given distinct identities through their supported setup process.
 
-**Reconnect when the app opens** is an explicit saved preference. It checks the
-same connection again; it never replays messages, opens previews or dispatches
-runs. Intermittent status failures clear current connection claims and recover
-automatically when that same endpoint responds. SSH transport recovery recreates
-only the same forward and retains the original capture/run controller. Identity
-changes remain blocked. A failed Stop or tunnel cleanup retains ownership and
-offers retry rather than claiming completion.
+**Reconnect when the app opens** is an explicit saved preference for the active
+project. Only the saved active project reconnects on launch; other projects stay
+offline. Reattachment checks the same connection again; it never replays messages,
+opens previews or dispatches runs. Intermittent status failures clear current
+connection claims. After the first failed check, four automatic retries use
+increasing delays of 4, 8, 16 and 30 seconds. Success clears the connection notice;
+exhaustion leaves the project offline with an explicit **Connect** recovery path.
+The original capture/run owner remains available for Stop throughout recovery.
+SSH transport loss requires **Connect** to recreate only the same forward, while
+retaining that controller. Identity changes remain blocked. A failed Stop or
+tunnel cleanup retains ownership and offers retry rather than claiming completion.
 
 ## Persistence and recovery
 
@@ -112,6 +116,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the process boundaries and
 ```sh
 npm run test:desktop
 PHYSICALSYSTEMS_DESKTOP_BROWSER_TESTS=1 npm run test:desktop
+PHYSICALSYSTEMS_DESKTOP_NATIVE_TESTS=1 node --test packages/desktop/test/native-electron.test.js
 npm test
 npx --yes npm@11.19.0 run check:release-packages
 ```
@@ -120,6 +125,9 @@ The opt-in browser tests require Firefox and geckodriver. They use isolated
 profiles and synthetic/application fixtures, never a live Node or model. Keep
 screenshots, logs and temporary app data outside the source tree; the optional
 `PHYSICALSYSTEMS_DESKTOP_BROWSER_EVIDENCE` variable selects an evidence directory.
+The native opt-in requires the installed pinned Electron and an existing X11
+desktop session. It uses isolated scripted simulation and synthetic preview.
+See [validation scope](VALIDATION.md) for evidence output and qualification gaps.
 
 Before distribution, the desktop still needs a separately reviewed installer,
 dependency/license inventory for the shipped Electron binaries, signing,

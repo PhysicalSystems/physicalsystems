@@ -245,8 +245,11 @@ function renderControls() {
   banner.hidden = !runs.length && !captures.length
   for (const owner of runs) {
     const row = make('div', undefined, 'operation-row')
-    row.append(make('span', `${owner.projectName || 'Project'} · ${owner.run?.mode === 'simulation' ? 'Simulation' : 'Physical run'} · ${owner.statusUnavailable || state.hostUnavailable ? 'last observed ' : ''}${cleanStatus(owner.run?.phase)}${owner.statusUnavailable || state.hostUnavailable ? ' · current state unavailable' : ''}`))
-    const stop = button(pendingOwnedStops.has(`run:${owner.projectId}`) ? 'Requesting stop…' : 'Request run stop', () => { if (owner.projectId === state.activeProjectId && state.workcell) byId('run-stop').click(); else void stopOwned(owner, 'run') }, 'stop'); stop.disabled = !owner.canStop || state.hostUnavailable || pendingOwnedStops.has(`run:${owner.projectId}`) || (owner.projectId === state.activeProjectId && byId('run-stop').disabled)
+    const phase = owner.run?.stopStatus === 'STOP_UNCONFIRMED' ? `Stop unconfirmed · last observed ${cleanStatus(owner.run?.phase)}` : cleanStatus(owner.run?.phase)
+    row.append(make('span', `${owner.projectName || 'Project'} · ${owner.run?.mode === 'simulation' ? 'Simulation' : 'Physical run'} · ${owner.statusUnavailable || state.hostUnavailable ? 'last observed ' : ''}${phase}${owner.statusUnavailable || state.hostUnavailable ? ' · current state unavailable' : ''}`))
+    const selected = owner.projectId === state.activeProjectId && owner.run?.runId === state.workcell?.execution?.run?.runId
+    const key = `run:${owner.projectId}:${owner.run?.runId}`
+    const stop = button(pendingOwnedStops.has(key) ? 'Requesting stop…' : 'Request run stop', () => { if (selected) byId('run-stop').click(); else void stopOwned(owner, 'run') }, 'stop'); stop.disabled = !owner.canStop || state.hostUnavailable || pendingOwnedStops.has(key) || (selected && byId('run-stop').disabled)
     row.append(stop); banner.append(row)
   }
   for (const owner of captures) {
@@ -259,7 +262,7 @@ function renderControls() {
   }
 }
 async function stopOwned(owner, kind) {
-  const key = `${kind}:${owner.projectId}`
+  const key = `${kind}:${owner.projectId}${kind === 'run' ? `:${owner.run?.runId}` : ''}`
   if (pendingOwnedStops.has(key) || state?.hostUnavailable) return
   pendingOwnedStops.add(key); renderControls()
   let timer

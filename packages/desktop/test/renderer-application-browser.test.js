@@ -97,6 +97,24 @@ test('actual desktop application completes the browser simulation journey with a
   assert.equal(await js('return document.querySelector(".technical-evidence").open'), false, 'technical evidence starts collapsed')
   assert.equal(await js('return document.querySelector(".technical-evidence").textContent.includes(arguments[0])', [application.snapshot().workcell.execution.run.runDigest]), true, 'the exact run digest remains inspectable')
   assert.equal(await js('return [...document.querySelectorAll("#run-details>p")].some(el=>el.textContent.includes("sha256:"))'), false, 'hashes do not obscure the primary result')
+  // Reading history must not hide a second unresolved invocation or bind Stop
+  // to the terminal run currently displayed in the inspector.
+  const historicalDigest = application.snapshot().workcell.execution.run.runDigest
+  const historicalReceipt = application.snapshot().workcell.execution.receipt.receiptDigest
+  await click('#run-prepare')
+  await until(() => application.snapshot().workcell.execution.run.phase === 'WAITING_FOR_APPROVAL', 'second waiting simulation run')
+  const waitingRunId = application.snapshot().workcell.execution.run.runId
+  await set('#run-select', runId)
+  await until(() => application.snapshot().workcell.execution.run.runId === runId, 'historical run selected while another waits')
+  await click('#run-receipt')
+  await until(() => application.snapshot().workcell.execution.receipt?.receiptDigest === historicalReceipt, 'historical receipt reloaded')
+  assert.equal(await js('return document.querySelector("#run-stop").disabled'), true, 'selected terminal history cannot be stopped')
+  await until(() => js('return !document.querySelector("#active-operation").hidden && !document.querySelector("#active-operation .stop").disabled'), 'global Stop retains the other owner')
+  await click('#active-operation .stop')
+  await until(() => !application.snapshot().activeRuns.length, 'nonselected waiting run stopped')
+  assert.equal(application.snapshot().workcell.execution.runs.find((run) => run.runId === waitingRunId).stopStatus, 'STOP_CONFIRMED')
+  assert.equal(application.snapshot().workcell.execution.run.runDigest, historicalDigest)
+  assert.equal(application.snapshot().workcell.execution.receipt.receiptDigest, historicalReceipt)
   await js('document.querySelector("#inspector").scrollTop=0')
   if (evidence) { await mkdir(evidence, { recursive: true }); const shot = await wd(`/session/${session}/screenshot`); await writeFile(`${evidence}/desktop-application-simulation-receipt.png`, Buffer.from(shot, 'base64')) }
   await click('[data-tab="devices"]'); await set('#camera-select', 'camera-synthetic-preview'); await click('#camera-start')
