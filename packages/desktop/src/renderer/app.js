@@ -18,8 +18,9 @@ let state = null, disposed = false, unsubscribe = null, sidebarKey = '', transcr
 let inspectorTab = 'devices', panelOpen = innerWidth > 950, navOpen = false, expanded = new Set(), popoverProject = null
 let pendingSend = false, dialogBusy = false, noticeMessage = '', currentContext = '', loginQuestionKey = '', draftTimer = null
 let dialogGeneration = 0, refreshDialog = null
+let slash = null
 let draftSave = Promise.resolve()
-const drafts = new Map(), pendingOwnedStops = new Set()
+const drafts = new Map(), pendingOwnedStops = new Set(), projectNavigationErrors = new Map()
 const activeProject = () => state?.projects?.find((project) => project.id === state.activeProjectId)
 const activeConversation = () => state?.conversation
 const scope = () => ({ projectId: state?.activeProjectId, conversationId: state?.activeConversationId, connectionGeneration: state?.connectionGeneration })
@@ -52,19 +53,36 @@ function folderIcon(remote) {
   }
   return svg
 }
+function composeIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.classList.add('project-compose-icon'); svg.setAttribute('aria-hidden', 'true')
+  const path = document.createElementNS(svg.namespaceURI, 'path')
+  path.setAttribute('d', 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z')
+  path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'currentColor'); path.setAttribute('stroke-width', '1.5'); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round'); svg.append(path)
+  return svg
+}
 function statusDot(status) { const dot = make('span', undefined, `dot ${['connected', 'connecting', 'reconnecting'].includes(status) ? status : ''}`); dot.setAttribute('aria-hidden', 'true'); return dot }
 function showProject(project, anchor, pinned = false) {
   if (!project) return
   popoverProject = project.id
   const popover = byId('project-popover'); popover.replaceChildren()
-  const title = make('div', undefined, 'actions'); title.append(make('h3', project.name), button('×', closePopover, 'icon')); popover.append(title)
+  const title = make('div', undefined, 'project-popover-title'); title.append(folderIcon(project.connection?.kind === 'ssh'), make('h3', project.name)); popover.append(title)
   const connection = project.connection || {}
   popover.append(make('p', `${connection.label || 'No connection profile'} · ${connection.kind || 'local'}`, 'muted'))
   const line = make('div', undefined, 'connection-line'); line.append(statusDot(connection.status), make('span', cleanStatus(connection.status))); popover.append(line)
   const current = connection.status === 'connected'
   const count = Number.isInteger(connection.deviceCount) ? connection.deviceCount : null
-  const deviceLabel = !current ? 'Device state unavailable' : count === null ? 'Discovery has not been read' : `${count} ${count === 1 ? 'device' : 'devices'} detected${Number.isInteger(connection.inUseCount) ? ` · ${connection.inUseCount} in use` : ''}`
-  popover.append(button(deviceLabel, async () => { await saveDraft(); run('project.select', { projectId: project.id }); panelOpen = true; navOpen = false; setTab('devices'); closePopover(); layout() }, 'plain device-count'))
+  const deviceLabel = !current ? 'Device state unavailable' : `${count === null ? 'Device count unavailable' : `${count} ${count === 1 ? 'device' : 'devices'} detected`}${Number.isInteger(connection.inUseCount) ? ` · ${connection.inUseCount} camera ${connection.inUseCount === 1 ? 'preview' : 'previews'} active` : ' · preview status unavailable'}`
+  popover.append(button(deviceLabel, async () => {
+    await saveDraft()
+    try {
+      await command('project.select', { projectId: project.id })
+      if (state?.activeProjectId !== project.id) return
+      if (noticeMessage && noticeMessage === projectNavigationErrors.get(project.id)) notice()
+      projectNavigationErrors.delete(project.id)
+      panelOpen = true; navOpen = false; setTab('devices'); closePopover(); layout()
+    } catch (error) { projectNavigationErrors.set(project.id, error.message) }
+  }, 'plain device-count'))
   if (connection.observedAt) popover.append(make('p', `Last observed ${new Date(connection.observedAt).toLocaleString()}`, 'small muted'))
   if (connection.error) popover.append(make('p', connection.error, 'error'))
   const actions = make('div', undefined, 'actions')
@@ -84,13 +102,14 @@ function renderSidebar() {
     if (project.archived) continue
     const group = make('div', undefined, 'project-group'), row = make('div', undefined, 'project-row'); row.dataset.projectId = project.id
     const toggle = button('', () => { expanded.has(project.id) ? expanded.delete(project.id) : expanded.add(project.id); closePopover(); renderSidebar() }, 'project-toggle')
-    toggle.setAttribute('aria-expanded', String(expanded.has(project.id))); toggle.setAttribute('aria-label', `${project.name}: ${expanded.has(project.id) ? 'collapse' : 'expand'} conversations`)
+    toggle.setAttribute('aria-expanded', String(expanded.has(project.id))); toggle.setAttribute('aria-label', `${project.name}: ${expanded.has(project.id) ? 'collapse' : 'expand'} conversations; connection ${cleanStatus(project.connection?.status)}`)
     toggle.append(folderIcon(project.connection?.kind === 'ssh'))
     const copy = make('span', undefined, 'project-copy'); copy.append(make('span', project.name, 'project-name'), make('span', project.connection?.label || 'Not connected', 'project-host')); toggle.append(copy)
-    toggle.onmouseenter = () => showProject(project, row); toggle.onfocus = () => showProject(project, row)
-    const status = button('', () => showProject(project, row, true), 'project-status'); status.append(statusDot(project.connection?.status)); status.setAttribute('aria-label', `${project.name} connection: ${cleanStatus(project.connection?.status)}`)
-    status.onfocus = () => showProject(project, row, true)
-    row.append(toggle, status); group.append(row)
+    toggle.append(statusDot(project.connection?.status))
+    row.onmouseenter = () => showProject(project, row); row.addEventListener('focusin', () => showProject(project, row))
+    const compose = button('', async () => { await saveDraft(); try { await command('conversation.create', { projectId: project.id }); navOpen = false; closePopover(); layout() } catch {} }, 'plain new-conversation')
+    compose.append(composeIcon()); compose.setAttribute('aria-label', `New conversation in ${project.name}`); compose.title = 'New conversation'
+    row.append(toggle, compose); group.append(row)
     if (expanded.has(project.id)) {
       const chats = make('div', undefined, 'project-conversations')
       for (const conversation of project.conversations || []) {
@@ -100,7 +119,7 @@ function renderSidebar() {
         open.setAttribute('aria-current', String(conversation.id === state.activeConversationId && project.id === state.activeProjectId))
         item.append(open, button('•••', () => conversationSettings(project, conversation), 'icon')); item.lastChild.setAttribute('aria-label', `Actions for ${conversation.title || 'conversation'}`); chats.append(item)
       }
-      chats.append(button('＋ New conversation', async () => { await saveDraft(); run('conversation.create', { projectId: project.id }); closePopover() }, 'plain new-conversation')); group.append(chats)
+      group.append(chats)
     }
     list.append(group)
   }
@@ -109,7 +128,7 @@ function renderSidebar() {
 function saveDraft() {
   clearTimeout(draftTimer); draftTimer = null
   if (!state?.activeConversationId || state.hostUnavailable) return Promise.resolve()
-  const text = byId('message').value, context = scope()
+  const text = slash?.context === currentContext ? slash.draft : byId('message').value, context = scope()
   drafts.set(`${state.activeProjectId}:${state.activeConversationId}`, text)
   draftSave = draftSave.catch(() => {}).then(() => command('conversation.saveDraft', { ...context, draft: text }, { quiet: true })).catch(() => { notice('This draft is not saved yet. Keep the conversation open and try again before leaving.') })
   return draftSave
@@ -224,7 +243,8 @@ function renderControls() {
   byId('conversation-menu').hidden = !conversation
   byId('composer').hidden = !conversation
   const busy = pendingSend || conversation?.busy
-  byId('send-message').disabled = state?.hostUnavailable || !conversation || busy || !byId('message').value.trim()
+  byId('send-message').disabled = state?.hostUnavailable || !conversation || busy || (slash ? slash.pending || !slash.options?.length : !byId('message').value.trim())
+  byId('send-message').textContent = slash ? 'Select ↵' : 'Send ↑'
   byId('message').disabled = state?.hostUnavailable || !conversation || busy
   byId('cancel-message').hidden = !conversation?.busy
   byId('model-settings').textContent = state?.conversation?.model?.name || state?.conversation?.model?.id || state?.workcell?.agent?.model || 'Select a model'
@@ -310,6 +330,7 @@ function update(next) {
   if (state && next.revision < state.revision) return
   const context = `${next.activeProjectId}:${next.activeConversationId}:${next.connectionGeneration}`
   const changed = currentContext !== context
+  if (slash && (changed || next.hostUnavailable)) closeSlash({ focus: false, save: false })
   if (changed && state?.activeConversationId) drafts.set(`${state.activeProjectId}:${state.activeConversationId}`, byId('message').value)
   state = next
   if (changed) {
@@ -320,10 +341,12 @@ function update(next) {
   workcell.update(next.workcell, activeProject()?.connection?.status === 'connected', context)
   renderSidebar(); renderTranscript(); renderQuestion(); renderSetup(); renderControls(); renderProviderQuestion(); layout()
   if (byId('dialog').open) refreshDialog?.()
+  if (slash) renderSlash()
   if (popoverProject) { const current = state.projects.find((item) => item.id === popoverProject), anchor = [...document.querySelectorAll('.project-row')].find((row) => row.dataset.projectId === popoverProject); if (current && anchor) showProject(current, anchor, byId('project-popover').dataset.pinned === 'true'); else closePopover() }
   if (next.notice && next.notice !== noticeMessage) notice(next.notice)
 }
 function dialog(title) {
+  if (slash) closeSlash({ focus: false })
   dialogGeneration++; refreshDialog = null; byId('dialog').dataset.providerQuestion = ''
   closePopover(); const content = byId('dialog-content'); content.replaceChildren(make('h2', title)); if (!byId('dialog').open) byId('dialog').showModal(); return content
 }
@@ -633,14 +656,175 @@ async function openSettingsView(show) {
   try { await command('settings.get', {}, { quiet: true }) }
   catch (error) { if (generation === dialogGeneration) dialogError(byId('dialog-content'), error.message) }
 }
+// Slash commands are local presentation state. The textarea is temporarily a
+// filter; only the separately retained prose draft may cross the session bridge.
+const slashMenu = make('section', undefined, 'slash-menu')
+slashMenu.id = 'slash-menu'; slashMenu.hidden = true; slashMenu.setAttribute('aria-label', 'Composer commands')
+byId('composer').prepend(slashMenu)
+const messagePlaceholder = byId('message').placeholder
+const draftKey = () => state?.activeProjectId + ':' + state?.activeConversationId
+const isModelCommand = (value) => /^\/model$/i.test(value.trim())
+const isCommandPrefix = (value) => !value.includes('\n') && value.startsWith('/') && '/model'.startsWith(value.trim().toLowerCase())
+function scheduleDraft() {
+  clearTimeout(draftTimer); draftTimer = setTimeout(() => { void saveDraft() }, 600)
+}
+function closeSlash({ restore = true, focus = true, save = true } = {}) {
+  if (!slash) return
+  const previous = slash; slash = null
+  slashMenu.hidden = true; slashMenu.replaceChildren()
+  const input = byId('message')
+  input.removeAttribute('aria-controls'); input.removeAttribute('aria-activedescendant'); input.removeAttribute('aria-autocomplete'); input.removeAttribute('aria-expanded')
+  input.placeholder = messagePlaceholder
+  if (previous.context === currentContext && restore) {
+    input.value = previous.draft; drafts.set(draftKey(), previous.draft)
+    if (save) scheduleDraft()
+  }
+  renderControls(); if (focus && !input.disabled) input.focus()
+}
+function openSlash(stage = 'commands') {
+  if (!state?.activeConversationId || state.hostUnavailable || activeConversation()?.busy || pendingSend) return
+  clearTimeout(draftTimer); draftTimer = null
+  slash = { stage, context: currentContext, scope: scope(), draft: drafts.get(draftKey()) ?? state.conversation?.draft ?? '',
+    query: '', provider: null, active: 0, options: [], pending: false, error: '' }
+  if (stage !== 'commands') byId('message').value = ''
+  renderSlash(); byId('message').focus()
+}
+function slashBack() {
+  if (!slash || slash.pending) return
+  if (slash.stage !== 'models') { closeSlash(); return }
+  slash.stage = 'providers'; slash.provider = null; slash.query = ''; slash.active = 0; slash.error = ''
+  byId('message').value = ''; renderSlash(); byId('message').focus()
+}
+function activateSlash(option) {
+  const owner = slash
+  if (!owner || owner.pending || owner.context !== currentContext || state.hostUnavailable || activeConversation()?.busy || pendingSend || !option) return
+  if (owner.stage === 'commands') {
+    owner.stage = 'providers'; owner.query = ''; owner.active = 0
+    byId('message').value = ''; renderSlash(); byId('message').focus(); return
+  }
+  if (owner.stage === 'providers') {
+    owner.stage = 'models'; owner.provider = option.provider; owner.query = ''; owner.active = 0; owner.error = ''
+    byId('message').value = ''; renderSlash(); byId('message').focus(); return
+  }
+  owner.pending = true; owner.error = ''; renderSlash()
+  void command('settings.selectModel', { ...owner.scope, provider: option.provider, modelId: option.modelId }, { quiet: true })
+    .then(() => { if (slash === owner && owner.context === currentContext) closeSlash() })
+    .catch((error) => { if (slash === owner) owner.error = error.message || 'Could not select that model. Refresh the list and try again.' })
+    .finally(() => { if (slash === owner) { owner.pending = false; renderSlash(); byId('message').focus() } })
+}
+function renderSlash() {
+  const owner = slash
+  if (!owner) return
+  const input = byId('message'), models = availableModels(), current = state?.conversation?.model
+  const query = owner.query.trim().toLocaleLowerCase()
+  const matches = (parts) => query.split(/\s+/).filter(Boolean).every((word) => parts.join(' ').toLocaleLowerCase().includes(word))
+  if (owner.stage === 'commands') owner.options = [{ label: '/model', detail: 'Choose provider and model', command: 'model' }]
+  else if (owner.stage === 'providers') {
+    const providers = [...new Set(models.map((model) => model.provider))]
+    owner.options = providers.filter((id) => matches([id, providerName(id)]))
+      .sort((a, b) => Number(b === current?.provider) - Number(a === current?.provider) || providerName(a).localeCompare(providerName(b)))
+      .map((id) => { const count = models.filter((model) => model.provider === id).length; return { provider: id, label: providerName(id), detail: count + (count === 1 ? ' model' : ' models') } })
+  } else {
+    owner.options = models.filter((model) => model.provider === owner.provider && matches([model.name, model.id]))
+      .sort((a, b) => Number(b.id === current?.id && b.provider === current?.provider) - Number(a.id === current?.id && a.provider === current?.provider) || (a.name || a.id).localeCompare(b.name || b.id))
+      .map((model) => ({ provider: model.provider, modelId: model.id, label: model.name || model.id, detail: model.id,
+        selected: model.provider === current?.provider && model.id === current?.id }))
+  }
+  owner.active = Math.max(0, Math.min(owner.active, owner.options.length - 1))
+  slashMenu.hidden = false; slashMenu.dataset.stage = owner.stage; slashMenu.replaceChildren()
+  const header = make('div', undefined, 'slash-heading')
+  header.append(make('strong', owner.stage === 'commands' ? 'Commands' : owner.stage === 'providers' ? 'Choose provider' : providerName(owner.provider) + ' · Choose model'))
+  if (owner.stage === 'models') {
+    const back = button('← Providers', slashBack, 'plain'); back.id = 'slash-back'; back.disabled = owner.pending; header.append(back)
+  }
+  slashMenu.append(header)
+  const list = make('div', undefined, 'slash-options'); list.id = 'slash-options'; list.setAttribute('role', 'listbox')
+  list.setAttribute('aria-label', owner.stage === 'providers' ? 'Available providers' : owner.stage === 'models' ? 'Available models' : 'Commands')
+  const disabled = owner.pending || state?.hostUnavailable || state?.conversation?.busy || pendingSend
+  owner.options.forEach((item, index) => {
+    const row = button('', () => { if (slash === owner && owner.options[index] === item) activateSlash(item) }, owner.stage === 'providers' ? 'slash-provider' : owner.stage === 'models' ? 'slash-model' : 'slash-command')
+    row.id = 'slash-option-' + index; row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(index === owner.active)); row.tabIndex = -1; row.disabled = disabled
+    if (item.provider) row.dataset.provider = item.provider
+    if (item.modelId) row.dataset.modelId = item.modelId
+    const label = make('span', undefined, 'slash-label'); label.append(make('strong', item.label), make('small', item.detail, 'muted'))
+    row.append(label, make('span', item.selected ? 'Current' : '↵', 'slash-choice-hint'))
+    row.onpointerdown = (event) => event.preventDefault()
+    row.onpointermove = () => {
+      if (slash !== owner || owner.options[index] !== item || owner.pending) return
+      owner.active = index
+      for (const option of list.children) option.setAttribute('aria-selected', String(option === row))
+      input.setAttribute('aria-activedescendant', row.id)
+    }
+    list.append(row)
+  })
+  slashMenu.append(list)
+  if (!owner.options.length) slashMenu.append(make('p', !models.length ? modelEmptyMessage() : owner.stage === 'providers' ? 'No providers match your search.' : 'No models match your search.', 'slash-empty'))
+  if (owner.error) { const error = make('p', owner.error, 'error'); error.id = 'slash-error'; error.setAttribute('role', 'alert'); slashMenu.append(error) }
+  const footer = make('div', undefined, 'slash-footer')
+  const hint = owner.pending ? 'Selecting model…' : state?.conversation?.busy ? 'Wait for the response or cancel it before changing models.' : '↑ ↓ Navigate · Enter Select · Esc Back'
+  footer.append(make('span', hint))
+  if (owner.stage !== 'commands') {
+    const manage = button('Manage providers', () => { closeSlash({ focus: false }); void openSettingsView(showSettings) }, 'plain'); manage.id = 'slash-manage'; manage.disabled = owner.pending
+    const refresh = button('Refresh', async () => {
+      if (slash !== owner || owner.pending) return
+      owner.pending = true; renderSlash()
+      try { await command('settings.models', {}, { quiet: true }) }
+      catch (error) { if (slash === owner) owner.error = error.message }
+      finally { if (slash === owner) { owner.pending = false; renderSlash(); input.focus() } }
+    }, 'plain'); refresh.disabled = owner.pending
+    footer.append(manage, refresh)
+  }
+  slashMenu.append(footer)
+  input.placeholder = owner.stage === 'providers' ? 'Filter providers…' : owner.stage === 'models' ? 'Filter models…' : messagePlaceholder
+  input.setAttribute('aria-controls', 'slash-options'); input.setAttribute('aria-expanded', 'true'); input.setAttribute('aria-autocomplete', 'list')
+  if (owner.options.length && !disabled) input.setAttribute('aria-activedescendant', 'slash-option-' + owner.active)
+  else input.removeAttribute('aria-activedescendant')
+  renderControls()
+}
+function slashKey(event) {
+  if (!slash || event.isComposing || event.keyCode === 229) return false
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); slashBack(); return true }
+  if (event.key === 'Enter' && event.shiftKey) return false
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault()
+    if (slash.options.length && !slash.pending) {
+      slash.active = event.key === 'Home' ? 0 : event.key === 'End' ? slash.options.length - 1 : (slash.active + (event.key === 'ArrowDown' ? 1 : -1) + slash.options.length) % slash.options.length
+      for (const [index, item] of [...byId('slash-options').children].entries()) item.setAttribute('aria-selected', String(index === slash.active))
+      const active = byId('slash-option-' + slash.active); inputActive(active)
+    }
+    return true
+  }
+  if (event.key === 'Enter' || event.key === 'Tab' && !event.shiftKey && slash.stage === 'commands') {
+    event.preventDefault(); activateSlash(slash.options[slash.active]); return true
+  }
+  return false
+}
+function inputActive(active) {
+  if (!active) return
+  byId('message').setAttribute('aria-activedescendant', active.id); active.scrollIntoView({ block: 'nearest' })
+}
+function handleComposerInput() {
+  if (slash && slash.stage !== 'commands') {
+    slash.query = byId('message').value; slash.active = 0; slash.error = ''; renderSlash(); return
+  }
+  if (isCommandPrefix(byId('message').value)) {
+    if (!slash) openSlash()
+    else renderSlash()
+    return
+  }
+  if (slash) closeSlash({ restore: false, focus: false, save: false })
+  drafts.set(draftKey(), byId('message').value); renderControls(); scheduleDraft()
+}
 byId('new-project').onclick = createProject
 byId('settings-open').onclick = () => { void openSettingsView(showSettings) }
 byId('model-settings').onclick = () => { void openSettingsView(showModels) }
 byId('conversation-menu').onclick = () => { if (activeProject() && activeConversation()) conversationSettings(activeProject(), activeConversation()) }
-byId('message').oninput = () => { renderControls(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { void saveDraft() }, 600) }
-byId('message').onkeydown = (event) => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); byId('composer').requestSubmit() } }
+byId('message').oninput = handleComposerInput
+byId('message').onkeydown = (event) => { if (slashKey(event)) return; if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); byId('composer').requestSubmit() } }
 byId('composer').onsubmit = async (event) => {
   event.preventDefault(); const text = byId('message').value.trim()
+  if (slash) { activateSlash(slash.options[slash.active]); return }
+  if (isModelCommand(text)) { openSlash('providers'); return }
   if (!text || pendingSend || activeConversation()?.busy || !state?.activeConversationId || state.hostUnavailable) return
   const context = currentContext, requestScope = scope(), key = `${state.activeProjectId}:${state.activeConversationId}`
   clearTimeout(draftTimer); draftTimer = null; pendingSend = true; renderControls(); notice()
@@ -654,7 +838,7 @@ byId('sidebar-toggle').onclick = () => { navOpen = !navOpen; layout() }
 byId('close-sidebar').onclick = () => { navOpen = false; layout() }
 byId('panel-backdrop').onclick = () => { navOpen = false; if (innerWidth <= 950) panelOpen = false; layout() }
 for (const tab of document.querySelectorAll('[data-tab]')) tab.onclick = () => setTab(tab.dataset.tab)
-document.addEventListener('pointerdown', (event) => { if (!event.target.closest('.project-popover,.project-row')) closePopover() })
+document.addEventListener('pointerdown', (event) => { if (!event.target.closest('.project-popover,.project-row')) closePopover(); if (slash && !event.target.closest('#composer')) closeSlash({ focus: false }) })
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closePopover(); navOpen = false; if (innerWidth <= 950) panelOpen = false; layout() } })
 byId('dialog').addEventListener('cancel', () => { if (state?.settings?.loginPending && byId('dialog').dataset.providerQuestion === 'true') run('settings.providerCancel') })
 addEventListener('resize', () => { closePopover(); layout() })

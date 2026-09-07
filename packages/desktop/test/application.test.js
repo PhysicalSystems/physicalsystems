@@ -16,10 +16,11 @@ async function fixture(t, overrides = {}) {
   const secrets = new Map(), created = [], calls = { attach: 0, probe: 0, refresh: 0, close: 0 }, disconnects = []
   const secretStore = { kind: 'memory', read: async (name) => secrets.get(name) || null, write: async (name, value) => { secrets.set(name, value) }, delete: async (name) => { secrets.delete(name) } }
   const hostFactory = async (options) => {
-    if (calls.hostWait) await calls.hostWait
+    if (calls.hostWait) { calls.hostWaiting?.(); await calls.hostWait }
     const listeners = new Set(), sessionRoot = path.join(options.config.configDir, 'harness-sessions')
     let sessionId = randomUUID(), sessionFile = options.sessionFile || path.join(sessionRoot, `${sessionId}.jsonl`)
     let busy = false, messages = [], disposed = false, viewers = 0, view, requests = new Map()
+    const sessionModels = new Map()
     const state = { workflow: { snapshot: { discovery: { observedAt: new Date().toISOString(), devices: [{ detected: true }] } }, routeReceipt: { receiptDigest: 'keep-route' } }, camera: {}, execution: {}, agent: {} }
     const emit = () => { for (const listener of listeners) listener({ type: 'change' }) }
     const replaceView = () => {
@@ -33,12 +34,16 @@ async function fixture(t, overrides = {}) {
     }
     replaceView()
     const host = { options, state, get viewers() { return viewers }, get disposed() { return disposed },
-      snapshot: () => ({ sessionId, sessionFile, messages, busy }), subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn) }, getWorkcell: () => view,
+      snapshot: () => ({ sessionId, sessionFile, messages, busy, model: sessionModels.get(sessionFile) || null }), subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn) }, getWorkcell: () => view,
       prompt: (value, requestId) => { if (requests.has(requestId)) return { accepted: true, duplicate: true }; requests.set(requestId, value); messages.push({ id: requestId, role: 'user', text: value }); busy = true; emit(); return { accepted: true } },
       cancel: async () => { busy = false; calls.cancel = (calls.cancel || 0) + 1; emit() },
       createSession: async () => { sessionId = randomUUID(); sessionFile = path.join(sessionRoot, `${sessionId}.jsonl`); messages = calls.newMessage ? [{ id: 'new', role: 'assistant', text: calls.newMessage }] : []; replaceView(); emit() },
       openSession: async (file) => { sessionFile = file; replaceView(); emit() },
-      listModels: async () => [], setModel: async () => {}, inspectSetup: async () => ({ physicalReadiness: 'unverified', physicalExecutionAuthorized: false }),
+      listModels: async () => [], setModel: async (provider, id) => {
+        (calls.models ||= []).push({ provider, id, sessionFile })
+        if (calls.modelWait) await calls.modelWait
+        sessionModels.set(sessionFile, { provider, id }); emit()
+      }, inspectSetup: async () => ({ physicalReadiness: 'unverified', physicalExecutionAuthorized: false }),
       dispose: async () => { disposed = true }, emit }
     created.push(host); return host
   }
@@ -85,6 +90,76 @@ test('new and resumed conversations rebind exactly one Workcell viewer and rejec
   assert.equal(f.app.snapshot().activeConversationId, old.conversationId)
 })
 
+test('model selection rejects a stale conversation without changing the newer session model', async (t) => {
+  const f = await fixture(t), first = await f.create()
+  await f.app.command('settings.selectModel', { ...first, provider: 'fixture-a', modelId: 'first-model' })
+  const firstFile = f.created[0].snapshot().sessionFile
+  await f.app.command('conversation.create', { projectId: first.projectId, title: 'Second conversation' })
+  const second = f.scope(), secondFile = f.created[0].snapshot().sessionFile
+  await f.app.command('settings.selectModel', { ...second, provider: 'fixture-b', modelId: 'second-model' })
+  await assert.rejects(f.app.command('settings.selectModel', { ...first, provider: 'stale-provider', modelId: 'stale-model' }), /conversation.*changed|no longer selected/i)
+  assert.equal(f.app.snapshot().activeConversationId, second.conversationId)
+  assert.deepEqual(f.app.snapshot().conversation.model, { provider: 'fixture-b', id: 'second-model' })
+  assert.deepEqual(f.calls.models, [
+    { provider: 'fixture-a', id: 'first-model', sessionFile: firstFile },
+    { provider: 'fixture-b', id: 'second-model', sessionFile: secondFile },
+  ])
+  await f.app.command('conversation.select', first)
+  assert.deepEqual(f.app.snapshot().conversation.model, { provider: 'fixture-a', id: 'first-model' })
+})
+
+test('model selection requires the explicit active project and conversation', async (t) => {
+  const f = await fixture(t), scope = await f.create()
+  for (const target of [{}, { projectId: scope.projectId }, { conversationId: scope.conversationId }]) {
+    await assert.rejects(f.app.command('settings.selectModel', { ...target, provider: 'fixture', modelId: 'unscoped' }), /conversation.*changed|no longer selected/i)
+  }
+  assert.deepEqual(f.calls.models || [], [])
+  assert.equal(f.app.snapshot().conversation.model, null)
+  await f.app.command('settings.selectModel', { ...scope, provider: 'fixture', modelId: 'selected' })
+  assert.equal(f.calls.models.length, 1)
+  assert.deepEqual(f.app.snapshot().conversation.model, { provider: 'fixture', id: 'selected' })
+})
+
+test('model selection keeps the mutation lock until its original session finishes changing', async (t) => {
+  const f = await fixture(t), first = await f.create()
+  await f.app.command('conversation.create', { projectId: first.projectId, title: 'Second conversation' })
+  const second = f.scope(), secondFile = f.created[0].snapshot().sessionFile
+  let release
+  f.calls.modelWait = new Promise((resolve) => { release = resolve })
+  const selecting = f.app.command('settings.selectModel', { ...second, provider: 'fixture', modelId: 'slow-selection' })
+  try {
+    for (let i = 0; i < 100 && !f.calls.models?.length; i++) await delay(5)
+    assert.equal(f.calls.models?.length, 1)
+    await assert.rejects(f.app.command('conversation.select', first), /request is in progress/)
+    assert.equal(f.app.snapshot().activeConversationId, second.conversationId)
+  } finally { release(); await selecting }
+  assert.deepEqual(f.calls.models, [{ provider: 'fixture', id: 'slow-selection', sessionFile: secondFile }])
+  assert.deepEqual(f.app.snapshot().conversation.model, { provider: 'fixture', id: 'slow-selection' })
+  await f.app.command('conversation.select', first)
+  assert.equal(f.app.snapshot().conversation.model, null)
+})
+
+test('model selection rechecks conversation ownership after delayed host creation', async (t) => {
+  const f = await fixture(t), first = await f.create()
+  await f.app.command('conversation.create', { projectId: first.projectId, title: 'Second conversation' })
+  const second = f.scope()
+  await f.app.command('connection.disconnect', second)
+  let release, started
+  f.calls.hostWait = new Promise((resolve) => { release = resolve })
+  const starting = new Promise((resolve) => { started = resolve })
+  f.calls.hostWaiting = started
+  const selecting = f.app.command('settings.selectModel', { ...second, provider: 'fixture', modelId: 'late-selection' })
+  try {
+    await starting
+    // Emulate an independently updated catalog while the requested host loads.
+    await f.catalog.transaction((draft) => { draft.selection = { projectId: first.projectId, conversationId: first.conversationId } })
+    release()
+    await assert.rejects(selecting, /conversation.*changed|no longer selected/i)
+    assert.deepEqual(f.calls.models || [], [])
+    assert.equal(f.app.snapshot().activeConversationId, first.conversationId)
+  } finally { release(); await selecting.catch(() => {}) }
+})
+
 test('authenticated green status clears and recovers without refreshing or retiring a proposal', async (t) => {
   const f = await fixture(t); await f.create(); const scope = await f.connect()
   assert.equal(f.app.snapshot().projects[0].connection.status, 'connected')
@@ -102,6 +177,52 @@ test('authenticated green status clears and recovers without refreshing or retir
   assert.equal(f.created.at(-1), host, 'recovery keeps the same capture owner')
   assert.equal(f.calls.refresh, initialRefreshes)
   assert.equal(f.app.snapshot().workcell.workflow.routeReceipt.receiptDigest, 'keep-route')
+})
+
+test('project preview activity becomes unknown when live camera evidence fails or expires', async (t) => {
+  const f = await fixture(t); await f.create(); await f.connect()
+  const host = f.created.at(-1), count = () => f.app.snapshot().projects[0].connection.inUseCount
+  const live = () => ({ availability: 'available', receivedAt: new Date().toISOString(),
+    status: { phase: 'live', captureSessionId: 'fixture-capture', selectedCandidateId: 'fixture-camera',
+      latestFrameId: 'fixture-capture-1', frameFresh: true, frameAgeMs: 0, staleAfterMs: 2000 },
+    frame: { captureSessionId: 'fixture-capture', candidateId: 'fixture-camera' }, previewFrameId: 'fixture-preview',
+    stopCaptureSessionId: 'fixture-capture', pending: null, stopPending: false, stopUnconfirmed: false })
+  host.state.camera = live()
+  assert.equal(count(), 1)
+  host.state.camera = { ...live(), availability: 'unavailable', frame: null, previewFrameId: null }
+  assert.equal(count(), null, 'a remembered live phase is not current activity after a failed status read')
+  host.state.camera = { ...live(), receivedAt: new Date(Date.now() - 2100).toISOString() }
+  assert.equal(count(), null, 'an unchanged healthy connection does not renew camera evidence')
+  host.state.camera = { ...live(), receivedAt: new Date(Date.now() - 1200).toISOString() }
+  host.state.camera.status.frameAgeMs = 1000
+  assert.equal(count(), null, 'frame age and time since the status read both consume freshness')
+  host.state.camera = live()
+  assert.equal(count(), 1, 'a new valid camera observation restores the known preview count')
+  for (const pending of [{ pending: 'start' }, { stopPending: true }, { stopUnconfirmed: true }]) {
+    host.state.camera = { ...live(), ...pending }
+    assert.equal(count(), null, 'an in-flight or unconfirmed camera transition is not known live activity')
+  }
+})
+
+test('project preview count reaches zero only for fresh stopped or idle status with no retained ownership', async (t) => {
+  const f = await fixture(t); await f.create(); const scope = await f.connect()
+  const host = f.created.at(-1), count = () => f.app.snapshot().projects[0].connection.inUseCount
+  const stopped = () => ({ availability: 'available', receivedAt: new Date().toISOString(),
+    status: { phase: 'stopped', captureSessionId: 'fixture-capture', selectedCandidateId: 'fixture-camera',
+      latestFrameId: null, frameFresh: false, frameAgeMs: null, staleAfterMs: 2000 },
+    frame: null, previewFrameId: null, stopCaptureSessionId: null, pending: null, stopPending: false, stopUnconfirmed: false })
+  host.state.camera = stopped()
+  assert.equal(count(), 0)
+  for (const unknown of [{ stopCaptureSessionId: 'older-owned-capture' }, { stopUnconfirmed: true }, { stopPending: true },
+    { pending: 'start' }, { availability: 'unavailable' }, { receivedAt: null }, { receivedAt: new Date(Date.now() - 2100).toISOString() }]) {
+    host.state.camera = { ...stopped(), ...unknown }
+    assert.equal(count(), null, 'a stopped phase cannot hide retained ownership or an unavailable/stale read')
+  }
+  host.state.camera = stopped()
+  host.state.camera.status = { ...host.state.camera.status, phase: 'idle', captureSessionId: null, selectedCandidateId: null }
+  assert.equal(count(), 0)
+  await f.app.command('connection.disconnect', scope)
+  assert.equal(count(), null, 'disconnection removes any current camera activity claim')
 })
 
 test('one owner per authenticated Node, including endpoint aliases', async (t) => {

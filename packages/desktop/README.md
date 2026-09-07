@@ -25,7 +25,7 @@ The tested Ubuntu graphical route uses X11/Xwayland. From a terminal in that
 desktop session, append `--ozone-platform=x11` if necessary. Native Wayland and
 headless Electron are not qualified by this change.
 
-Start with **New project → Simulation**. The Simulation guide is scripted and
+Start with **Projects + → Simulation**. The Simulation guide is scripted and
 uses synthetic devices; it is not an AI model, physics simulation or hardware
 qualification. Send “Plan a tray transfer”, answer the destination question,
 review the proposal, and open **Run**. Preparation creates an exact waiting run.
@@ -36,10 +36,15 @@ after explicit Start. Stop and receipt checks use the existing controllers.
 ## Workspace layout
 
 - **Left:** projects with a folder icon, muted computer label and right-aligned
-  connection dot. Clicking the project row expands its conversations. Clicking
+  decorative connection dot. Hover or focus the Projects heading to reveal its
+  add button; each project row has a compose icon for a new conversation.
+  Clicking the project row expands its conversations. Clicking
   a conversation opens its saved history. A project status popover shows the
-  authenticated connection and fresh detected-device count; clicking that count
-  restores the project's last conversation and opens Devices.
+  authenticated connection, fresh detected-device count and any known active
+  camera preview count. Hover the whole row to see it; clicking the device count
+  selects the project's last conversation and opens Devices after selection
+  succeeds. Reported missing devices remain visible; disconnected projects show
+  previous scan results as unavailable rather than current presence claims.
 - **Center:** one persistent conversation, streamed assistant replies, questions,
   answers, cancellation and a proposed capability. Conversation titles describe
   the discussion; the proposal names a capability. Each approved invocation is a
@@ -65,7 +70,14 @@ are in **Model & app settings**, using the same reviewed Pi provider runtime.
 Provider sign-in URLs open in the system browser only after an explicit click;
 the renderer cannot supply an arbitrary URL to open.
 
-The model button in the composer opens a searchable picker grouped by provider.
+Type **/model** in the composer and press **Enter** to choose a provider, then
+press **Enter** to choose its model. Typing filters the current step; arrow keys
+navigate, and Escape goes back. Typing **/** also suggests the command. This
+inline menu uses the cached catalog immediately; Refresh updates it when needed.
+Commands and filters stay out of the transcript and saved prose draft. Model
+selection requires the same explicitly selected conversation throughout.
+
+The model button in the composer also opens a searchable picker grouped by provider.
 Search accepts model/provider names and identifiers; the selected model is marked.
 **Manage providers** opens searchable provider settings, with configured providers
 first and sign-in actions revealed when a provider is expanded. An empty catalog
@@ -79,8 +91,10 @@ expire with the active attempt and are never saved in conversation history.
 
 **Connect** checks both Node discovery identity and authenticated camera status;
 it does not start capture. A green dot requires a recent successful check.
-Detected does not mean commissioned or ready to move. “In use” currently counts
-the capture reported by this controller; it is not a fleet utilization metric.
+Detected does not mean commissioned or ready to move. The active-preview count
+covers capture reported by this controller; it is not a count of all active devices.
+Unavailable or expired preview status is shown as unknown, including pending or
+unconfirmed Stop outcomes. Zero active previews requires fresh confirmed status.
 Node names are used as the current public identity claim, not cryptographic
 device identities. The app pins the first authenticated name and conservatively
 allows only one owner per responding name/endpoint. Distinct Nodes with the same

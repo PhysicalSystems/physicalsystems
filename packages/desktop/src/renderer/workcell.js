@@ -418,17 +418,20 @@ export function mountWorkcellView(root, { command, onNotice = () => {}, onContro
     }
   }
   function renderWorkflow(workflow = {}) {
-    const key = JSON.stringify(workflow)
+    const key = JSON.stringify([workflow, connected])
     if (key === workflowKey) return
     workflowKey = key
     const snapshot = workflow.snapshot
-    const devices = (snapshot?.discovery?.devices || []).filter((device) => device.detected === true)
-    text('device-count', String(devices.length))
+    const devices = snapshot?.discovery?.devices || []
+    text('devices-title', 'Device status')
+    text('device-count', String(devices.filter((device) => device.detected === true).length) + ' detected in last scan')
     const list = byId('devices'); list.replaceChildren()
     for (const device of devices) {
-      const row = make('details', undefined, 'device-row'); row.open = openDeviceDetails.has(device.deviceId)
-      const heading = make('summary'); heading.append(make('span', undefined, 'device-indicator'))
+      const row = make('details', undefined, 'device-row'); row.open = openDeviceDetails.has(device.deviceId); row.dataset.deviceId = device.deviceId
+      const heading = make('summary'); heading.append(make('span', undefined, `device-indicator${connected && device.detected === true ? '' : ' unavailable'}`))
       const details = make('div'); details.append(make('strong', device.displayName || device.deviceId))
+      const presence = device.detected === true ? 'Detected in last scan' : device.detected === false ? 'Not detected in last scan' : 'Presence unverified'
+      details.append(make('p', connected ? presence : `Connection unavailable · ${presence.toLowerCase()}`, 'device-presence'))
       details.append(make('p', `${device.kind} · ${device.readiness || (device.driverReady ? 'adapter available' : 'adapter unavailable')}`))
       heading.append(details); row.append(heading)
       row.append(make('p', `Device identity: ${device.deviceId}`, 'receipt-meta'))
@@ -438,7 +441,7 @@ export function mountWorkcellView(root, { command, onNotice = () => {}, onContro
       list.append(row)
     }
     if (!devices.length) list.append(make('p', workflow.error || 'No devices observed. Connect hardware and refresh discovery.', 'quiet'))
-    text('discovery-note', snapshot?.discovery?.observedAt ? `Observed ${snapshot.discovery.observedAt} · detection alone is not readiness.` : 'Only devices reported as detected are listed; no fixed demo inventory.')
+    text('discovery-note', snapshot?.discovery?.observedAt ? `Last scan ${snapshot.discovery.observedAt} · ${connected ? 'Refresh discovery to check for changes. Detection is not operation readiness.' : 'Project disconnected; current device state is unavailable.'}` : 'No discovery scan has been reported. Device state is unverified.')
     text('node-detail', snapshot ? `${snapshot.nodeName} · ${workflow.nodeOrigin}` : `Local node · ${workflow.nodeOrigin || 'not connected'}`)
     const receipt = workflow.routeReceipt
     const interpretation = workflow.response?.interpretation

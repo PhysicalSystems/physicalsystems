@@ -44,6 +44,14 @@ opening failure/retry, exact provider/model selection, search and empty catalogs
 These checks do not open a real provider URL or complete live sign-in. The earlier
 native simulation result does not qualify these provider changes as a live login.
 
+Composer shortcut tests exercise the local /model → provider → model flow,
+keyboard and pointer selection, preserved prose drafts, error recovery and
+conversation changes. Application regressions reject stale model requests before
+they can change a newer conversation. Sidebar checks cover heading/row icons,
+whole-row status details, scoped device navigation and disconnected scan results.
+These additions use fakes and headless Firefox, with no real provider calls,
+device discovery or native installation changes.
+
 Compositor screenshots are a separate opt-in with
 `PHYSICALSYSTEMS_DESKTOP_NATIVE_SCREENSHOT=1` and an evidence directory. Functional
 native UI/IPC validation does not imply compositor capture or optical/display

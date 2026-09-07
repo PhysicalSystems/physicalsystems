@@ -8,6 +8,7 @@ import { createPhysicalNodeClient } from '../../cli/src/physical/node-client.js'
 import { createCameraPreviewClient } from '../../cli/src/physical/camera-preview-client.js'
 import { createHarnessHost } from '../../cli/src/harness/application-host.js'
 import { workcellRequestFailure } from '../../cli/src/harness/workcell-controller.js'
+import { cameraIsFresh } from '../../cli/src/harness/workcell-view/view-state.js'
 import { listProvidersCommand, providerLoginCommand, providerLogoutCommand } from '../../cli/src/commands/provider.js'
 import * as connectionAdapters from './connections.js'
 import { createSimulationHost } from './simulation.js'
@@ -19,6 +20,18 @@ const text = (value, label, max = 160) => {
   return value.trim()
 }
 const fresh = (at) => Number.isFinite(Date.parse(at)) && Date.now() - Date.parse(at) >= 0 && Date.now() - Date.parse(at) < 10_000
+function cameraPreviewCount(camera) {
+  if (camera?.availability !== 'available' || camera.pending || camera.stopPending || camera.stopUnconfirmed) return null
+  const now = Date.now()
+  if (cameraIsFresh(camera, now)) return 1
+  const status = camera.status, elapsed = now - Date.parse(camera.receivedAt || '')
+  // Stop responses retain the previous poll timestamp. Do not manufacture a
+  // newer status observation or claim zero while another capture is still owned.
+  if (['idle', 'stopped'].includes(status?.phase) && !camera.stopCaptureSessionId &&
+      Number.isFinite(elapsed) && elapsed >= 0 && Number.isFinite(status.staleAfterMs) &&
+      status.staleAfterMs > 0 && elapsed < status.staleAfterMs) return 0
+  return null
+}
 const unavailable = async () => { throw new Error('Connect the project to inspect its devices.') }
 const disconnectedOptions = {
   createPhysicalNodeClientImpl: () => ({ origin: 'http://127.0.0.1:1', inspect: unavailable, capabilities: unavailable, previewCapability: unavailable, routeReceipt: unavailable, interpret: unavailable }),
@@ -88,7 +101,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
             autoConnect: connection.autoConnect === true,
             error: link?.error || null, observedAt: link?.observedAt || null,
             deviceCount: status === 'connected' && fresh(observed) ? (observation?.discovery?.devices || []).filter((d) => d.detected).length : null,
-            inUseCount: status === 'connected' && view?.camera?.status?.phase === 'live' ? 1 : null },
+            inUseCount: status === 'connected' ? cameraPreviewCount(view?.camera) : null },
           conversations: stored.conversations.filter((entry) => entry.projectId === item.id && !entry.archived)
             .map(({ id, title, archived }) => ({ id, title, archived })) }
       }),
@@ -460,8 +473,24 @@ export async function createApplication({ dataDir, catalog, connections = connec
       await disposeHost(p.id); await closeLink(p.id)
       emit(); return snapshot()
     }
+    if (name === 'settings.selectModel') {
+      const changed = () => fail('The conversation changed. Reopen the model picker for the current conversation.')
+      const checkSelection = () => {
+        const selected = state().selection
+        if (body.projectId !== p.id || !body.conversationId || c?.id !== body.conversationId ||
+            conversation(c.id)?.projectId !== p.id || selected.projectId !== p.id || selected.conversationId !== c.id) throw changed()
+      }
+      checkSelection()
+      const host = await ensureHost(p, c)
+      checkSelection()
+      // A project reuses one host as conversations change. An older request
+      // must never select a model on that host's newer active session.
+      const entry = hosts.get(p.id)
+      if (entry?.host !== host || entry.conversationId !== c.id || entry.switching) throw changed()
+      await host.setModel(text(body.provider, 'Provider'), text(body.modelId || body.id, 'Model'))
+      emit(); return snapshot()
+    }
     const host = await ensureHost(p, c)
-    if (name === 'settings.selectModel') { await host.setModel(text(body.provider, 'Provider'), text(body.modelId || body.id, 'Model')); emit(); return snapshot() }
     if (name === 'conversation.send') {
       if (state().selection.projectId !== p.id || c?.id !== state().selection.conversationId) throw fail('This conversation is no longer selected. Review it before sending.')
       const accepted = host.prompt(body.text, text(body.requestId, 'Request ID', 128))
