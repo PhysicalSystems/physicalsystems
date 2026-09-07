@@ -520,7 +520,7 @@ test('the export boundary accepts the guarded source-license transition without 
     }
     // Preserve the separate private desktop guard while exercising npm/source
     // licensing transitions; it never inherits the product publication state.
-    writeFixtureFile(fixtureRoot, 'packages/desktop/package.json', readFileSync(path.join(root, 'packages/desktop/package.json')))
+    for (const component of ['desktop', 'operator-core', 'operator-service']) writeFixtureFile(fixtureRoot, `packages/${component}/package.json`, readFileSync(path.join(root, `packages/${component}/package.json`)))
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/Apache-2.0.txt', apacheLicenseTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.txt', noticeTemplate)
     writeFixtureFile(fixtureRoot, 'scripts/legal/templates/NOTICE.pi-runtime.txt', runtimeNoticeTemplate)

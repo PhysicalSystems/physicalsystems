@@ -56,10 +56,11 @@ after explicit Start. Stop and receipt checks use the existing controllers.
 
 ## Try a bounded experiment
 
-Create a **Simulation** project and send **Find an alignment approach**. Open
-the **Experiments** tab in the right inspector. Review the goal and maximum
-trial count, check the exact-plan confirmation, then choose **Approve & run
-scripted trials**. The guide measures a synthetic alignment error and halves
+Create a **Simulation** project and send **Find an alignment approach**. The
+conversation displays a **Review experiment** card with the exact goal, synthetic
+fixture, allowed offset range, trial budget and expiry. Choose **Approve &
+continue** to approve that plan and start the guide. The guide measures a
+synthetic alignment error and halves
 the signed correction on each subsequent trial. The table records every offset
 and measurement; the best recorded result and previous experiments remain
 inspectable. This numeric fixture deliberately discloses its target at 3 mm.
@@ -68,10 +69,22 @@ physics, learned policies, VLA behavior or SO-101 readiness.
 
 An ordinary model conversation uses the same simulation-only controller. Its
 assistant can propose, inspect, measure and revise after the operator approves
-the exact budget. After approving, send **Continue the approved synthetic
-experiment** so the model can choose and measure its next trials. Approval
-does not automatically send a model request; only the scripted guide starts
-its loop automatically. Approval is an operator UI action, never an assistant tool.
+the exact budget. **Approve & continue** records the exact approval before
+submitting one synthetic experiment continuation to that conversation's model.
+Recorded measurements and the final result appear in the conversation. There
+is no required switch to the right panel or manually typed continuation message.
+Approval is an operator UI action, never an assistant tool or ordinary prose.
+**View details** opens the optional Experiments tab and its historical evidence.
+Its separate **Approve simulation plan** control still only records approval;
+the chat card then offers **Continue experiment**.
+
+If model submission fails, the recorded approval remains visible and Continue
+can be retried without approving again. A timed-out continuation retains its
+request identity: **Check continuation** inspects or acknowledges the same
+request rather than silently starting another. Reloads never resubmit. If the
+model stops after using the budget, **Finish experiment** retains the measured
+result without running another trial. Explicit Stop remains available during
+pending approval/continuation requests and while the assistant is busy.
 The inspector also permits a bounded manual offset trial and early Finish.
 Synthetic experiments work while the project's Node connection is offline;
 they never connect equipment or dispatch a physical invocation.

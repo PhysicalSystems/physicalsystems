@@ -42,3 +42,32 @@ details.device-row{display:block}details.device-row>summary{display:flex;gap:9px
 .experiment-best { border: 1px solid var(--line); padding: 12px; border-radius: 10px; }
 .experiment-result .technical-evidence { overflow-wrap: anywhere; }
 .inspector .tabs { overflow-x: auto; }
+
+/* Assistant formatting is text-built Markdown; user input stays literal. */
+.message .body.message-markdown { white-space: normal; overflow-wrap: anywhere; }
+.message-markdown > :first-child { margin-top: 0; }
+.message-markdown > :last-child { margin-bottom: 0; }
+.message-markdown p { margin: 0 0 12px; }
+.message-markdown :is(h1,h2,h3,h4,h5,h6) { font-size: 1.08em; font-weight: 600; margin: 20px 0 9px; }
+.message-markdown strong { font-weight: 650; }
+.message-markdown :is(ul,ol) { padding-left: 24px; margin: 9px 0 14px; }
+.message-markdown li { padding-left: 2px; margin: 4px 0; }
+.message-markdown li > p { margin: 0; }
+.message-markdown blockquote { margin: 12px 0; padding-left: 16px; border-left: 3px solid var(--line); color: var(--muted); }
+.message-markdown code { font-family: ui-monospace,monospace; font-size: .9em; background: var(--panel); border-radius: 4px; padding: 2px 4px; }
+.message-markdown pre { overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); white-space: pre; }
+.message-markdown pre code { padding: 0; background: transparent; white-space: pre; }
+.message.tool summary { cursor: pointer; color: var(--muted); }
+
+.experiment-chat-card { max-width: 750px; margin: 12px auto 26px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); overflow-wrap: anywhere; }
+.experiment-chat-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.experiment-chat-heading .eyebrow { display: inline; font-size: 10px; color: var(--muted); letter-spacing: .08em; }
+.experiment-chat-heading .badge { font-size: 11px; color: var(--muted); }
+.experiment-chat-card h3 { font-size: 16px; }
+.experiment-chat-card .experiment-chat-goal { margin-bottom: 8px; }
+.experiment-chat-card .panel-note { font-size: 12px; }
+.experiment-chat-card .experiment-chat-review { margin-top: 15px; }
+.experiment-chat-card .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.experiment-chat-card .experiment-best { margin: 14px 0 0; background: var(--bg); }
+.experiment-chat-card .error { margin: 12px 0 0; font-size: 12px; }
+@media (max-width: 680px) { .experiment-chat-card { padding: 15px; } .experiment-chat-card .actions button { flex-grow: 1; } }

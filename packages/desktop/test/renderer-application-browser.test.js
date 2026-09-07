@@ -18,7 +18,7 @@ test('actual desktop application completes the browser simulation journey with a
   const application = await createApplication({ dataDir, catalog, env: {},
     secretStore: { read: async () => null, write: forbidden('credential write'), delete: forbidden('credential deletion') },
     hostFactory: forbidden('real model host'), connections: { attachLocal: forbidden('local Node'), attachSSH: forbidden('SSH') }, probeNode: forbidden('live Node probe') })
-  let driver, session, origin
+  let driver, session, origin, staleClickRetries = 0
   const fixture = `window.__errors=[];addEventListener('error',e=>window.__errors.push(e.message));addEventListener('unhandledrejection',e=>window.__errors.push(String(e.reason)));const api=async(path,payload)=>{const response=await fetch('/api/'+path,{method:payload===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:payload===undefined?undefined:JSON.stringify(payload)});const value=await response.json();if(!response.ok)throw new Error(value.error);return value};window.physicalSystems={snapshot:()=>api('snapshot'),command:(name,payload)=>api('command',{name,payload}),subscribe(fn){let busy=false;const timer=setInterval(async()=>{if(busy)return;busy=true;try{fn(await api('snapshot'))}catch{}finally{busy=false}},100);return()=>clearInterval(timer)}};`
   const server = createServer(async (request, response) => {
     try {
@@ -34,7 +34,7 @@ test('actual desktop application completes the browser simulation journey with a
       }
       if (request.url === '/fixture.js') { response.writeHead(200, { 'Content-Type': 'text/javascript' }); response.end(fixture); return }
       const requested = request.url === '/' ? 'index.html' : request.url.slice(1)
-      if (!['index.html','styles.css','app.js','workcell.js','experiments.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
+      if (!['index.html','styles.css','app.js','workcell.js','experiments.js','markdown.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
       const file = requested === 'view-state.js' ? new URL('../../cli/src/harness/workcell-view/view-state.js', import.meta.url) : new URL(`../src/renderer/${requested}`, import.meta.url)
       let data = await readFile(file)
       if (requested === 'index.html') data = Buffer.from(data.toString().replace("connect-src 'none'", "connect-src 'self'").replace('<script type="module"', '<script src="./fixture.js"></script><script type="module"'))
@@ -60,13 +60,30 @@ test('actual desktop application completes the browser simulation journey with a
   })
   async function wd(path, body, method = body === undefined ? 'GET' : 'POST') {
     const response = await fetch(origin + path, { method, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(12000) }); const value = await response.json()
-    if (!response.ok || value.value?.error) throw new Error(JSON.stringify(value.value)); return value.value
+    if (!response.ok || value.value?.error) {
+      const error = new Error(JSON.stringify(value.value)); error.code = value.value?.error; throw error
+    }
+    return value.value
   }
   async function until(condition, label) { for (let i=0;i<160;i++) { if (await condition()) return; await sleep(75) }; throw new Error(`Browser condition timed out: ${label || ''}; ${JSON.stringify({ commands, conversation: application.snapshot().conversation, agent: application.snapshot().workcell?.agent, notice: session ? await wd(`/session/${session}/execute/sync`, { script: 'return {notice:document.querySelector("#app-notice").textContent,errors:window.__errors}', args: [] }).catch(() => null) : null })}`) }
   await until(async () => { try { return (await fetch(origin + '/status')).ok } catch { return false } }, 'driver startup')
   const created = await wd('/session', { capabilities: { alwaysMatch: { browserName: 'firefox', 'moz:firefoxOptions': { args: ['-headless'] } } } }); session = created.sessionId
   const js = (script, args = []) => wd(`/session/${session}/execute/sync`, { script, args })
-  const click = async (selector) => { const element = await wd(`/session/${session}/element`, { using: 'css selector', value: selector }); await wd(`/session/${session}/element/${element['element-6066-11e4-a52e-4f735466cecf']}/click`, {}) }
+  const click = async (selector) => {
+    // Live controller snapshots can replace a control between WebDriver lookup
+    // and pointer dispatch. Only a stale-element rejection permits reacquiring
+    // it; an unconfirmed click outcome must never be retried automatically.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const element = await wd(`/session/${session}/element`, { using: 'css selector', value: selector })
+        await wd(`/session/${session}/element/${element['element-6066-11e4-a52e-4f735466cecf']}/click`, {})
+        return
+      } catch (error) {
+        if (error.code !== 'stale element reference' || attempt === 3) throw error
+        staleClickRetries++; await sleep(25)
+      }
+    }
+  }
   const set = (selector, value) => js('const el=document.querySelector(arguments[0]);el.value=arguments[1];el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}))', [selector,value])
   await wd(`/session/${session}/window/rect`, { width: 1440, height: 1000 }); await wd(`/session/${session}/url`, { url: assetOrigin })
   await until(() => js('return document.querySelector("#transcript").textContent.includes("Your physical workspace.")'), 'empty onboarding')
@@ -141,23 +158,26 @@ test('actual desktop application completes the browser simulation journey with a
   await until(() => js('return document.querySelector("#execution-state").textContent.includes("VERIFIED SUCCESS")'), 'stored run selected')
   await set('#message', 'Find an alignment approach'); await click('#send-message')
   await until(() => application.snapshot().experiments?.current?.phase === 'PROPOSED' && !application.snapshot().conversation.busy, 'scripted experiment proposal')
-  await click('[data-tab="experiments"]')
-  assert.equal(await js('return document.querySelector("#experiments").hidden'), false)
-  assert.equal(await js('return document.querySelector("#workcell").hidden'), true)
-  assert.match(await js('return document.querySelector("#experiments").textContent'), /SIMULATION ONLY/)
-  assert.equal(await js('return document.querySelector("#experiment-approve").disabled'), true)
+  await click('#inspector-close')
+  await until(() => js('return Boolean(document.querySelector("#chat-experiment-approve"))'), 'proposal review available in the conversation')
+  assert.equal(await js('return document.querySelector("#inspector").hidden'), true)
+  assert.match(await js('return document.querySelector("#chat-experiment-card").textContent'), /SIMULATION ONLY/)
+  assert.equal(await js('return document.querySelector("#chat-experiment-approve").disabled'), false)
   assert.equal(application.snapshot().experiments.current.trials.length, 0)
   const experimentId = application.snapshot().experiments.current.id
-  await click('#experiment-confirm'); await click('#experiment-approve')
+  if (evidence) { const shot = await wd(`/session/${session}/screenshot`); await writeFile(`${evidence}/desktop-inline-proposal.png`, Buffer.from(shot, 'base64')) }
+  await click('#chat-experiment-approve')
   await until(() => application.snapshot().experiments.current.phase === 'RUNNING', 'approved synthetic trial running')
   await wd(`/session/${session}/refresh`, {})
-  await until(() => js('return Boolean(document.querySelector("[data-tab=experiments]"))'), 'renderer reloaded during experiment')
-  await click('[data-tab="experiments"]')
+  await until(() => js('return Boolean(document.querySelector("#chat-experiment-card"))'), 'renderer reloaded during experiment')
   await until(() => application.snapshot().experiments.current.phase === 'COMPLETED', 'bounded scripted experiment completed')
+  await until(() => js('return document.querySelectorAll("#chat-experiment-card tbody tr").length===4 && document.querySelector("#chat-experiment-card").textContent.includes("Best recorded: 0.375 mm error")'), 'completed measurements visible in the conversation')
+  await click('#chat-experiment-details')
   await until(() => js('return document.querySelectorAll("#experiment-trials tbody tr").length===4 && document.querySelector("#experiment-best")?.textContent.includes("0.375 mm error")'), 'all completed trial comparisons visible')
   assert.deepEqual(application.snapshot().experiments.current.trials.map((trial) => trial.offsetMm), [0, 1.5, 2.25, 2.625])
   assert.match(await js('return document.querySelector("#experiment-best").textContent'), /0.375 mm error at 2.625 mm offset/)
-  assert.equal(commands.filter((name) => name === 'experiment.approve').length, 1, 'renderer reload never replays approval')
+  assert.equal(commands.filter((name) => name === 'experiment.approveAndContinue').length, 1, 'renderer reload never replays inline approval or continuation')
+  assert.equal(commands.filter((name) => name === 'experiment.approve').length, 0, 'conversation approval does not require an inspector action')
   assert.equal(application.snapshot().workcell.execution.runs.length, 2, 'synthetic experiments never dispatch physical run commands')
   if (evidence) { const shot = await wd(`/session/${session}/screenshot`); await writeFile(`${evidence}/desktop-synthetic-experiment-completed.png`, Buffer.from(shot, 'base64')) }
   await click('#experiment-propose')
@@ -174,5 +194,5 @@ test('actual desktop application completes the browser simulation journey with a
   assert.equal(await js('return document.querySelectorAll("#experiment-history-trials tbody tr").length'), 4)
   assert.match(await js('return document.querySelector("#experiment-history-best").textContent'), /0.375 mm error/)
   assert.deepEqual(unexpected, []); assert.deepEqual(await js('return window.__errors'), [])
-  if (evidence) await writeFile(`${evidence}/renderer-application-result.json`, JSON.stringify({ status: 'PASS', scope: 'Actual renderer + createApplication + catalog + existing Workcell/execution controllers + scripted simulation host; no Electron transport, AI model or physical hardware verification.', checks: ['empty onboarding has no commands', 'explicit simulation project', 'discovery', 'conversation and destination question', 'proposal', 'prepare waits for separate exact approval', 'three scripted transitions', 'receipt integrity', 'synthetic image decode and Stop clearing/release', 'rename and new conversation', 'saved transcript and run history after browser reload', 'chat experiment proposal', 'operator exact trial-budget approval', 'four signed-measurement revisions', 'reload during trial without approval replay', 'recorded best comparison', 'independent experiment Stop and history'], commands, unexpectedExternalCalls: unexpected }, null, 2))
+  if (evidence) await writeFile(`${evidence}/renderer-application-result.json`, JSON.stringify({ status: 'PASS', scope: 'Actual renderer + createApplication + catalog + existing Workcell/execution controllers + scripted simulation host; no Electron transport, AI model or physical hardware verification.', checks: ['empty onboarding has no commands', 'explicit simulation project', 'discovery', 'conversation and destination question', 'proposal', 'prepare waits for separate exact approval', 'three scripted transitions', 'receipt integrity', 'synthetic image decode and Stop clearing/release', 'rename and new conversation', 'saved transcript and run history after browser reload', 'chat experiment proposal', 'operator exact trial-budget approval', 'four signed-measurement revisions', 'reload during trial without approval replay', 'recorded best comparison', 'independent experiment Stop and history'], commands, staleClickRetries, unexpectedExternalCalls: unexpected }, null, 2))
 })

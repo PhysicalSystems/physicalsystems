@@ -17,7 +17,7 @@ test('desktop renderer presents saved projects and routes operator interactions 
     try {
       if (request.url === '/fixture.js') { response.writeHead(200, { 'Content-Type': 'text/javascript' }); response.end(fixture); return }
       const requested = request.url === '/' ? 'index.html' : request.url.slice(1)
-      if (!['index.html','styles.css','app.js','workcell.js','experiments.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
+      if (!['index.html','styles.css','app.js','workcell.js','experiments.js','markdown.js','view-state.js'].includes(requested)) { response.writeHead(404); response.end(); return }
       const file = requested === 'view-state.js' ? new URL('../../cli/src/harness/workcell-view/view-state.js', import.meta.url) : new URL(`../src/renderer/${requested}`, import.meta.url)
       let data = await readFile(file)
       if (requested === 'index.html') data = Buffer.from(data.toString().replace('<script type="module"', '<script src="./fixture.js"></script><script type="module"'))

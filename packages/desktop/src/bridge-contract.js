@@ -11,7 +11,7 @@ export const COMMANDS = new Set([
   'workcell.execution.stop', 'workcell.execution.reconcile', 'workcell.execution.select',
   'workcell.execution.receipt', 'settings.get', 'settings.models', 'settings.selectModel',
   'settings.providerLogin', 'settings.providerLogout', 'settings.providerAnswer', 'settings.providerCancel', 'settings.openAuthUrl',
-  'experiment.propose', 'experiment.approve', 'experiment.trial', 'experiment.finish', 'experiment.stop',
+  'experiment.propose', 'experiment.approve', 'experiment.approveAndContinue', 'experiment.continue', 'experiment.trial', 'experiment.finish', 'experiment.stop',
 ]);
 
 export function validateCommand(name, payload = {}) {
@@ -31,10 +31,19 @@ export function validateCommand(name, payload = {}) {
   visit(clean);
   if (name.startsWith('experiment.')) {
     const operations = { propose: ['goal', 'trialLimit', 'requestId', 'mode'], approve: ['experimentId', 'expectedDigest', 'approved'],
+      approveAndContinue: ['experimentId', 'expectedDigest', 'requestId', 'approved'], continue: ['experimentId', 'expectedDigest', 'requestId'],
       trial: ['experimentId', 'requestId', 'offsetMm'], finish: ['experimentId'], stop: ['experimentId'] };
     const allowed = new Set(['projectId', 'conversationId', 'connectionGeneration', ...operations[name.slice('experiment.'.length)]]);
     if (Object.keys(clean).some((key) => !allowed.has(key))) throw new Error('This experiment request contains unsupported fields.');
     if (!clean.projectId || !clean.conversationId) throw new Error('An explicit project and conversation are required for experiments.');
+    if (['experiment.approveAndContinue', 'experiment.continue'].includes(name)) {
+      if (!Number.isSafeInteger(clean.connectionGeneration) || clean.connectionGeneration < 0) throw new Error('An exact connection generation is required for experiment continuation.');
+      for (const key of ['projectId', 'conversationId', 'experimentId', 'expectedDigest']) {
+        if (typeof clean[key] !== 'string' || !clean[key].trim() || clean[key].length > 160 || /[\u0000-\u001f\u007f]/u.test(clean[key])) throw new Error(`The experiment ${key} is invalid.`);
+      }
+      if (typeof clean.requestId !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(clean.requestId)) throw new Error('A bounded unique request ID is required.');
+      if (name === 'experiment.approveAndContinue' && clean.approved !== true) throw new Error('Review this exact simulation experiment and explicitly approve its trial budget.');
+    }
   }
   return clean;
 }
@@ -50,7 +59,7 @@ export function assetName(requestUrl) {
   const url = new URL(requestUrl);
   if (url.protocol !== 'physicalsystems:' || url.host !== 'desktop' || url.search || url.hash) return null;
   // An explicit allowlist prevents access to application code, metadata, or local files.
-  const allowed = new Set(['/index.html', '/styles.css', '/app.js', '/workcell.js', '/experiments.js', '/view-state.js']);
+  const allowed = new Set(['/index.html', '/styles.css', '/app.js', '/workcell.js', '/experiments.js', '/view-state.js', '/markdown.js']);
   return allowed.has(url.pathname) ? url.pathname.slice(1) : null;
 }
 

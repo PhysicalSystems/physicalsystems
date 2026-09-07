@@ -93,6 +93,18 @@ physical-run simulation controls are exercised in the same browser journey.
 This qualifies synthetic UI/controller integration only; no real model-driven
 experimentation, VLA behavior, physics or SO-101 trial is established.
 
+The conversation now owns a visible experiment review card. Its explicit
+Approve & continue action uses the exact controller plan and then submits a
+single scoped assistant request. Fakes and headless Firefox cover approval
+failure, request deduplication, timeout/status recovery, expired/changed plans,
+detached controls, independent Stop, results in chat and optional detail
+navigation. The actual application-backed browser journey approves in chat,
+reloads during a scripted trial and reads the completed measurements in chat.
+Assistant Markdown formatting is tested as inert DOM text with bold, headings,
+lists and code; raw HTML, links and images grant no renderer capabilities.
+The user demonstrated a three-trial model-driven synthetic result on the earlier
+UI; that observation does not qualify the new inline controls in native Electron.
+
 Release qualification still requires:
 
 - An authorized live local and SSH Node assessment, including authentication,

@@ -126,6 +126,18 @@ export function loadCuratedAgentSkills({ loadSkillsFromDir, packageRoot = PACKAG
     summaries.push(Object.freeze({ skillId: parsed.name, description: parsed.description }))
   }
 
+  return verifiedRegistry(root, summaries)
+}
+
+/** Agent-neutral entry for the same hash-pinned built-ins. The pinned bytes and
+ * fixed metadata are sufficient here; no Pi parser or project skill search runs. */
+export function loadVerifiedAgentSkills({ packageRoot = PACKAGE_ROOT } = {}) {
+  const root = path.resolve(packageRoot)
+  for (const entry of PACKAGES) readPackage(root, entry)
+  return verifiedRegistry(root, PACKAGES.map(({ id, description }) => Object.freeze({ skillId: id, description })))
+}
+
+function verifiedRegistry(root, summaries) {
   return Object.freeze({
     summaries: Object.freeze(summaries),
     prompt() {

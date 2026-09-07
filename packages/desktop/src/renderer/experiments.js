@@ -125,3 +125,152 @@ export function mountExperiments(root, { command }) {
     dispose() { disposed = true; clearInterval(timer) },
   }
 }
+
+/** Approval is a real operator action bound to the controller's exact plan.
+ * Assistant prose cannot create this card or authorize a continuation. */
+export function mountExperimentChat(root, { command, openDetails }) {
+  let state, scope, context = '', key = '', disposed = false, attempt = null, stopping = null, finishing = null, failure = ''
+  const current = () => state?.experiments?.current
+  const identity = () => JSON.stringify([scope?.projectId, scope?.conversationId, scope?.connectionGeneration, current()?.id, current()?.planDigest])
+  const progress = () => JSON.stringify([state?.conversation?.messages?.length, state?.conversation?.messages?.at(-1)?.id,
+    state?.conversation?.error, current()?.trials?.length])
+  const active = () => !disposed && state?.activeProjectId === scope?.projectId && state?.activeConversationId === scope?.conversationId
+  const offline = () => state?.hostUnavailable || state?.experiments?.historical || state?.experiments?.availability !== 'simulation-only'
+  const unavailable = () => offline() || Boolean(state?.experiments?.error) || current()?.mode !== 'simulation'
+  const settled = () => attempt?.status === 'accepted' && !state?.conversation?.busy && (attempt.sawBusy || progress() !== attempt.before)
+  const unconfirmed = () => attempt?.status === 'unknown' || attempt?.status === 'accepted' && !settled()
+  const invalidate = () => { key = ''; render() }
+  function actionButton(id, text, action, disabled = false, className = '') {
+    const owner = context, button = node('button', text, className)
+    button.type = 'button'; button.id = id; button.disabled = disabled
+    button.onclick = () => { if (active() && context === owner && root.contains(button) && !button.disabled) action() }
+    return button
+  }
+  function continueExperiment(approve) {
+    if (!active() || unavailable() || attempt?.pending || finishing?.pending || stopping?.pending || state?.conversation?.busy) return
+    const record = current()
+    if (!record || Date.now() >= record.expiresAt || record.phase !== (approve ? 'PROPOSED' : 'READY')) return
+    const reuse = attempt && (unconfirmed() || attempt.status === 'rejected')
+    const token = { context, requestId: reuse ? attempt.requestId : crypto.randomUUID(), pending: true,
+      status: 'pending', before: reuse ? attempt.before : progress(), sawBusy: reuse ? attempt.sawBusy : false, timer: null }
+    if (attempt) clearTimeout(attempt.timer)
+    attempt = token; failure = ''
+    const operation = approve ? 'approveAndContinue' : 'continue'
+    const payload = { ...scope, experimentId: record.id, expectedDigest: record.planDigest,
+      requestId: token.requestId, ...(approve ? { approved: true } : {}) }
+    const owned = () => active() && context === token.context && attempt === token
+    token.timer = setTimeout(() => {
+      if (!owned()) return
+      token.pending = false; token.status = 'unknown'
+      failure = 'The request is not confirmed yet. Check its status here before trying another continuation.'; invalidate()
+    }, 6500)
+    invalidate()
+    void Promise.resolve().then(() => command(`experiment.${operation}`, payload)).then((result) => {
+      if (!owned()) return
+      const receipt = result?.continuation
+      token.pending = false
+      if (receipt?.requestId === token.requestId && receipt.accepted === true) {
+        token.status = 'accepted'; failure = ''
+      } else if (receipt?.requestId === token.requestId && receipt.accepted === false) {
+        token.status = 'rejected'; failure = receipt.error || 'The assistant did not start. Your recorded approval is preserved; retry Continue when the assistant is available.'
+      } else {
+        token.status = 'unknown'; failure = 'The continuation was not confirmed. Check its recorded status before trying another request.'
+      }
+    }, (error) => {
+      if (!owned()) return
+      token.pending = false; token.status = 'unknown'
+      failure = error.message || 'The request could not be confirmed. Inspect this experiment before retrying.'
+    }).finally(() => { clearTimeout(token.timer); if (owned()) invalidate() })
+  }
+  function controlExperiment(operation) {
+    const stop = operation === 'stop'
+    if (!active() || offline() || !current()) return
+    if (stop ? stopping?.pending : unavailable() || finishing?.pending || stopping?.pending || attempt?.pending || state?.conversation?.busy || current().phase !== 'READY') return
+    const token = { context, pending: true, timer: null }, payload = { ...scope, experimentId: current().id }
+    if (stop) stopping = token; else finishing = token
+    failure = ''
+    const label = stop ? 'Stop' : 'Finish'
+    const owned = () => active() && context === token.context && (stop ? stopping : finishing) === token
+    token.timer = setTimeout(() => {
+      if (!owned()) return
+      token.pending = false; failure = `${label} is not confirmed yet. Inspect the recorded status and retry ${label}.`; invalidate()
+    }, 6500)
+    invalidate()
+    void Promise.resolve().then(() => command(`experiment.${operation}`, payload)).then(() => {
+      if (owned()) { token.pending = false; failure = '' }
+    }, (error) => {
+      if (owned()) { token.pending = false; failure = error.message || `${label} could not be confirmed. Retain this experiment and retry ${label}.` }
+    }).finally(() => { clearTimeout(token.timer); if (owned()) invalidate() })
+  }
+  function render() {
+    if (disposed) return
+    const experiment = state?.experiments, record = current(), expired = record && (!Number.isFinite(record.expiresAt) || Date.now() >= record.expiresAt)
+    const busy = Boolean(state?.conversation?.busy), pending = Boolean(attempt?.pending || finishing?.pending)
+    const next = JSON.stringify([context, experiment, busy, state?.conversation?.error, progress(),
+      unavailable(), expired, pending, attempt?.status, settled(), stopping?.pending, failure])
+    if (next === key) return
+    key = next; root.replaceChildren(); root.hidden = !record && !experiment?.error
+    if (root.hidden) return
+    root.id = 'chat-experiment-card'; root.className = 'experiment-chat-card'; root.setAttribute('aria-label', 'Experiment in this conversation')
+    const title = node('div', undefined, 'experiment-chat-heading')
+    title.append(node('span', 'SIMULATION ONLY', 'eyebrow'), node('span', unavailable() ? 'Status unavailable' : labelPhase(record?.phase), 'badge'))
+    root.append(title)
+    if (record) {
+      const heading = record.phase === 'PROPOSED' ? 'Review experiment' : record.phase === 'COMPLETED' ? 'Experiment completed' : 'Experiment'
+      root.append(node('h3', heading), node('p', record.goal, 'experiment-chat-goal'))
+      const input = experiment.fixture?.input
+      root.append(node('p', `${record.trials?.length || 0} / ${record.trialLimit} trials · Synthetic alignment · Offset ${input?.minimum ?? -10} to ${input?.maximum ?? 10} mm`, 'panel-note'))
+      if (record.phase === 'PROPOSED') {
+        root.append(node('p', `Approve up to ${record.trialLimit} synthetic trials and let the assistant continue. This numeric fixture does not operate equipment.`, 'experiment-chat-review'))
+        root.append(node('p', expired ? 'This proposal has expired. Stop it and ask for a new proposal.' : `Approval expires ${new Date(record.expiresAt).toLocaleTimeString()}.`, expired ? 'error' : 'panel-note'))
+      }
+      if (record.trials?.length) {
+        const table = node('table', undefined, 'experiment-trials'), head = node('thead'), row = node('tr'), body = node('tbody')
+        table.append(node('caption', 'Recorded synthetic results'))
+        for (const text of ['Trial', 'Offset', 'Error', 'Status']) row.append(node('th', text))
+        head.append(row); table.append(head)
+        for (const [index, trial] of record.trials.entries()) {
+          const row = node('tr'), measured = trial.status === 'COMPLETED' && Number.isFinite(trial.result?.alignmentErrorMm)
+          for (const value of [index + 1, `${trial.offsetMm} mm`, measured ? `${trial.result.alignmentErrorMm} mm` : 'Not confirmed', labelPhase(trial.status)]) row.append(node('td', value))
+          body.append(row)
+        }
+        table.append(body); root.append(table)
+        const measured = record.trials.filter((trial) => trial.status === 'COMPLETED' && Number.isFinite(trial.result?.alignmentErrorMm))
+        if (record.phase === 'COMPLETED' && measured.length) {
+          const best = measured.reduce((best, trial) => trial.result.alignmentErrorMm < best.result.alignmentErrorMm ? trial : best)
+          root.append(node('p', `Best recorded: ${best.result.alignmentErrorMm} mm error at ${best.offsetMm} mm offset.`, 'experiment-best'))
+        }
+      }
+      if (record.recoveryReason) root.append(node('p', record.recoveryReason, 'error'))
+      if (record.phase === 'OUTCOME_UNKNOWN') root.append(node('p', 'The outcome is unconfirmed. Stop and retain the evidence; an uncertain trial is never replayed automatically.', 'error'))
+      if (busy && ['PROPOSED', 'READY'].includes(record.phase)) root.append(node('p', 'The assistant is working. Answer its question or wait for the response before continuing.', 'panel-note'))
+      if (record.phase === 'READY' && expired) root.append(node('p', 'The approval has expired. Stop this experiment and review a new proposal.', 'error'))
+      if (attempt?.status === 'accepted' && !settled() && !busy && record.phase === 'READY') root.append(node('p', 'Continuation requested. Waiting for the assistant’s status.', 'panel-note'))
+      const actions = node('div', undefined, 'actions')
+      if (record.phase === 'PROPOSED') actions.append(actionButton('chat-experiment-approve', pending ? 'Requesting approval…' : 'Approve & continue', () => continueExperiment(true), unavailable() || busy || pending || stopping?.pending || expired, 'primary'))
+      if (record.phase === 'READY') {
+        if (record.trials.length < record.trialLimit) actions.append(actionButton('chat-experiment-continue', pending ? 'Requesting continuation…' : unconfirmed() ? 'Check continuation' : 'Continue experiment', () => continueExperiment(false), unavailable() || busy || pending || stopping?.pending || expired, 'primary'))
+        else actions.append(actionButton('chat-experiment-finish', finishing?.pending ? 'Finishing experiment…' : 'Finish experiment', () => controlExperiment('finish'), unavailable() || busy || pending || stopping?.pending || !record.trials.some((trial) => trial.status === 'COMPLETED'), 'primary'))
+      }
+      if (ACTIVE.has(record.phase)) actions.append(actionButton('chat-experiment-stop', stopping?.pending ? 'Stopping experiment…' : 'Stop experiment', () => controlExperiment('stop'), offline() || stopping?.pending, 'plain stop'))
+      actions.append(actionButton('chat-experiment-details', 'View details', openDetails, false, 'plain'))
+      root.append(actions)
+    }
+    if (experiment?.error) root.append(node('p', experiment.error, 'error'))
+    if (failure) { const error = node('p', failure, 'error'); error.setAttribute('role', 'status'); root.append(error) }
+  }
+  const timer = setInterval(render, 500)
+  return {
+    update(next, nextScope) {
+      state = next; scope = nextScope
+      const nextContext = identity()
+      if (nextContext !== context) {
+        clearTimeout(attempt?.timer); clearTimeout(stopping?.timer); clearTimeout(finishing?.timer)
+        context = nextContext; attempt = null; stopping = null; finishing = null; failure = ''; key = ''
+      }
+      if (attempt && state?.conversation?.busy) attempt.sawBusy = true
+      render()
+    },
+    dispose() { disposed = true; clearInterval(timer); clearTimeout(attempt?.timer); clearTimeout(stopping?.timer); clearTimeout(finishing?.timer) },
+  }
+}

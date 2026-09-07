@@ -93,7 +93,7 @@ assert.deepEqual(
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort(),
-  ['cli', 'desktop', 'npx', 'pi', 'pi-runtime', 'runtime'],
+  ['cli', 'desktop', 'npx', 'operator-core', 'operator-service', 'pi', 'pi-runtime', 'runtime'],
   'the clean export contains the Harness, private desktop development client, public Python Runtime and frozen compatibility source, never private Node source',
 )
 checkDesktopManifest(JSON.parse(readFileSync(path.join(root, 'packages/desktop/package.json'), 'utf8')))

@@ -1,0 +1,10 @@
+{
+  "name": "@physicalsystems/operator-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": { ".": "./src/index.js" },
+  "scripts": { "test": "node --test test/*.test.js" },
+  "engines": { "node": ">=22.19.0" }
+}

@@ -13,7 +13,7 @@ import { experimentRequestFailure } from '../../cli/src/harness/experiments/cont
 import { listProvidersCommand, providerLoginCommand, providerLogoutCommand } from '../../cli/src/commands/provider.js'
 import * as connectionAdapters from './connections.js'
 import { createSimulationHost } from './simulation.js'
-import { validateAuthDestination } from './bridge-contract.js'
+import { validateAuthDestination, validateCommand } from './bridge-contract.js'
 
 const TERMINAL = new Set(['VERIFIED_SUCCESS', 'FAILED', 'CANCELLED', 'BLOCKED'])
 const ACTIVE_EXPERIMENT = new Set(['READY', 'RUNNING', 'OUTCOME_UNKNOWN'])
@@ -341,9 +341,92 @@ export async function createApplication({ dataDir, catalog, connections = connec
     if (body.conversationId && !state().conversations.some((c) => c.id === body.conversationId && c.projectId === p.id && !c.archived)) throw fail('The conversation no longer belongs to this project.')
     return p
   }
+  async function continueExperiment(p, c, host, body, operation, owner) {
+    const { entry, experiments, sessionId, stopEpoch } = owner
+    const checkScope = () => {
+      if (hosts.get(p.id) !== entry || entry.host !== host || entry.switching || entry.conversationId !== c.id ||
+          state().selection.projectId !== p.id || state().selection.conversationId !== c.id ||
+          host.snapshot().sessionId !== sessionId || host.getExperiments?.() !== experiments) {
+        throw fail('The experiment conversation changed. Open its conversation and review the current experiment.')
+      }
+      if (body.connectionGeneration !== generation(p.id)) throw fail('The connection changed. Refresh and review the current experiment.')
+      if ((entry.experimentStopEpoch || 0) !== stopEpoch) throw fail('Stop was requested while approval was pending. Inspect the current experiment; no continuation was submitted.')
+    }
+    const reviewed = (requireReady = false) => {
+      checkScope()
+      const value = experiments.snapshot(), current = value.current
+      if (value.error) throw fail(value.error)
+      if (!current || current.id !== body.experimentId) throw fail('The experiment has changed. Refresh and review the current proposal before acting.')
+      if (current.mode !== 'simulation' || current.planDigest !== body.expectedDigest) throw fail('The proposal does not match the reviewed plan. Refresh and review its exact goal and trial limit.')
+      const at = Date.parse(now())
+      if (!Number.isFinite(at) || !Number.isFinite(current.expiresAt) || at >= current.expiresAt) throw fail('This experiment approval has expired. Stop it and propose a new bounded experiment for review.')
+      if (current.phase === 'OUTCOME_UNKNOWN' || current.stopStatus === 'UNCONFIRMED') throw fail('The experiment outcome or Stop is unconfirmed. Inspect its evidence and use Stop; continuation is blocked.')
+      if (requireReady && (current.phase !== 'READY' || !Number.isFinite(current.approvedAt))) throw fail('Review and approve this exact simulation proposal before continuing; an existing READY approval is required.')
+      return value
+    }
+    const requireBudget = (current) => {
+      if (!Number.isInteger(current.trialLimit) || current.trialLimit < 1 || current.trialLimit > 10 ||
+          !Array.isArray(current.trials) || current.trials.length >= current.trialLimit) throw fail('The approved trial limit has been reached. Finish this experiment or propose a new one for review.')
+    }
+    const requireIdle = () => {
+      const state = host.snapshot()
+      if (state.disposed || state.failed) throw fail('This assistant session is unavailable. Reopen its conversation before continuing.')
+      if (state.busy) throw fail('Wait for the current assistant request to finish, or use Cancel before continuing the experiment.')
+    }
+    const value = reviewed(), fingerprint = JSON.stringify([body.experimentId, body.expectedDigest])
+    // Connection freshness is checked above, but reconnecting a live session
+    // cannot retire its accepted IDs and make an old continuation replayable.
+    const scope = JSON.stringify([c.id, sessionId])
+    if (entry.experimentContinuations?.scope !== scope) entry.experimentContinuations = { scope, requests: new Map() }
+    const requests = entry.experimentContinuations.requests, previous = requests.get(body.requestId)
+    if (previous && previous.fingerprint !== fingerprint) throw fail('This request identifier was already used for a different action. Refresh and submit a new request.')
+    const mode = typeof host.startExperimentGuide === 'function' ? 'scripted' : 'model'
+    const response = (accepted, duplicate, error) => ({ ...experiments.snapshot(),
+      continuation: { accepted, duplicate, requestId: body.requestId, mode, ...(error ? { error } : {}) } })
+    // Retain accepted IDs for this live session without eviction: an old retry
+    // must not replay after the host's smaller ordinary-message cache rotates.
+    // A duplicate acknowledges prior acceptance only; it never resumes work.
+    if (previous?.accepted || (mode === 'scripted' && [...requests.values()].some((request) => request.accepted && request.fingerprint === fingerprint))) {
+      if (['STOPPED', 'INTERRUPTED', 'FAILED'].includes(value.current.phase)) throw fail('This experiment is stopped or interrupted. Propose a new experiment for review; no continuation was submitted.')
+      return response(true, true)
+    }
+    if (operation === 'continue') reviewed(true)
+    requireBudget(value.current); requireIdle()
+    if (!previous && requests.size >= 256) throw fail('This conversation has reached its experiment continuation request limit. Stop or finish its experiment and start a new conversation; accepted requests are never replayed.')
+    if (operation === 'approveAndContinue' && value.current.phase !== 'READY') {
+      // The shared controller owns exact digest/expiry checks and durable
+      // approval. An awaited approval is rechecked against independent Stop.
+      await experiments.approve({ experimentId: body.experimentId, expectedDigest: body.expectedDigest })
+    }
+    requireBudget(reviewed(true).current); requireIdle()
+    const request = previous || { fingerprint, accepted: false }
+    requests.set(body.requestId, request)
+    try {
+      let accepted
+      if (mode === 'scripted') {
+        host.startExperimentGuide(body.experimentId)
+        accepted = { accepted: true, duplicate: false }
+      } else {
+        const prompt = 'Continue the approved synthetic simulation experiment. Run the remaining trials, compare the measurements, and summarize the result.'
+        accepted = host.prompt(prompt, body.requestId)
+      }
+      if (accepted?.accepted !== true) throw fail('The assistant did not confirm accepting the continuation. Inspect its state before retrying Continue.')
+      request.accepted = true
+      emit(); return response(true, Boolean(accepted.duplicate))
+    } catch (error) {
+      // Approval remains durable even if model selection or submission fails.
+      // Reusing this ID lets host.prompt resolve uncertain acceptance without
+      // replay; a new explicit request is needed after an accepted model error.
+      emit(); return response(false, false, safeFailure(error))
+    }
+  }
   async function runCommand(name, body = {}) {
     if (closing) throw fail('The desktop host is closing.')
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw fail('Request fields are invalid.')
+    const inlineContinuation = ['experiment.approveAndContinue', 'experiment.continue'].includes(name)
+    if (inlineContinuation) {
+      try { body = validateCommand(name, body) } catch (error) { throw fail(error.message) }
+    }
     if (name === 'project.create') {
       const id = `project-${randomUUID()}`, connectionId = `connection-${randomUUID()}`, conversationId = `conversation-${randomUUID()}`
       const name = text(body.name, 'Project name'), connection = body.connection
@@ -500,13 +583,20 @@ export async function createApplication({ dataDir, catalog, connections = connec
       await host.setModel(text(body.provider, 'Provider'), text(body.modelId || body.id, 'Model'))
       emit(); return snapshot()
     }
+    let continuationOwner
     if (name.startsWith('experiment.')) {
       const entry = hosts.get(p.id), independentStop = name === 'experiment.stop'
+      if (inlineContinuation && body.connectionGeneration !== generation(p.id)) throw fail('The connection changed. Refresh and review the current experiment.')
       if (body.projectId !== p.id || !c || body.conversationId !== c.id || c.projectId !== p.id || entry?.switching ||
-          (entry && entry.conversationId !== c.id) || (!entry && independentStop) ||
+          (entry && entry.conversationId !== c.id) || (!entry && (independentStop || inlineContinuation)) ||
           (!independentStop && (state().selection.projectId !== p.id || state().selection.conversationId !== c.id))) {
         throw fail('The experiment conversation changed. Open its conversation and review the current experiment.')
       }
+      // Mark Stop intent before any await so a pending approval cannot outrun
+      // independent cancellation while both requests resolve their host.
+      if (independentStop) entry.experimentStopEpoch = (entry.experimentStopEpoch || 0) + 1
+      if (inlineContinuation) continuationOwner = { entry, experiments: entry.host.getExperiments?.(),
+        sessionId: entry.host.snapshot().sessionId, stopEpoch: entry.experimentStopEpoch || 0 }
     }
     const host = await ensureHost(p, c)
     if (name.startsWith('experiment.')) {
@@ -517,6 +607,7 @@ export async function createApplication({ dataDir, catalog, connections = connec
       }
       const experiments = host.getExperiments?.()
       if (!experiments) throw fail('Experiments are unavailable in this host. Reopen the development app to load the experiment controller.')
+      if (inlineContinuation) return continueExperiment(p, c, host, body, operation, continuationOwner)
       if (!['propose', 'approve', 'trial', 'finish', 'stop'].includes(operation)) throw fail('This experiment action is unsupported.')
       if (operation === 'approve' && body.approved !== true) throw fail('Review this exact simulation experiment and explicitly approve its trial budget.')
       const fields = operation === 'propose' ? { goal: body.goal, trialLimit: body.trialLimit, requestId: body.requestId, mode: body.mode }

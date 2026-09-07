@@ -1,5 +1,6 @@
 import { mountWorkcellView } from './workcell.js'
-import { mountExperiments } from './experiments.js'
+import { mountExperiments, mountExperimentChat } from './experiments.js'
+import { renderMarkdown } from './markdown.js'
 
 // The renderer owns presentation only. All persistence, sessions, provider
 // credentials and Node calls cross the constrained main-process bridge.
@@ -43,6 +44,11 @@ function run(name, payload = {}) { void command(name, payload).catch(() => {}) }
 let workcellNotice = ''
 const workcell = mountWorkcellView(byId('workcell'), { command: (name, payload) => command(name, payload, { quiet: true }), onControls: renderControls, onNotice: (message) => { if (message || noticeMessage === workcellNotice) notice(message); workcellNotice = message } })
 const experiments = mountExperiments(byId('experiments'), { command: (name, payload) => command(name, payload, { quiet: true }) })
+const experimentChatRoot = make('section')
+const experimentChat = mountExperimentChat(experimentChatRoot, {
+  command: (name, payload) => command(name, payload, { quiet: true }),
+  openDetails: () => { panelOpen = true; navOpen = false; setTab('experiments'); layout() },
+})
 function folderIcon(remote) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   svg.setAttribute('viewBox', '0 0 24 24'); svg.classList.add('project-icon'); svg.setAttribute('aria-hidden', 'true')
@@ -140,7 +146,7 @@ function renderTranscript() {
   const conversation = activeConversation(), project = activeProject()
   const workflow = state?.workcell?.workflow
   const key = JSON.stringify([project?.id, conversation?.id, conversation?.messages, conversation?.busy, conversation?.error,
-    workflow?.routeReceipt, workflow?.routeError, workflow?.response?.interpretation, workflow?.capabilityCatalog])
+    workflow?.routeReceipt, workflow?.routeError, workflow?.response?.interpretation, workflow?.capabilityCatalog, state?.experiments])
   if (key === transcriptKey) return
   transcriptKey = key
   const transcript = byId('transcript'), keepBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 90
@@ -159,16 +165,25 @@ function renderTranscript() {
   }
   for (const message of messages) {
     const role = ['user', 'assistant', 'tool'].includes(message.role) ? message.role : 'tool'
+    if (role === 'assistant' && !message.text?.trim()) continue
     const item = make('article', undefined, `message ${role}`); item.dataset.messageId = message.id || ''
-    item.append(make('div', role === 'user' ? 'You' : role === 'assistant' ? 'Physical Systems' : message.toolName || 'Tool', 'who'))
     if (role === 'tool') {
-      const detail = make('details'); detail.append(make('summary', message.toolName || 'Tool result'), make('pre', message.text || 'No text result')); item.append(detail)
-    } else item.append(make('div', message.text || '', `body${message.streaming ? ' streaming' : ''}`))
+      const labels = { ask_choice: 'Ask a question', inspect_local_experiment: 'Inspect experiment', propose_local_experiment: 'Propose experiment', run_simulated_trial: 'Measure simulated trial', finish_local_experiment: 'Finish experiment' }
+      const label = labels[message.toolName] || (message.toolName || 'Tool result').replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
+      const detail = make('details'); detail.append(make('summary', label + (message.isError ? ' · Failed' : '')), make('pre', message.text || 'No text result')); item.append(detail)
+    } else {
+      item.append(make('div', role === 'user' ? 'You' : 'Physical Systems', 'who'))
+      const body = make('div', undefined, `body${role === 'assistant' ? ' message-markdown' : ''}${message.streaming ? ' streaming' : ''}`)
+      if (role === 'assistant') renderMarkdown(body, message.text || '')
+      else body.textContent = message.text || ''
+      item.append(body)
+    }
     transcript.append(item)
   }
   if (conversation?.busy) transcript.append(make('p', 'Assistant is working…', 'small muted'))
   if (conversation?.error) transcript.append(make('p', conversation.error, 'error'))
   if (conversation && workflow) renderProposal(transcript, workflow)
+  if (conversation) transcript.append(experimentChatRoot)
   if (keepBottom) transcript.scrollTop = transcript.scrollHeight
 }
 function blockerAction(code) {
@@ -360,6 +375,7 @@ function update(next) {
   }
   workcell.update(next.workcell, activeProject()?.connection?.status === 'connected', context)
   experiments.update(next, scope())
+  experimentChat.update(next, scope())
   renderSidebar(); renderTranscript(); renderQuestion(); renderSetup(); renderControls(); renderProviderQuestion(); layout()
   if (byId('dialog').open) refreshDialog?.()
   if (slash) renderSlash()
@@ -863,7 +879,7 @@ document.addEventListener('pointerdown', (event) => { if (!event.target.closest(
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closePopover(); navOpen = false; if (innerWidth <= 950) panelOpen = false; layout() } })
 byId('dialog').addEventListener('cancel', () => { if (state?.settings?.loginPending && byId('dialog').dataset.providerQuestion === 'true') run('settings.providerCancel') })
 addEventListener('resize', () => { closePopover(); layout() })
-addEventListener('pagehide', () => { clearTimeout(draftTimer); disposed = true; unsubscribe?.(); workcell.dispose(); experiments.dispose() })
+addEventListener('pagehide', () => { clearTimeout(draftTimer); disposed = true; unsubscribe?.(); workcell.dispose(); experiments.dispose(); experimentChat.dispose() })
 async function start() {
   layout()
   if (!bridge || typeof bridge.snapshot !== 'function' || typeof bridge.command !== 'function' || typeof bridge.subscribe !== 'function') {
