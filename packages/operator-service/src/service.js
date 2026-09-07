@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, lstat } from 'node:fs/promises'
 import path from 'node:path'
 import { createExperimentController, createExperimentStore, createExperimentTools, experimentRequestFailure,
   workcellRequestFailure, cameraIsFresh, loadVerifiedAgentSkills, createReadAgentSkillTool, assertRunMatches } from '../../operator-core/src/index.js'
@@ -44,6 +44,25 @@ function requestId(value) {
 function publicError(error) {
   return error?.operatorServiceError ? error : fail('REQUEST_FAILED', experimentRequestFailure(error)?.message || workcellRequestFailure(error)?.message ||
     'The request could not be confirmed. Inspect its current state before retrying.')
+}
+
+async function createManagedWorkspace(dataDir, id) {
+  // Recheck the real storage ancestry before writing. Do not follow a replaced
+  // parent into an unrelated folder or change permissions on existing folders.
+  let current = path.parse(dataDir).root
+  for (const component of dataDir.slice(current.length).split(path.sep).filter(Boolean)) {
+    current = path.join(current, component)
+    const stat = await lstat(current)
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw fail('WORKSPACE_UNAVAILABLE', 'The managed workspace requires real directories without symbolic links. Preserve the existing folders and inspect the storage path.')
+  }
+  const root = path.join(dataDir, 'projects')
+  try { await mkdir(root, { mode: 0o700 }) } catch (error) { if (error.code !== 'EEXIST') throw error }
+  const stat = await lstat(root)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw fail('WORKSPACE_UNAVAILABLE', 'The managed workspace requires a real directory without symbolic links. Preserve the existing folder and inspect its storage path.')
+  const cwd = path.join(root, id)
+  // A newly allocated project ID must never reuse or overwrite an existing path.
+  await mkdir(cwd, { mode: 0o700 })
+  return cwd
 }
 
 /** Trusted host object. Never expose this whole object to the agent process.
@@ -406,8 +425,9 @@ export async function createOperatorService({ dataDir, secretStore, connections 
           if (!['simulation', 'local', 'ssh'].includes(connection.type)) throw fail('INVALID_CONNECTION', 'Choose simulation, local or SSH')
           if (connection.type === 'local') connection.nodeUrl = connections.normalizeLocalEndpoint(connection.nodeUrl)
           if (connection.type === 'ssh') connectionAdapters.buildSshArgs({ ...connection, remotePort: connection.remotePort || 8876 }, 1)
-          const id = `project-${randomUUID()}`, name = text(body.name, 'Project name'), cwd = body.cwd ? path.resolve(text(body.cwd, 'Project folder', 2000)) : path.join(dataDir, 'projects', id)
-          await mkdir(cwd, { recursive: true, mode: 0o700 })
+          const id = `project-${randomUUID()}`, name = text(body.name, 'Project name')
+          const cwd = body.cwd ? path.resolve(text(body.cwd, 'Project folder', 2000)) : await createManagedWorkspace(dataDir, id)
+          if (body.cwd) await mkdir(cwd, { recursive: true, mode: 0o700 })
           saved.projects.push({ id, name, cwd, generation: 0,
             connection: { ...connection, label: text(connection.label || (connection.type === 'simulation' ? 'Synthetic simulation' : connection.type === 'ssh' ? connection.host : 'This computer'), 'Connection label') } })
           saved.selection = { projectId: id, conversationId: null }; save()

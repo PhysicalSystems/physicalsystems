@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, readFile, readdir, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, readdir, mkdir, writeFile, lstat, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -32,6 +32,43 @@ const propose = (service, bound, callId = 'proposal-one') => service.agentCall({
 const approve = (bound, current, requestId = 'continue-one') => ({ ...bound.binding, experimentId: current.id, expectedDigest: current.planDigest, requestId, approved: true })
 const next = (bound, current, requestId = 'continue-two') => ({ ...bound.binding, experimentId: current.id, expectedDigest: current.planDigest, requestId })
 const value = (result) => JSON.parse(result.content[0].text)
+
+test('a project without a folder has a usable private local workspace and preserves explicit existing folders', async (t) => {
+  const f = await fixture(t), id = await f.create()
+  const project = f.service.snapshot().projects.find((entry) => entry.id === id)
+  assert.equal(typeof project.cwd, 'string')
+  assert.equal(path.isAbsolute(project.cwd), true)
+  assert.equal(path.relative(f.dataDir, project.cwd).startsWith('..'), false)
+  const stat = await lstat(project.cwd)
+  assert.equal(stat.isDirectory(), true)
+  assert.equal(stat.isSymbolicLink(), false)
+  if (process.platform !== 'win32') assert.equal(stat.mode & 0o777, 0o700)
+  const file = path.join(project.cwd, 'workspace-probe.txt')
+  await writeFile(file, 'Synthetic fixture workspace', { flag: 'wx', mode: 0o600 })
+  assert.equal(await readFile(file, 'utf8'), 'Synthetic fixture workspace')
+  const existing = path.join(f.dataDir, 'existing-folder')
+  await mkdir(existing, { mode: 0o750 })
+  await writeFile(path.join(existing, 'existing-config.json'), '{"fixture":true}', { flag: 'wx' })
+  const permissions = (await lstat(existing)).mode
+  const selected = await f.service.command('project.create', { name: 'Existing workspace', cwd: existing, connection: { type: 'simulation' } })
+  assert.equal(selected.projects.find((entry) => entry.id === selected.activeProjectId).cwd, existing)
+  assert.equal((await lstat(existing)).mode, permissions)
+  assert.equal(await readFile(path.join(existing, 'existing-config.json'), 'utf8'), '{"fixture":true}')
+})
+
+test('managed workspace creation refuses a symlinked storage parent before creating files outside its root', async (t) => {
+  const f = await fixture(t), first = await f.create()
+  const managed = path.dirname(f.service.snapshot().projects.find((entry) => entry.id === first).cwd)
+  const outside = path.join(f.dataDir, 'unrelated-directory')
+  await mkdir(outside)
+  await writeFile(path.join(outside, 'preserve.txt'), 'Keep this existing evidence', { flag: 'wx' })
+  await rm(managed, { recursive: true })
+  await symlink(outside, managed, process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(f.create('Must remain uncreated'), /workspace|symbolic|directory|could not be confirmed/i)
+  assert.deepEqual(await readdir(outside), ['preserve.txt'])
+  assert.equal(await readFile(path.join(outside, 'preserve.txt'), 'utf8'), 'Keep this existing evidence')
+  assert.equal(f.service.snapshot().projects.length, 1)
+})
 
 test('bound agent proposes, trusted operator approves once, then canonical synthetic tools measure and finish', async (t) => {
   const f = await fixture(t), bound = await f.bind(await f.create())
