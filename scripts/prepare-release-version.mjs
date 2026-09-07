@@ -24,6 +24,7 @@ const digest = (value) => createHash('sha256').update(value).digest('hex')
 
 export function requireNewVersion(current, next) {
   const stable = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
+  assert.equal(next.trim(), next, 'Version must not contain surrounding whitespace')
   assert.match(next, stable, 'Use a stable major.minor.patch product version')
   const before = current.split('.').map(BigInt), after = next.split('.').map(BigInt)
   const first = after.findIndex((value, index) => value !== before[index])

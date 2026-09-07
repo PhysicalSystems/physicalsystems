@@ -3,10 +3,10 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { lstat, readFile, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { workcellRequestFailure } from './workcell-controller.js'
+import { workcellRequestFailure, WORKCELL_VIEW_MAX_BYTES } from './workcell-controller.js'
 
 const MAX_BODY_BYTES = 8 * 1024
-const MAX_STATE_BYTES = 256 * 1024
+const MAX_STATE_BYTES = WORKCELL_VIEW_MAX_BYTES
 const MAX_FRAME_BYTES = 2 * 1024 * 1024
 const MAX_STATIC_BYTES = 512 * 1024
 const MAX_VIEWERS = 8
@@ -170,7 +170,7 @@ function validateAction(path, body) {
     if (kind === 'stop' && body.reason !== 'operator-requested-stop') throw new HttpError(400, 'invalid_body', 'Unsupported stop reason')
     return body
   }
-  if (path === '/api/refresh') return exact(body, [])
+  if (path === '/api/refresh' || path === '/api/setup/inspect') return exact(body, [])
   if (path === '/api/intent') {
     exact(body, ['text'])
     boundedText(body.text, 2000, 'Intent')
@@ -361,10 +361,14 @@ export async function createWorkcellServer({ host, assetsDir = join(dirname(file
         response.writeHead(200, { 'Content-Type': value.contentType, 'Content-Length': value.bytes.byteLength })
         return response.end(Buffer.from(value.bytes.buffer, value.bytes.byteOffset, value.bytes.byteLength))
       }
-      if (request.method === 'POST' && (['/api/refresh', '/api/intent', '/api/choice', '/api/camera/start', '/api/camera/stop'].includes(path) || EXECUTION_PATH.test(path))) {
+      if (request.method === 'POST' && (['/api/refresh', '/api/setup/inspect', '/api/intent', '/api/choice', '/api/camera/start', '/api/camera/stop'].includes(path) || EXECUTION_PATH.test(path))) {
         const body = validateAction(path, await readBody(request))
         let result
         if (path === '/api/refresh') result = await host.refresh()
+        else if (path === '/api/setup/inspect') {
+          if (typeof host.inspectSetup !== 'function') throw new HttpError(503, 'setup_unavailable', 'Setup inspection is unavailable; reopen /workcell from the Harness')
+          result = await host.inspectSetup()
+        }
         else if (path === '/api/intent') result = await host.submitIntent(body.text)
         else if (path === '/api/choice') result = await host.answerChoice(body)
         else if (EXECUTION_PATH.test(path)) {

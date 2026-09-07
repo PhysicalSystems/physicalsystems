@@ -221,10 +221,14 @@ a successful physical transfer. The npm registry release is a separate gate.
 
 ### Read-only setup preflight
 
-Use `/physical-setup`, or ask the assistant what setup evidence is missing for
-the current proposal. The assistant's `inspect_physical_setup` tool reads the
+Use **Inspect setup** in `/workcell`, `/physical-setup` in the terminal, or ask
+the assistant what setup evidence is missing for the current proposal.
+The assistant's `inspect_physical_setup` tool reads the
 same report. It combines the session's retained discovery/catalog/route evidence
-with a bounded read of execution-service status. It does not refresh discovery,
+with bounded reads of execution-service status and, on supporting Nodes,
+implementation-owned setup requirements. Older Nodes show the requirements
+endpoint as unsupported while retaining the existing evidence report.
+It does not refresh discovery,
 open devices, create a proposal, inspect arbitrary files or change configuration.
 Follow-up questions can explain the previous assessment as explicitly retired
 historical evidence, without restoring its execution eligibility. New discovery,
@@ -237,6 +241,11 @@ Driver behavior, physical calibration, taught positions and qualification remain
 unverified when the current public API does not expose the necessary evidence.
 Matching hashes, simulation and historical observations never establish current
 physical readiness. Each area includes the next operator or integrator action.
+The SO-101 provider profile distinguishes software inspection from separately
+approved configuration and hardware validation procedures. These descriptions
+cannot execute commands or authorize a first physical trial. Report expiry and
+workflow changes invalidate the shared browser report; expired instructions
+remain readable as historical guidance, and reloading cannot renew evidence.
 See [the setup preflight guide](SETUP-PREFLIGHT.md) for the evidence limits and
 the separate preparation/approval path.
 

@@ -62,8 +62,9 @@ test('version preparation changes product roots and guards while preserving ever
   newLock.version = oldLock.version
   newLock.packages[''].version = oldLock.packages[''].version
   assert.deepEqual(newLock, oldLock)
-  assert.ok(plan.updates.get('.github/workflows/npm-release.yml').includes(`preview: '${before.product.version}'`))
-  assert.ok(plan.updates.get('.github/workflows/npm-release.yml').includes(`RELEASE_VERSION: ${next}`))
+  for (const file of ['.github/workflows/npm-release.yml', '.github/workflows/cli.yml']) {
+    assert.equal(plan.updates.get(file), plan.originals.get(file), 'Version preparation must not need workflow-write permissions')
+  }
 })
 
 test('version preparation updates tarball filenames without rewriting longer numeric versions', async (t) => {

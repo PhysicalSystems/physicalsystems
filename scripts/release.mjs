@@ -42,13 +42,12 @@ export function parseReleaseArguments(args) {
   throw new Error(usage)
 }
 
-// Until the protected workflow is deliberately migrated, check its repeated
-// constants cheaply so drift fails before dependency hydration or packaging.
+// Product versions and previous tags come from the reviewed descriptor.
+// Toolchain changes still require deliberate qualification of the matrix.
 export async function checkWorkflowReleaseConfiguration(sourceRoot = root) {
   const release = await readProductRelease(sourceRoot)
   const workflow = await fs.readFile(path.join(sourceRoot, '.github/workflows/npm-release.yml'), 'utf8')
   const expected = {
-    RELEASE_VERSION: release.product.version,
     PI_RUNTIME_VERSION: release.components.piRuntime.version,
     NODE_VERSION: release.toolchain.node,
     NPM_VERSION: release.toolchain.npm,
@@ -67,10 +66,13 @@ export async function checkWorkflowReleaseConfiguration(sourceRoot = root) {
     `${release.toolchain.consumerNpm}:${release.toolchain.consumerNode}`,
   ]).flat().sort()
   if (JSON.stringify(matrixPairs) !== JSON.stringify(expectedPairs)) throw new Error('Protected workflow consumer matrix differs from release/product.json')
-  const tagMatches = [...workflow.matchAll(/\{ bootstrap: '([^']+)', latest: '([^']+)', preview: '([^']+)' \}/g)]
-  if (tagMatches.length !== 1 || JSON.stringify(tagMatches[0].slice(1)) !== JSON.stringify([
-    release.previousTags.bootstrap, release.previousTags.latest, release.previousTags.preview,
-  ])) throw new Error('Protected workflow previous tags differ from release/product.json')
+  const versionBindings = [...workflow.matchAll(/RELEASE_VERSION: (.+)/g)]
+  if (versionBindings.length !== 5 || versionBindings.some((match) => match[1] !== '${{ needs.require-main.outputs.version }}')) {
+    throw new Error('Protected workflow RELEASE_VERSION differs from the reviewed request output')
+  }
+  if (!workflow.includes("JSON.parse(readFileSync('release/product.json', 'utf8')).previousTags")) {
+    throw new Error('Protected workflow previous tags differ from release/product.json binding')
+  }
 }
 
 async function watchSavedRelease(args, sourceRoot, print) {

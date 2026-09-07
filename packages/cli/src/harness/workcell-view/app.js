@@ -48,6 +48,10 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
   let configurationOptionsKey = ''
   let runHistoryKey = ''
   let runDetailsKey = ''
+  let setupRequest = null
+  let setupError = ''
+  let setupKey = ''
+  let retiredSetupReport = ''
   function notice(message = '', category = 'action') {
     notices[category] = message
     const value = Object.values(notices).filter(Boolean).join(' ')
@@ -57,6 +61,8 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     connected = isConnected
     text('connection-state', label)
     byId('connection-dot').classList.toggle('connected', isConnected)
+    if (!isConnected) cancelSetupRead()
+    renderSetup()
     controls()
   }
   async function api(path, body, signal) {
@@ -191,6 +197,136 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     byId('run-stop').disabled = stopPending || execution?.stopPending || !execution?.canStop
     byId('run-reconcile').disabled = executionBusy || !fresh || !execution?.canReconcile
     byId('run-receipt').disabled = executionBusy || !execution?.run
+    byId('setup-inspect').disabled = !connected || stopped || Boolean(setupRequest) || Boolean(state?.setup?.pending)
+  }
+  function setupContext(value) {
+    const workflow = value?.workflow, camera = value?.camera?.status
+    return JSON.stringify([value?.sessionId, workflow?.nodeOrigin, workflow?.snapshot?.discoveryBindingDigest, workflow?.snapshot?.discovery?.snapshotDigest,
+      workflow?.capabilityCatalog?.registryDigest, workflow?.capabilityCatalog?.currentCandidateBindingDigest,
+      workflow?.routeReceipt?.receiptDigest, camera?.selectedCandidateId, camera?.captureSessionId])
+  }
+  function cancelSetupRead() { if (setupRequest) { setupRequest.cancelled = true; setupRequest.controller.abort() } }
+  function retireSetup() {
+    retiredSetupReport = JSON.stringify(state?.setup?.report || state?.setup?.historicalReport || null)
+    setupError = ''; cancelSetupRead(); setupKey = ''
+  }
+  async function inspectSetup() {
+    if (!connected || stopped || setupRequest || state?.setup?.pending) return
+    const request = { controller: new AbortController(), context: setupContext(state), sessionId: state.sessionId, timedOut: false }
+    setupRequest = request; setupError = ''; controls(); renderSetup()
+    const timeout = setTimeout(() => { request.timedOut = true; request.controller.abort() }, 6500)
+    let onAbort
+    const aborted = new Promise((resolve, reject) => {
+      onAbort = () => reject(new Error('setup-read-cancelled'))
+      request.controller.signal.addEventListener('abort', onAbort, { once: true })
+    })
+    try {
+      const result = await Promise.race([(async () => (await api('/api/setup/inspect', {}, request.controller.signal)).json())(), aborted])
+      if (stopped || setupRequest !== request || request.context !== setupContext(state) || result.sessionId !== request.sessionId) return
+      render(result)
+    } catch {
+      if (!stopped && connected && !request.cancelled && setupRequest === request && request.context === setupContext(state)) {
+        setupError = request.timedOut ? 'Setup inspection timed out. Inspect again to retry the bounded read; no readiness is inferred.'
+          : 'Setup inspection could not finish. Check the local Node connection, then inspect again. Reopen /workcell if this view is no longer authorized.'
+      }
+    } finally {
+      clearTimeout(timeout); request.controller.signal.removeEventListener('abort', onAbort)
+      if (setupRequest === request) { setupRequest = null; renderSetup(); controls() }
+    }
+  }
+  function renderSetup() {
+    const setup = state?.setup, report = setup?.report || setup?.historicalReport, projection = report?.implementationSetup
+    const node = projection?.report, now = Date.now()
+    const observedAt = Date.parse(report?.inspection?.observedAt), expiresAt = Date.parse(report?.inspection?.expiresAt)
+    const nodeAt = node ? Date.parse(node.inspectedAt) : null
+    const invalidTime = Boolean(report) && (!Number.isFinite(observedAt) || !Number.isFinite(expiresAt) || expiresAt <= observedAt || now < observedAt
+      || (node && (!Number.isFinite(nodeAt) || now < nodeAt || !Number.isFinite(node.maximumAgeMs) || node.maximumAgeMs <= 0)))
+    const expired = Boolean(report) && !invalidTime && (now >= expiresAt || (node && now >= nodeAt + node.maximumAgeMs))
+    const historical = Boolean(setup?.historicalReport && !setup?.report) || expired
+    const retired = report && JSON.stringify(report) === retiredSetupReport
+    const pending = Boolean(setupRequest || setup?.pending), error = setupError || (setup?.historicalReport && !setup?.report ? null : setup?.error)
+    const key = JSON.stringify([connected, stopped, pending, error, invalidTime, historical, retired, report])
+    if (key === setupKey) return
+    setupKey = key
+    const panel = byId('setup-report'); panel.replaceChildren()
+    let phase = 'NOT INSPECTED', detail = 'Inspect recorded requirements and blockers. This read does not establish physical readiness or execution authorization.'
+    if (stopped || !connected) { phase = 'DISCONNECTED'; detail = 'Reconnect to the Harness to inspect setup. No current setup evidence is displayed.' }
+    else if (pending) { phase = 'INSPECTING'; detail = 'Reading setup records. No hardware or configuration action is requested.' }
+    else if (error) { phase = 'UNAVAILABLE'; detail = error }
+    else if (setup === undefined) { phase = 'UNAVAILABLE'; detail = 'Setup details are unavailable in this view; use /physical-setup in the terminal.' }
+    else if (retired) { phase = 'CONTEXT CHANGED'; detail = 'The selected camera or session context changed. Inspect setup again for the current context.' }
+    else if (invalidTime && report?.inspection?.expiresAt) { phase = 'UNAVAILABLE'; detail = 'The setup report timestamps cannot establish its lifetime. Inspect again; no current evidence is displayed.' }
+    else if (historical && !invalidTime) { phase = 'EXPIRED · HISTORICAL'; detail = 'Expired report · historical guidance only. Inspect again for current evidence; these records do not establish readiness or authorization.' }
+    else if (report) { phase = (report.inspection?.status || 'unavailable').replaceAll('_', ' ').toUpperCase() }
+    text('setup-state', phase)
+    byId('setup-state').className = `badge ${['UNAVAILABLE', 'EXPIRED · HISTORICAL', 'CONTEXT CHANGED'].includes(phase) ? 'warning' : ''}`
+    text('setup-detail', detail)
+    if (!connected || stopped || pending || error || retired || invalidTime || !report) {
+      panel.append(make('p', report && invalidTime && !report.inspection?.expiresAt ? report.inspection?.message || 'Setup records could not be inspected. Inspect again when the local connection is available.'
+        : 'Inspection is read-only. Camera access, configuration changes and physical validation remain separate operator actions.', 'quiet'))
+      return
+    }
+    panel.append(make('p', `${historical ? 'Historical inspection' : 'Inspected'} ${report.inspection.observedAt} · original expiry ${report.inspection.expiresAt}. Source records keep their original times.`, 'receipt-meta'))
+    panel.append(make('p', 'Present means a reported record or declaration exists. Driver health and physical validation remain separate checks.', 'quiet'))
+    if (report.sources?.route?.relationship === 'retired') panel.append(make('p', 'This inventory refers to a previous proposal and remains historical. It does not restore a current route or run permission.', 'error'))
+    const findings = (parent, checks) => {
+      for (const check of (checks || []).slice(0, 64)) {
+        const row = make('div', undefined, 'setup-finding')
+        row.append(make('strong', `${historical ? 'Previously reported ' : ''}${check.id || check.code}: ${check.status || 'blocked'}`))
+        row.append(make('p', `${historical ? 'Recorded explanation: ' : ''}${check.message}`, 'quiet'))
+        if (check.reasonCodes?.length) row.append(make('p', check.reasonCodes.join(' · '), 'receipt-meta'))
+        if (check.action) row.append(make('p', check.action, 'quiet'))
+        parent.append(row)
+      }
+    }
+    findings(panel, report.checks); findings(panel, report.requestBlockers)
+    for (const implementation of (report.implementations || []).slice(0, 16)) {
+      const section = make('details', undefined, 'setup-implementation')
+      section.append(make('summary', `${implementation.implementationId} · recorded route checks`))
+      findings(section, implementation.checks); panel.append(section)
+    }
+    const messages = {
+      not_inspected: 'Exact implementation requirements have not been inspected. Inspect again when the setup service is available.',
+      unsupported: 'This Node does not expose exact implementation setup requirements. The available inventory remains useful; unreported requirements remain unverified.',
+      unavailable: 'Exact implementation requirements are temporarily unavailable. Check the local Node connection and inspect again.',
+      invalid: 'The Node setup report could not be validated. Check the compatible Node service and inspect again; no provider details are trusted.',
+      context_mismatch: 'The Node setup report does not match the current registry context. Refresh the relevant records and inspect again.',
+      expired: 'The Node setup report expired. Inspect again without assuming current readiness.',
+    }
+    if (projection?.status !== 'available' || !node) panel.append(make('p', messages[projection?.status] || messages.not_inspected, 'quiet'))
+    else {
+      panel.append(make('p', `${historical ? 'Historical provider guidance · ' : ''}${node.mode === 'simulation' ? 'SIMULATION · This evidence does not qualify physical operation.' : 'Recorded setup inventory · physical readiness remains unverified.'} Generated ${node.inspectedAt}. Generation time does not refresh physical observations.`, 'panel-note'))
+      for (const implementation of node.implementations.slice(0, 8)) {
+        const section = make('details', undefined, 'setup-implementation')
+        section.append(make('summary', `${implementation.implementationId || implementation.provider || 'Unidentified implementation'} · ${implementation.registeredImplementation ? 'registered implementation' : 'provider setup profile only'}`))
+        if (!implementation.registeredImplementation) section.append(make('p', 'This is supported provider guidance. It is not an installed or registered implementation.', 'quiet'))
+        section.append(make('p', `Capability: ${implementation.capabilityId || 'not reported'} · workcell: ${implementation.workcellId || 'not reported'} · configuration: ${implementation.configurationId || 'not reported'} · profile: ${implementation.profileStatus}`, 'receipt-meta'))
+        for (const binding of implementation.bindings.slice(0, 32)) section.append(make('p', `${binding.scope} · ${binding.id}: ${binding.digest}`, 'receipt-meta'))
+        section.append(make('p', 'Declared versions and limits describe this implementation\'s requirements. They are not observed state or evidence that validation passed.', 'quiet'))
+        if (!implementation.constraints.length) section.append(make('p', 'Exact dependency versions and observation constraints are not exposed for this profile; they remain unverified.', 'quiet'))
+        for (const constraint of implementation.constraints.slice(0, 32)) {
+          const row = make('div', undefined, 'setup-finding')
+          row.append(make('strong', `${historical ? 'Previously declared ' : 'Declared '}${constraint.kind} · ${constraint.name}: ${constraint.value}${constraint.unit ? ` ${constraint.unit}` : ''}`))
+          row.append(make('p', `Source: ${constraint.source} · source record ${constraint.sourceUpdatedAt || 'time not exposed'}. This is the declaration's record time, not an observation or validation time.`, 'receipt-meta'))
+          section.append(row)
+        }
+        for (const requirement of implementation.requirements.slice(0, 16)) {
+          const row = make('div', undefined, 'setup-finding')
+          row.append(make('strong', `${historical ? 'Previously reported ' : ''}${requirement.label}: ${requirement.state}`))
+          row.append(make('p', `${historical ? 'Recorded explanation: ' : ''}${requirement.reason}`, 'quiet'))
+          const evidence = requirement.evidence, procedure = requirement.procedure
+          row.append(make('p', `Evidence: ${evidence.source} · ${evidence.mode} · source record ${evidence.sourceUpdatedAt || 'time not exposed'}. This record time is not a physical validation time.`, 'receipt-meta'))
+          row.append(make('p', `${procedure.label}: ${procedure.description}`, 'quiet'))
+          row.append(make('p', procedure.requiresApproval ? 'Requires separate approval before this validation or configuration procedure.'
+            : 'Software read-only procedure described here; it has not been run by this inspection.', 'receipt-meta'))
+          section.append(row)
+        }
+        panel.append(section)
+      }
+      if (node.truncation.implementationsOmitted || node.truncation.requirementsOmitted || node.truncation.bindingsOmitted || node.truncation.constraintsOmitted) panel.append(make('p', `${node.truncation.implementationsOmitted} implementation rows, ${node.truncation.requirementsOmitted} requirement rows, ${node.truncation.bindingsOmitted} binding rows and ${node.truncation.constraintsOmitted} constraint rows omitted by the bounded report. This view is not a complete setup inventory.`, 'error'))
+    }
+    if (report.counts?.configurationTruncated || report.counts?.implementationTruncated) panel.append(make('p', 'Some configuration or route rows were omitted from this bounded inventory. Review the exact implementation records before any setup procedure.', 'error'))
+    for (const limitation of (report.limitations || []).slice(0, 16)) panel.append(make('p', limitation, 'receipt-meta'))
   }
   function clearDisplayedFrame() {
     displayedCamera = null
@@ -462,13 +598,15 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     if (next.contractVersion !== 'physicalsystems-workcell-view-v1' || next.physicalExecutionAuthorized !== false) throw new Error('Unsupported workcell contract; no physical state is trusted.')
     // HTTP action responses can arrive after a newer snapshot on the event stream.
     if (state && state.sessionId === next.sessionId && next.revision < state.revision) return
+    if (state && setupContext(state) !== setupContext(next)) retireSetup()
+    if (next.setup?.report && JSON.stringify(state?.setup?.report) !== JSON.stringify(next.setup.report)) setupError = ''
     if (state && state.sessionId !== next.sessionId) {
       hideFrame(); stoppedCaptureSessionId = null; cameraStopState = null; cameraStopGeneration += 1
       cameraStarting = false; cameraStopping = false; ordinaryRequest = null; mutating = false
     }
     state = next
     connection(true, 'Connected to Harness')
-    renderCamera(next.camera); renderAgent(next.agent); renderWorkflow(next.workflow); renderExecution(next.execution); controls()
+    renderCamera(next.camera); renderAgent(next.agent); renderWorkflow(next.workflow); renderExecution(next.execution); renderSetup(); controls()
   }
   function renderExecution(execution = {}) {
     const run = execution.run
@@ -560,9 +698,10 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
   byId('run-reconcile').onclick = () => { if (state?.execution?.run) void executionAction('reconcile', { runId: state.execution.run.runId, expectedRunDigest: state.execution.run.runDigest }) }
   byId('run-receipt').onclick = () => { if (state?.execution?.run) void executionAction('receipt', { runId: state.execution.run.runId }) }
   byId('refresh').onclick = () => action('/api/refresh', {})
+  byId('setup-inspect').onclick = inspectSetup
   byId('camera-select').onchange = (event) => {
     selectedCandidate = event.target.value; previewSelectionChanged = true
-    hideFrame(); controls()
+    retireSetup(); renderSetup(); hideFrame(); controls()
   }
   byId('camera-start').onclick = () => {
     const candidate = state?.camera?.status?.availableCameras?.find((item) => item.candidateId === selectedCandidate)
@@ -667,6 +806,7 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     if (!executionApprovalAvailable(state?.execution)) byId('run-confirm').checked = false
     controls()
     expireDisplayedFrame()
+    renderSetup()
     if (displayedCamera) renderObservation(displayedCamera)
     const camera = state?.camera
     if (connected && camera?.status?.phase === 'live' && !cameraIsFresh(camera)
@@ -675,7 +815,7 @@ import { cameraIsFresh, executionReadIsFresh, executionApprovalAvailable } from 
     }
   }, 500)
   addEventListener('pagehide', () => {
-    stopped = true; eventAbort?.abort(); cancelStreamWatchdog(); cancelReconnectDelay(); recoveryAvailable(false); hideFrame()
+    stopped = true; cancelSetupRead(); renderSetup(); eventAbort?.abort(); cancelStreamWatchdog(); cancelReconnectDelay(); recoveryAvailable(false); hideFrame()
   })
   // A browser may reuse this tab when /workcell opens its session link again.
   // Reload to consume a new fragment in memory; history.replaceState itself
