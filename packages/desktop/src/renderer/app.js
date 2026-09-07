@@ -244,7 +244,9 @@ function renderControls() {
   byId('composer').hidden = !conversation
   const busy = pendingSend || conversation?.busy
   byId('send-message').disabled = state?.hostUnavailable || !conversation || busy || (slash ? slash.pending || !slash.options?.length : !byId('message').value.trim())
-  byId('send-message').textContent = slash ? 'Select ↵' : 'Send ↑'
+  const submitLabel = slash ? 'Select option' : 'Send message'
+  byId('send-message').setAttribute('aria-label', submitLabel)
+  byId('send-message').title = submitLabel
   byId('message').disabled = state?.hostUnavailable || !conversation || busy
   byId('cancel-message').hidden = !conversation?.busy
   byId('model-settings').textContent = state?.conversation?.model?.name || state?.conversation?.model?.id || state?.workcell?.agent?.model || 'Select a model'
