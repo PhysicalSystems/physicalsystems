@@ -4,6 +4,18 @@ run-name: npm preview ${{ inputs.coordinator_id || github.run_id }}
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Auto prepares a patch PR or publishes an already reviewed version
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - publish
+      next_version:
+        description: Optional explicit next version (for example 0.3.0); blank increments patch
+        required: false
+        type: string
       coordinator_id:
         description: Optional maintainer coordinator correlation ID (not authorization)
         required: false
@@ -21,7 +33,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_VERSION: 0.2.5
   PI_RUNTIME_VERSION: 0.84.2-tinyedge.1
   NODE_VERSION: 22.19.0
   # Keep the exact packaging/publishing CLI fixed. Consumer verification also
@@ -31,14 +42,23 @@ env:
   NPM_REGISTRY: https://registry.npmjs.org/
   NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
   RELEASE_ARTIFACT_DIRECTORY: release-artifacts
-  RELEASE_ARTIFACT_NAME: physicalsystems-npm-0.2.5-${{ github.sha }}-${{ github.run_attempt }}
+  RELEASE_ARTIFACT_NAME: physicalsystems-npm-${{ github.sha }}-${{ github.run_attempt }}
 
 jobs:
   require-main:
     name: Require a manual main-branch dispatch
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Only preparation can push a new review branch.
+      pull-requests: write
+    outputs:
+      action: ${{ steps.request.outputs.action }}
+      version: ${{ steps.request.outputs.version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -82,9 +102,36 @@ jobs:
       - name: Check coordinated product pins before release packaging
         run: node scripts/release.mjs check
 
+      - name: Decide whether to prepare, publish or do nothing
+        id: request
+        env:
+          RELEASE_OPERATION: ${{ inputs.operation }}
+          REQUESTED_VERSION: ${{ inputs.next_version }}
+          COORDINATOR_ID: ${{ inputs.coordinator_id }}
+        run: node scripts/release-request.mjs plan
+      - name: Prepare the version and generated records for review
+        if: steps.request.outputs.action == 'prepare'
+        run: node scripts/release-request.mjs prepare
+      - name: Open the release review PR
+        if: steps.request.outputs.action == 'prepare'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-request.mjs submit
+      - name: Preserve the preparation patch and decision
+        if: always() && steps.request.outputs.action == 'prepare'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-preparation-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-request
+          if-no-files-found: error
+          retention-days: 14
+
   build:
     name: Pack the Windows x64 candidate once
     needs: require-main
+    if: needs.require-main.outputs.action == 'publish'
+    env:
+      RELEASE_VERSION: ${{ needs.require-main.outputs.version }}
     runs-on: windows-latest
     outputs:
       artifact-name: ${{ steps.candidate.outputs.name }}
@@ -123,7 +170,7 @@ jobs:
           const root = process.env.GITHUB_WORKSPACE
           const expectedVersion = process.env.RELEASE_VERSION
           const expectedRuntimeVersion = process.env.PI_RUNTIME_VERSION
-          assert.equal(expectedVersion, '0.2.5')
+          assert.equal(expectedVersion, JSON.parse(readFileSync('release/product.json', 'utf8')).product.version)
           assert.equal(expectedRuntimeVersion, '0.84.2-tinyedge.1')
 
           const readPackage = (directory) => JSON.parse(
@@ -213,7 +260,9 @@ jobs:
 
   verify:
     name: Verify on Windows ${{ matrix.architecture }} with npm ${{ matrix.npm-version }}
-    needs: build
+    needs: [require-main, build]
+    env:
+      RELEASE_VERSION: ${{ needs.require-main.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -324,7 +373,9 @@ jobs:
 
   verify-linux:
     name: Verify on ${{ matrix.runner }} x64 with npm ${{ matrix.npm-version }}
-    needs: build
+    needs: [require-main, build]
+    env:
+      RELEASE_VERSION: ${{ needs.require-main.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -438,7 +489,9 @@ jobs:
 
   verify-unsupported-node:
     name: Verify the exact candidate fails clearly on Node 12
-    needs: build
+    needs: [require-main, build]
+    env:
+      RELEASE_VERSION: ${{ needs.require-main.outputs.version }}
     runs-on: ubuntu-22.04
     steps:
       - name: Check out the exact prerequisite assertion
@@ -523,8 +576,11 @@ jobs:
           fi
 
   publish:
-    name: Publish physicalsystems 0.2.5 to preview with npm OIDC
+    name: Publish physicalsystems to preview with npm OIDC
+    env:
+      RELEASE_VERSION: ${{ needs.require-main.outputs.version }}
     needs:
+      - require-main
       - build
       - verify
       - verify-linux
@@ -663,10 +719,10 @@ jobs:
           const manifest = JSON.parse(manifestBytes.toString('utf8'))
           const expected = [
             ['pi-runtime', '@tinyedge/pi-runtime', process.env.PI_RUNTIME_VERSION, 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz'],
-            ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, 'physicalsystems-0.2.5.tgz'],
+            ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, `physicalsystems-${process.env.RELEASE_VERSION}.tgz`],
           ]
 
-          assert.equal(process.env.RELEASE_VERSION, '0.2.5')
+          assert.equal(process.env.RELEASE_VERSION, JSON.parse(readFileSync('release/product.json', 'utf8')).product.version)
           assert.equal(process.env.PI_RUNTIME_VERSION, '0.84.2-tinyedge.1')
           assert.equal(manifest.schemaVersion, 1)
           assert.equal(manifest.version, process.env.RELEASE_VERSION)
@@ -713,7 +769,7 @@ jobs:
               legalFiles: ['LICENSE', 'NOTICE', 'SBOM.cdx.json', 'UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM_README.md'],
             },
             ...[
-              ['physicalsystems', 'physicalsystems-0.2.5.tgz', 'packages/cli'],
+              ['physicalsystems', `physicalsystems-${process.env.RELEASE_VERSION}.tgz`, 'packages/cli'],
             ].map(([name, filename, sourceDirectory]) => ({
               name,
               version: process.env.RELEASE_VERSION,
@@ -839,7 +895,7 @@ jobs:
           const manifest = JSON.parse(
             execFileSync(
               'tar',
-              ['-xOf', path.join(directory, 'physicalsystems-0.2.5.tgz'), 'package/npm-shrinkwrap.json'],
+              ['-xOf', path.join(directory, `physicalsystems-${process.env.RELEASE_VERSION}.tgz`), 'package/npm-shrinkwrap.json'],
               { encoding: 'utf8' },
             ),
           )
@@ -883,6 +939,7 @@ jobs:
           import assert from 'node:assert/strict'
           import { execFileSync } from 'node:child_process'
           import path from 'node:path'
+          import { readFileSync } from 'node:fs'
 
           assert.match(process.env.PHYSICALSYSTEMS_BOOTSTRAP_INTEGRITY || '', /^sha512-[A-Za-z0-9+/]+={0,2}$/)
           assert.match(process.env.PHYSICALSYSTEMS_BOOTSTRAP_SHASUM || '', /^[0-9a-f]{40}$/)
@@ -916,8 +973,8 @@ jobs:
           const tags = JSON.parse(process.env.PHYSICALSYSTEMS_TAGS_JSON)
           assert.deepEqual(
             tags,
-            { bootstrap: '0.0.0', latest: '0.0.0', preview: '0.2.4' },
-            'preview update requires the existing 0.2.4 preview and unchanged inert bootstrap/latest tags',
+            JSON.parse(readFileSync('release/product.json', 'utf8')).previousTags,
+            'preview update requires the reviewed previous tags from release/product.json',
           )
           const [packed] = JSON.parse(process.env.PHYSICALSYSTEMS_PACK_JSON)
           assert.equal(packed.name, 'physicalsystems')
@@ -1070,11 +1127,11 @@ jobs:
             'packed runtime tarball must match the already-published registry artifact',
           )
           NODE
-      - name: Publish physicalsystems@0.2.5 directly to preview
+      - name: Publish the reviewed physicalsystems version directly to preview
         shell: bash
         run: |
           set -euo pipefail
-          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-0.2.5.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
+          npm publish "./$RELEASE_ARTIFACT_DIRECTORY/physicalsystems-$RELEASE_VERSION.tgz" --registry="$NPM_REGISTRY" --provenance --tag preview --access public 2>&1 \
             | tee publish-evidence/physicalsystems-publish.log
       - name: Verify preview isolation, registry bytes, and provenance signature
         shell: bash
@@ -1117,7 +1174,7 @@ jobs:
           )
           assert.equal(tags.latest, '0.0.0', 'publishing preview must not move the inert initial latest tag')
           assert.equal(tags.bootstrap, '0.0.0', 'the inert namespace bootstrap must remain isolated')
-          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to 0.2.5')
+          assert.equal(tags.preview, process.env.RELEASE_VERSION, 'preview must resolve to the reviewed version')
           NODE
           mkdir -p publish-evidence/signature-audit
           (
@@ -1180,7 +1237,7 @@ jobs:
             echo "- Registry integrity, dist-tags, SLSA provenance metadata, and npm's cryptographic signature audit were rechecked after publication."
             echo "- @tinyedge/pi-runtime@$PI_RUNTIME_VERSION is already published; this workflow packs it for verification, matches the packed tarball to the live registry artifact, and never republishes it."
             echo "- @tinyedge/cli@0.1.3 and @tinyedge/pi@0.1.3 remain immutable compatibility releases and are not part of this candidate."
-            echo "- Automatic provenance applies to physicalsystems@0.2.5 from this public repository, not to either earlier inert namespace bootstrap publication."
+            echo "- Automatic provenance applies to physicalsystems@$RELEASE_VERSION from this public repository, not to either earlier inert namespace bootstrap publication."
             echo "- Promotion from preview to latest remains a separate manual maintainer action with npm 2FA."
           } | tee publish-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload registry preflight and publication logs
