@@ -111,11 +111,11 @@ test('the real pre-publish checksum gate refuses oversized archives and falsifie
         integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}` })
     }
     const check = () => {
-      const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, version: '0.2.6', commit, artifacts }))
+      const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, generatedInputsSha256: 'c'.repeat(64), version: '0.2.6', commit, artifacts }))
       writeFixtureFile(fixture, 'candidate/release-manifest.json', bytes)
       return spawnSync(process.execPath, ['--input-type=module'], { cwd: fixture,
         input: match[1].replace(/^          /gm, ''), encoding: 'utf8', timeout: 15_000,
-        env: { ...process.env, GITHUB_SHA: commit, RELEASE_VERSION: '0.2.6',
+        env: { ...process.env, EXPECTED_GENERATED_INPUTS_SHA256: 'c'.repeat(64), GITHUB_SHA: commit, RELEASE_VERSION: '0.2.6',
           PI_RUNTIME_VERSION: '0.84.2-tinyedge.1', RELEASE_ARTIFACT_DIRECTORY: 'candidate',
           EXPECTED_MANIFEST_SHA256: createHash('sha256').update(bytes).digest('hex') } })
     }

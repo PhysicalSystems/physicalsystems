@@ -855,6 +855,7 @@ function packRelease(outputDirectory, bundledPackageDirectory) {
 
   const manifest = {
     schemaVersion: 1,
+    ...(process.env.RELEASE_INPUTS_SHA256 ? { generatedInputsSha256: process.env.RELEASE_INPUTS_SHA256 } : {}),
     version,
     commit: process.env.GITHUB_SHA || run('git', ['rev-parse', 'HEAD']),
     artifacts,
@@ -948,6 +949,7 @@ async function verifyRelease(artifactDirectory, { requireNodeBundle = false, req
     })
 
     const installed = readJson(path.join(temporaryRoot, 'node_modules/physicalsystems/package.json'))
+    assert.deepEqual(installed.physicalsystemsRelease, readJson(path.join(REPOSITORY_ROOT, 'packages/cli/package.json')).physicalsystemsRelease, 'Installed release generation record differs from qualified source')
     const installedPhysicalSystemsDirectory = path.join(temporaryRoot, 'node_modules/physicalsystems')
     const pythonArguments = process.env.pythonLocation
       ? [path.join(process.env.pythonLocation, process.platform === 'win32' ? 'python.exe' : 'bin/python')]
