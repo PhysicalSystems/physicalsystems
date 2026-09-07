@@ -127,6 +127,8 @@ screenshots, logs and temporary app data outside the source tree; the optional
 `PHYSICALSYSTEMS_DESKTOP_BROWSER_EVIDENCE` variable selects an evidence directory.
 The native opt-in requires the installed pinned Electron and an existing X11
 desktop session. It uses isolated scripted simulation and synthetic preview.
+It inherits the existing display and desktop session bus, uses native mouse
+events within the test app, and never installs a missing Electron binary.
 See [validation scope](VALIDATION.md) for evidence output and qualification gaps.
 
 Before distribution, the desktop still needs a separately reviewed installer,

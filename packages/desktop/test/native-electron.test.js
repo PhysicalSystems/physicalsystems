@@ -115,8 +115,19 @@ test('native sandboxed Electron completes the scripted simulation journey and or
   timeout: 150_000,
 }, async (t) => {
   assert.ok(process.env.DISPLAY, 'Native qualification requires an existing graphical X11 session. Inherit DISPLAY and its XAUTHORITY; do not disable the Electron sandbox or install a display server for this test.')
-  // Resolve only after opt-in: the ordinary test suite needs no Electron install.
-  const electron = createRequire(import.meta.url)('electron')
+  // Resolve metadata only after opt-in: Electron's npm entry point can run its
+  // installer or honor an ambient binary override. Qualification must use the
+  // already installed pinned binary and must never install missing setup.
+  let electronPackage
+  try { electronPackage = createRequire(import.meta.url).resolve('electron/package.json') }
+  catch { assert.fail('Native qualification requires the existing pinned Electron 44.2.0 development installation; no package will be installed by this test.') }
+  assert.equal(JSON.parse(await readFile(electronPackage, 'utf8')).version, '44.2.0', 'Native qualification requires the pinned Electron 44.2.0 installation')
+  const electron = path.join(path.dirname(electronPackage), 'dist', 'electron')
+  const binary = await lstat(electron).catch((error) => {
+    if (error.code === 'ENOENT') assert.fail('The installed Electron 44.2.0 binary is missing. Native qualification cannot proceed without separate setup; this test does not download packages.')
+    throw error
+  })
+  assert.ok(binary.isFile() && !binary.isSymbolicLink() && (binary.mode & 0o111), 'The pinned Electron binary must be an existing executable regular file')
   const evidenceDir = process.env.PHYSICALSYSTEMS_DESKTOP_NATIVE_EVIDENCE
   if (evidenceDir) {
     assert.ok(path.isAbsolute(evidenceDir), 'Native evidence requires an absolute output directory')
@@ -126,10 +137,10 @@ test('native sandboxed Electron completes the scripted simulation journey and or
   }
   const dataDir = await mkdtemp(path.join(tmpdir(), 'physicalsystems-desktop-native-'))
   const testEnvironment = {}
-  for (const key of ['PATH', 'LANG', 'LC_ALL', 'DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR']) {
+  for (const key of ['PATH', 'LANG', 'LC_ALL', 'DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS']) {
     if (process.env[key]) testEnvironment[key] = process.env[key]
   }
-  // Preserve only the display connection, never ambient Node/model credentials,
+  // Preserve the desktop session connection, never ambient Node/model credentials,
   // Electron switches, NODE_OPTIONS or a user's application configuration.
   for (const [key, child] of Object.entries({ HOME: 'home', XDG_CONFIG_HOME: 'config', XDG_CACHE_HOME: 'cache', XDG_DATA_HOME: 'data' })) {
     testEnvironment[key] = path.join(dataDir, child)
@@ -140,12 +151,19 @@ test('native sandboxed Electron completes the scripted simulation journey and or
     '--remote-debugging-address=127.0.0.1', `--inspect=127.0.0.1:${mainPort}`, '--ozone-platform=x11']
   const startedAt = performance.now()
   const child = spawn(electron, argumentsForApp, { env: testEnvironment, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
-  let diagnosticLog = '', exitResult, spawnError, renderer, main, cleanClose = false
+  let diagnosticLog = '', exitResult, spawnError, renderer, main, cleanClose = false, rendererDiagnosticsInstalled = false
+  const rendererErrorKey = `__physicalSystemsNativeErrors_${process.pid}`
   const owned = new Map()
   for (const stream of [child.stdout, child.stderr]) stream.on('data', (chunk) => { diagnosticLog = (diagnosticLog + chunk).slice(-8_000) })
   child.on('error', (error) => { spawnError = error })
   const exited = new Promise((resolve) => child.once('exit', (code, signal) => { exitResult = { code, signal }; resolve(exitResult) }))
   t.after(async () => {
+    if (renderer && rendererDiagnosticsInstalled) {
+      try {
+        const events = await bounded(renderer.evaluate(`(()=>{const capture=globalThis[${JSON.stringify(rendererErrorKey)}];if(!capture)return [];window.removeEventListener('error',capture.error);window.removeEventListener('unhandledrejection',capture.rejection);delete globalThis[${JSON.stringify(rendererErrorKey)}];return capture.events})()`), 1_000, 'Renderer error diagnostic cleanup')
+        if (events.length) t.diagnostic(`Renderer error events: ${JSON.stringify(events)}`)
+      } catch {}
+    }
     renderer?.close(); main?.close()
     if (!cleanClose && child.pid) {
       // Failure cleanup is restricted to this detached, simulation-only process
@@ -175,7 +193,13 @@ test('native sandboxed Electron completes the scripted simulation journey and or
       if (result) return result
       await sleep(75)
     }
-    throw new Error(`${label} did not arrive within ${timeoutMs} ms\n${diagnosticLog}`)
+    let ui = null
+    if (renderer) {
+      try {
+        ui = await bounded(renderer.evaluate(`(()=>({visibility:document.visibilityState,dialogOpen:document.querySelector('#dialog')?.open,dialogText:document.querySelector('#dialog')?.textContent?.slice(0,1000),notices:[...document.querySelectorAll('[role="alert"],#notice,#app-notice,#connection-summary')].map(e=>e.textContent?.slice(0,600))}))()`), 1_000, 'Owned UI timeout diagnostic')
+      } catch { ui = { unavailable: true } }
+    }
+    throw new Error(`${label} did not arrive within ${timeoutMs} ms\n${diagnosticLog}\nOwned UI state: ${JSON.stringify(ui)}`)
   }
   async function inspectorTarget(port, predicate) {
     return until(async () => {
@@ -185,13 +209,28 @@ test('native sandboxed Electron completes the scripted simulation journey and or
       } catch { return false }
     }, 'Owned Electron inspector target', 25_000)
   }
-  renderer = await connectInspector((await inspectorTarget(rendererPort, (target) => target.url === 'physicalsystems://desktop/index.html')).webSocketDebuggerUrl)
+  const electronExpression = "process.getBuiltinModule('module').createRequire(process.execPath)('electron')"
   main = await connectInspector((await inspectorTarget(mainPort, (target) => target.type === 'node')).webSocketDebuggerUrl)
+  try {
+    renderer = await connectInspector((await inspectorTarget(rendererPort, (target) => target.url === 'physicalsystems://desktop/index.html')).webSocketDebuggerUrl)
+  } catch (error) {
+    let startup
+    try {
+      startup = await bounded(main.evaluate(`(()=>{const e=${electronExpression};return {ready:e.app.isReady(),windowCount:e.BrowserWindow.getAllWindows().length,windows:e.BrowserWindow.getAllWindows().slice(0,4).map(w=>({destroyed:w.isDestroyed(),url:w.webContents.isDestroyed()?null:w.webContents.getURL()}))}})()`), 3_000, 'Main startup diagnostic')
+    } catch (diagnosticError) { startup = { unavailable: diagnosticError.message } }
+    throw new Error(`${error.message}\nOwned main startup state: ${JSON.stringify(startup)}`, { cause: error })
+  }
   const js = (expression) => renderer.evaluate(expression)
   const state = () => js('window.physicalSystems.snapshot()')
-  const click = (selector) => js(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});if(!element||element.disabled)throw new Error('Required control is unavailable');element.click();return true})()`)
+  const click = async (selector) => {
+    const point = await js(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});if(!element||element.disabled)throw new Error('Required control is unavailable');element.scrollIntoView({block:'center',inline:'nearest'});const r=element.getBoundingClientRect();if(!r.width||!r.height)throw new Error('Required control is not visible');return {x:r.x+r.width/2,y:r.y+r.height/2}})()`)
+    await renderer.rpc('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point })
+    await renderer.rpc('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 })
+    await renderer.rpc('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 })
+  }
   const set = (selector, value) => js(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});element.value=${JSON.stringify(value)};element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));return true})()`)
-  const electronExpression = "process.getBuiltinModule('module').createRequire(process.execPath)('electron')"
+  await js(`(()=>{const events=[];const record=(kind,value)=>{if(events.length<12)events.push({kind,message:(typeof value==='string'?value:typeof value?.message==='string'?value.message:'Unspecified renderer error').slice(0,300)})};const capture={events,error:event=>record('error',event.message),rejection:event=>record('unhandledrejection',event.reason)};globalThis[${JSON.stringify(rendererErrorKey)}]=capture;window.addEventListener('error',capture.error);window.addEventListener('unhandledrejection',capture.rejection);return true})()`)
+  rendererDiagnosticsInstalled = true
   await until(() => js('document.querySelector("#transcript")?.textContent.includes("Your physical workspace.")'), 'Empty onboarding')
   const initial = await state()
   const startupMs = Math.round(performance.now() - startedAt)
@@ -227,6 +266,7 @@ test('native sandboxed Electron completes the scripted simulation journey and or
   assert.equal((await state()).workcell.execution.run, null)
   await click('#question button')
   await until(() => js('document.querySelector("#transcript").textContent.includes("Simulation proposal:")'), 'Scripted capability proposal')
+  await until(async () => !(await state()).conversation.busy, 'Scripted planning response settled')
   await click('.proposal-card .primary'); await click('#execution-refresh')
   await until(() => js('[...document.querySelector("#configuration-select").options].some(option=>option.value==="simulation-table")'), 'Simulation configuration')
   await set('#configuration-select', 'simulation-table'); await click('#run-prepare')
@@ -244,12 +284,41 @@ test('native sandboxed Electron completes the scripted simulation journey and or
   assert.equal(completed.workcell.execution.run.physicalExecutionAuthorized, false)
   assert.match(completed.workcell.execution.run.outcome.reason, /no hardware was operated/)
   const simulationMetrics = await metrics('simulation after verified receipt')
-  if (evidenceDir) await writeFile(path.join(evidenceDir, 'native-simulation-receipt.png'), Buffer.from((await renderer.rpc('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
+  // Compositor capture is a separate opt-in from functional UI/IPC evidence;
+  // a locked desktop can serve DOM requests without presenting display frames.
+  const captureScreenshot = process.env.PHYSICALSYSTEMS_DESKTOP_NATIVE_SCREENSHOT === '1'
+  if (captureScreenshot) {
+    assert.ok(evidenceDir, 'Native screenshot qualification requires an evidence directory')
+    await writeFile(path.join(evidenceDir, 'native-simulation-receipt.png'), Buffer.from((await renderer.rpc('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
+  }
 
   // This explicitly named generated JPEG fixture never enumerates or opens a
   // physical camera. It verifies native typed-byte IPC and renderer decoding.
   await click('[data-tab="devices"]'); await set('#camera-select', 'camera-synthetic-preview'); await click('#camera-start')
-  await until(() => js('!document.querySelector("#preview").hidden && document.querySelector("#preview").naturalWidth===1'), 'Synthetic JPEG decoding')
+  try {
+    await until(() => js('!document.querySelector("#preview").hidden && document.querySelector("#preview").naturalWidth===1'), 'Synthetic JPEG decoding')
+  } catch (error) {
+    // Metadata only: keep generated image bytes, transcripts, environment and
+    // credentials out of failure diagnostics. Neither probe changes UI state.
+    const probes = await Promise.allSettled([
+      bounded(js(`(async()=>{
+        const s=await window.physicalSystems.snapshot();const c=s.workcell?.camera;const p=document.querySelector('#preview');
+        return {document:{visibility:document.visibilityState,focused:document.hasFocus()},rendererErrors:globalThis[${JSON.stringify(rendererErrorKey)}]?.events??[],
+          preview:{exists:Boolean(p),hidden:p?.hidden,srcPresent:p?.hasAttribute('src'),complete:p?.complete,naturalWidth:p?.naturalWidth,naturalHeight:p?.naturalHeight},
+          cameraLabel:document.querySelector('#camera-state')?.textContent?.slice(0,100),
+          frameNote:document.querySelector('#frame-details')?.textContent?.slice(0,300),
+          emptyLabel:document.querySelector('#camera-empty h3')?.textContent?.slice(0,200),
+          camera:{availability:c?.availability,sinceReceivedMs:Date.now()-Date.parse(c?.receivedAt),selectedInput:document.querySelector('#camera-select')?.value,
+            phase:c?.status?.phase,captureSessionId:c?.status?.captureSessionId,stopCaptureSessionId:c?.stopCaptureSessionId,selectedCandidateId:c?.status?.selectedCandidateId,
+            previewFrameId:c?.previewFrameId,latestFrameId:c?.status?.latestFrameId,frameFresh:c?.status?.frameFresh,frameAgeMs:c?.status?.frameAgeMs,staleAfterMs:c?.status?.staleAfterMs,
+            receivedAt:c?.receivedAt,errorCode:c?.status?.errorCode,error:typeof c?.error==='string'?c.error.slice(0,300):null},
+          ownedCaptures:(s.activeCaptures??[]).map(c=>({projectId:c.projectId,captureSessionId:c.captureSessionId}))}
+      })()`), 3_000, 'Synthetic camera state diagnostic'),
+      bounded(main.evaluate(`(()=>{const e=${electronExpression};return {ready:e.app.isReady(),windowCount:e.BrowserWindow.getAllWindows().length,windows:e.BrowserWindow.getAllWindows().slice(0,4).map(w=>({visible:w.isVisible(),minimized:w.isMinimized(),focused:w.isFocused(),destroyed:w.isDestroyed()}))}})()`), 3_000, 'Native window visibility diagnostic'),
+    ])
+    const diagnostic = Object.fromEntries(probes.map((result, index) => [['renderer', 'main'][index], result.status === 'fulfilled' ? result.value : { unavailable: result.reason?.message }]))
+    throw new Error(`${error.message}\nSynthetic preview diagnostic: ${JSON.stringify(diagnostic)}`, { cause: error })
+  }
   assert.match(await js('document.querySelector("#frame-kind").textContent'), /SYNTHETIC TEST FRAME/)
   const frame = await js(`(async()=>{for(let attempt=0;attempt<8;attempt++){const s=await window.physicalSystems.snapshot();try{const f=await window.physicalSystems.command('workcell.camera.frame',{projectId:s.activeProjectId,conversationId:s.activeConversationId,connectionGeneration:s.connectionGeneration,frameId:s.workcell.camera.previewFrameId});return {typed:f.bytes instanceof Uint8Array,size:f.bytes.length,contentType:f.contentType}}catch(error){if(attempt===7)throw error}}})()`)
   assert.equal(frame.typed, true)
@@ -285,6 +354,7 @@ test('native sandboxed Electron completes the scripted simulation journey and or
   cleanClose = true
   const result = {
     status: 'PASS', scope: 'Native Linux Electron main, sandboxed renderer, utility host, catalog and scripted simulation. No live model, SSH, Node, hardware or optical/display flicker measurement.',
+    screenshot: { requested: captureScreenshot, status: captureScreenshot ? 'PASS' : 'NOT TESTED' },
     startup: { elapsedMs: startupMs, definition: 'Source Electron spawn to rendered empty onboarding and responsive application bridge; one sample, not an installer or cold-cache benchmark.' },
     memory: { unit: 'KiB', definition: 'Sum of Electron app.getAppMetrics working sets; shared pages may be counted more than once. Point samples, not peak memory or live model streaming.', samples: [idleMetrics, simulationMetrics] },
     sandbox, checks: ['empty onboarding', 'renderer isolation', 'unknown IPC denied', 'simulation discovery', 'question and answer', 'capability proposal', 'explicit approval boundary', 'verified receipt', 'native synthetic JPEG IPC and decode', 'Stop clears image and releases synthetic capture', 'renderer reload preserves conversation', 'ordinary window close releases catalog lock and owned running processes'],

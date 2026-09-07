@@ -27,9 +27,21 @@ window shutdown and owned-process cleanup. The optional absolute
 `PHYSICALSYSTEMS_DESKTOP_NATIVE_EVIDENCE` directory must be outside the repository.
 It records source startup timing and point samples of Electron process working
 sets; those are neither live-model streaming benchmarks nor peak-memory figures.
-The 2026-09-07 session has no graphical display, so repeating this native test
-on the follow-up changes is blocked. The earlier native result does not qualify
-the current revision by itself.
+On 2026-09-07, the existing Ubuntu desktop session was located and the repeatable
+test passed on the follow-up application code. It uses native mouse events in
+the owned renderer, waits for the scripted planning response to settle, and
+inherits the desktop display/session connection while keeping app data and
+Node/model credentials isolated. Earlier attempts using programmatic DOM clicks
+timed out at several UI stages and are preserved as failed automation evidence;
+they are not counted as passing qualification. The test resolves only an already
+installed pinned Electron binary and cannot implicitly invoke its downloader.
+
+Compositor screenshots are a separate opt-in with
+`PHYSICALSYSTEMS_DESKTOP_NATIVE_SCREENSHOT=1` and an evidence directory. Functional
+native UI/IPC validation does not imply compositor capture or optical/display
+flicker measurement. Renderer reload is covered; full native application relaunch
+and active-execution Stop remain separate native checks. Controller/application
+regressions cover saved-session reopening and independent execution Stop.
 
 The browser tests include responsive light/dark layouts, empty onboarding,
 project expansion without connection changes, conversation selection, scoped
