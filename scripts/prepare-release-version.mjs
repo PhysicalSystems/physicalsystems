@@ -7,7 +7,6 @@ import path from 'node:path'
 // Explicit product-only inventory. Backend descriptors, compatibility runtime
 // sources and historical release records are never searched and rewritten.
 export const versionFiles = [
-  '.github/workflows/cli.yml', '.github/workflows/npm-release.yml',
   'README.md', 'SECURITY.md', 'SUPPORT.md', 'packages/cli/README.md', 'packages/cli/RELEASE.md',
   'packages/cli/scripts/check-release-packages.js', 'packages/cli/scripts/install-unreleased.ps1',
   'packages/cli/test/downloaded-node-canary.test.js', 'packages/cli/test/installer.test.js',
@@ -17,7 +16,7 @@ export const versionFiles = [
 ]
 const jsonFiles = ['release/product.json', 'packages/cli/package.json',
   'packages/cli/package-lock.json', 'packages/cli/npm-shrinkwrap.json']
-const generatedFiles = ['SBOM.cdx.json', 'packages/cli/SBOM.cdx.json',
+export const generatedFiles = ['SBOM.cdx.json', 'packages/cli/SBOM.cdx.json',
   'packages/pi-runtime/SBOM.cdx.json', 'EXPORT-PROVENANCE.json']
 const serialize = (value) => `${JSON.stringify(value, null, 2)}\n`
 const digest = (value) => createHash('sha256').update(value).digest('hex')
@@ -31,7 +30,7 @@ export function requireNewVersion(current, next) {
   assert.ok(first >= 0 && after[first] > before[first], 'New product version must increase')
 }
 
-export async function planVersionUpdate(sourceRoot, next) {
+export async function planVersionUpdate(sourceRoot, next, { previousPreview, candidateRecord } = {}) {
   const originals = new Map()
   for (const file of [...jsonFiles, ...versionFiles, ...generatedFiles]) {
     const target = path.join(sourceRoot, file)
@@ -40,16 +39,21 @@ export async function planVersionUpdate(sourceRoot, next) {
   }
   const release = JSON.parse(originals.get('release/product.json'))
   const current = release.product.version, previous = release.previousTags.preview
-  requireNewVersion(current, next)
+  if (!candidateRecord || next !== current) requireNewVersion(current, next)
+  if (previousPreview !== undefined) requireNewVersion(previousPreview, next)
   const updates = new Map()
   release.product.version = next
-  release.previousTags.preview = current
+  release.previousTags.preview = previousPreview ?? current
   updates.set('release/product.json', serialize(release))
   for (const file of jsonFiles.slice(1)) {
     const value = JSON.parse(originals.get(file))
     assert.equal(value.name, 'physicalsystems')
     assert.equal(value.version, current, `${file} version drift`)
     value.version = next
+    if (file === 'packages/cli/package.json') {
+      if (candidateRecord) value.physicalsystemsRelease = candidateRecord
+      else delete value.physicalsystemsRelease
+    }
     if (value.packages) {
       assert.equal(value.packages[''].version, current)
       value.packages[''].version = next
@@ -65,11 +69,7 @@ export async function planVersionUpdate(sourceRoot, next) {
   for (const file of versionFiles) {
     let value = originals.get(file).replace(pattern, next)
       .replaceAll(current.replaceAll('.', '\\.'), next.replaceAll('.', '\\.'))
-    if (file === '.github/workflows/npm-release.yml') {
-      value = value.replace(`preview: '${previous}'`, `preview: '${current}'`)
-        .replace(`existing ${previous} preview`, `existing ${current} preview`)
-    }
-    if (file === 'packages/cli/RELEASE.md') value = value.replace(`preview=${previous}`, `preview=${current}`)
+    if (file === 'packages/cli/RELEASE.md') value = value.replace(`preview=${previous}`, `preview=${previousPreview ?? current}`)
     if (file === 'scripts/legal/reviewed-inventory.mjs') {
       assert.ok(value.includes(oldHash), 'Reviewed shrinkwrap hash drift')
       value = value.replace(oldHash, newHash)
@@ -79,9 +79,9 @@ export async function planVersionUpdate(sourceRoot, next) {
   return { current, next, originals, updates }
 }
 
-export async function prepareReleaseVersion(sourceRoot, next, { print = console.log } = {}) {
+export async function prepareReleaseVersion(sourceRoot, next, { print = console.log, previousPreview, candidateRecord } = {}) {
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: sourceRoot, encoding: 'utf8' }).trim(), '', 'Version preparation requires a clean checkout; commit or preserve current work first')
-  const plan = await planVersionUpdate(sourceRoot, next)
+  const plan = await planVersionUpdate(sourceRoot, next, { previousPreview, candidateRecord })
   const run = (script, args = []) => execFileSync(process.execPath, [script, ...args], { cwd: sourceRoot, stdio: 'pipe' })
   try {
     for (const [file, value] of plan.updates) await fs.writeFile(path.join(sourceRoot, file), value)
@@ -93,6 +93,6 @@ export async function prepareReleaseVersion(sourceRoot, next, { print = console.
     for (const [file, value] of plan.originals) await fs.writeFile(path.join(sourceRoot, file), value)
     throw new Error(`Version preparation failed; restored original release files. ${error.stderr?.toString() || error.message}`, { cause: error })
   }
-  print(`Prepared ${plan.current} -> ${next}; previous preview=${plan.current}. Review the diff and release notes, run tests, and submit a release PR.`)
+  print(`Prepared ${plan.current} -> ${next}; previous preview=${previousPreview ?? plan.current}. Review the diff and release notes, run tests, and submit a release PR.`)
   return { current: plan.current, next }
 }

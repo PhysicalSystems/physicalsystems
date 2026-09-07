@@ -5,7 +5,8 @@ import { execFileSync } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { prepareReleaseVersion, requireNewVersion } from './prepare-release-version.mjs'
+import { requireNewVersion } from './prepare-release-version.mjs'
+import { generateReleaseInputs } from './workflow-release-inputs.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const repository = 'PhysicalSystems/physicalsystems'
@@ -20,19 +21,18 @@ export function planReleaseRequest({ current, published, previousPreview, change
   assert.ok(['auto', 'publish'].includes(mode), 'Unknown release mode')
   assert.ok(stable(current) && stable(published) && (!requested || stable(requested)), 'Expected stable major.minor.patch versions')
   const order = compare(current, published)
-  assert.ok(order >= 0, 'Source version is older than published preview; update main first')
-  if (order > 0) {
-    assert.ok(!requested || requested === current, 'A different candidate is already prepared; review it before requesting another version')
+  if (mode === 'publish') {
+    assert.ok(order > 0, 'This source version is already published; use auto to generate the next release')
+    assert.ok(!requested || requested === current, 'Publish mode accepts only the source version')
     assert.equal(previousPreview, published, 'Reviewed previous preview differs from the registry')
-    return { action: 'publish', version: current }
   }
-  assert.equal(mode, 'auto', 'This version is already published; use auto to prepare the next release')
-  if (!changed && !requested) return { action: 'noop', version: current }
-  const parts = current.split('.')
+  if (mode === 'auto' && !changed && !requested && order <= 0) return { action: 'noop', version: published }
+  const parts = published.split('.')
   parts[2] = String(BigInt(parts[2]) + 1n)
-  const version = requested || parts.join('.')
-  requireNewVersion(current, version)
-  return { action: 'prepare', version }
+  const next = requested || (order > 0 ? current : parts.join('.'))
+  requireNewVersion(published, next)
+  assert.ok(compare(next, current) >= 0, 'Requested version is older than the source template')
+  return { action: 'publish', version: next }
 }
 
 export function releaseChanges(files) {
@@ -99,85 +99,19 @@ export async function inspectReleaseRequest(sourceRoot, { requested = '', mode =
   if (plan.action !== 'noop') assert.equal(await readJson(`physicalsystems/${plan.version}`, { allowMissing: true }), null,
     'Requested version already exists in npm; inspect the registry and source before continuing')
   return { ...plan, base: git(sourceRoot, 'rev-parse', 'HEAD'), baseline, published: metadata.version,
-    branch: `release/physicalsystems-${plan.version}`, changedFiles: files }
-}
-
-export async function prepareRequest(sourceRoot, plan, directory) {
-  assert.equal(plan.action, 'prepare')
-  assert.equal(git(sourceRoot, 'rev-parse', 'HEAD'), plan.base, 'Source changed after release planning')
-  assert.ok(path.isAbsolute(directory), 'Evidence directory must be absolute')
-  const parent = await fs.realpath(path.dirname(directory))
-  let resolved = path.join(parent, path.basename(directory))
-  try { resolved = await fs.realpath(directory) } catch (error) { if (error.code !== 'ENOENT') throw error }
-  const relative = path.relative(await fs.realpath(sourceRoot), resolved)
-  assert.ok(path.isAbsolute(relative) || relative.split(path.sep)[0] === '..', 'Evidence must be outside the checkout')
-  await fs.mkdir(directory, { recursive: true })
-  await prepareReleaseVersion(sourceRoot, plan.version)
-  const changed = git(sourceRoot, 'diff', '--name-only').split('\n')
-  assert.ok(changed.every((file) => !file.startsWith('.github/')), 'Automatic version changes must not edit workflows')
-  await fs.writeFile(path.join(directory, 'release.patch'), execFileSync('git', ['diff', '--binary'], { cwd: sourceRoot }))
-  await fs.writeFile(path.join(directory, 'request.json'), `${JSON.stringify(plan, null, 2)}\n`)
-}
-
-export async function submitRequest(sourceRoot, plan, directory, { api, authenticate } = {}) {
-  const gh = (args, input) => {
-    try { return execFileSync('gh', args, { cwd: sourceRoot, input, encoding: 'utf8', timeout: 30_000, stdio: ['pipe', 'pipe', 'pipe'] }).trim() }
-    catch { throw new Error('GitHub release preparation failed. Inspect the branch/PR before retrying. The release.patch artifact is preserved. An owner may need to allow GitHub Actions to create pull requests in Settings > Actions > General; no repository setting was changed.') }
-  }
-  api ||= (endpoint, body) => JSON.parse(gh(['api', `repos/${repository}/${endpoint}`, ...(body ? ['--method', 'POST', '--input', '-'] : [])], body ? JSON.stringify(body) : undefined) || 'null')
-  assert.equal(api('git/ref/heads/main').object.sha, plan.base, 'main advanced; run the workflow again before preparing a PR')
-  const files = git(sourceRoot, 'diff', 'HEAD', '--name-only').split('\n')
-  assert.ok(files.length && files.every((file) => file && !file.startsWith('.github/')), 'Expected a scoped version diff')
-  git(sourceRoot, 'add', '--', ...files)
-  const tree = git(sourceRoot, 'write-tree')
-  const existing = api(`pulls?state=all&head=PhysicalSystems:${plan.branch}&base=main&per_page=100`)
-  assert.ok(existing.length <= 1, 'Multiple release PRs require manual inspection')
-  if (existing.length) {
-    const pr = existing[0]
-    assert.equal(pr.state, 'open', `Release PR ${pr.html_url} is closed; inspect it before another request`)
-    assert.equal(api(`git/commits/${pr.head.sha}`).tree.sha, tree, `Release PR ${pr.html_url} differs from this request; review it without overwriting`)
-    return pr.html_url
-  }
-  // Empty lease requires an absent remote branch, including recovery after an
-  // uncertain push. Never replace another run's or operator's release branch.
-  if (authenticate) authenticate()
-  else gh(['auth', 'setup-git', '--hostname', 'github.com'])
-  const remote = git(sourceRoot, 'ls-remote', '--heads', 'origin', `refs/heads/${plan.branch}`)
-  if (remote) {
-    const sha = remote.split(/\s+/)[0]
-    assert.match(sha, /^[a-f0-9]{40}$/)
-    const commit = api(`git/commits/${sha}`)
-    assert.equal(commit.tree.sha, tree, 'Existing release branch differs; inspect it instead of overwriting')
-    assert.deepEqual(commit.parents.map((entry) => entry.sha), [plan.base], 'Existing release branch has a different base')
-  } else {
-    git(sourceRoot, 'switch', '-c', plan.branch)
-    git(sourceRoot, '-c', 'user.name=github-actions[bot]', '-c', 'user.email=41898282+github-actions[bot]@users.noreply.github.com',
-      '-c', 'commit.gpgsign=false', 'commit', '--signoff', '-m', `Prepare physicalsystems ${plan.version}`)
-    git(sourceRoot, 'push', `--force-with-lease=refs/heads/${plan.branch}:`, 'origin', `HEAD:refs/heads/${plan.branch}`)
-  }
-  const body = `Prepare physicalsystems ${plan.version} from reviewed main ${plan.base}.\n\nDefault patch selection compares npm preview ${plan.published} with main. Backend versions, hashes and dependency pins are preserved. Version consistency, SBOM and source provenance were regenerated; native qualification is still pending.\n\nReview the diff, approve/run the existing Physical Systems CLI checks, and merge when ready. Then run **Publish Physical Systems npm preview** on main again with the default auto operation. Its existing protected qualification and publication gates remain required. Nothing was published by preparation.\n\nRefs #43.\n`
-  await fs.writeFile(path.join(directory, 'review.md'), body)
-  const pr = api('pulls', { title: `Prepare physicalsystems ${plan.version}`, head: plan.branch, base: 'main', body })
-  return pr.html_url
+    changedFiles: files }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const action = process.argv[2]
+    assert.equal(process.argv[2], 'plan', 'Expected plan')
     const directory = path.join(process.env.RUNNER_TEMP, 'release-request')
-    if (action === 'plan') {
-      const plan = await inspectReleaseRequest(root, { requested: process.env.REQUESTED_VERSION || '', mode: process.env.COORDINATOR_ID ? 'publish' : process.env.RELEASE_OPERATION || 'auto' })
-      await fs.mkdir(directory, { recursive: true })
-      await fs.writeFile(path.join(directory, 'request.json'), `${JSON.stringify(plan, null, 2)}\n`)
-      await fs.appendFile(process.env.GITHUB_OUTPUT, `action=${plan.action}\nversion=${plan.version}\n`)
-      await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, `Release decision: **${plan.action} ${plan.version}**. Published preview: ${plan.published}.\n`)
-    } else {
-      const plan = JSON.parse(await fs.readFile(path.join(directory, 'request.json'), 'utf8'))
-      if (action === 'prepare') await prepareRequest(root, plan, directory)
-      else if (action === 'submit') {
-        const url = await submitRequest(root, plan, directory)
-        await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, `Review [the release PR](${url}), then run this same workflow on main after merging. Nothing was published.\n`)
-      } else throw new Error('Expected plan, prepare or submit')
-    }
+    const plan = await inspectReleaseRequest(root, { requested: process.env.REQUESTED_VERSION || '', mode: process.env.COORDINATOR_ID ? 'publish' : process.env.RELEASE_OPERATION || 'auto' })
+    await fs.mkdir(directory, { recursive: true })
+    await fs.writeFile(path.join(directory, 'request.json'), `${JSON.stringify(plan, null, 2)}\n`)
+    let inputHash = ''
+    if (plan.action === 'publish') inputHash = await generateReleaseInputs(root, plan, directory)
+    await fs.appendFile(process.env.GITHUB_OUTPUT, `action=${plan.action}\nversion=${plan.version}\ninputs-sha256=${inputHash}\n`)
+    await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, `Release decision: **${plan.action} ${plan.version}**. Published preview: ${plan.published}.\nSource commit: ${plan.base}. Generated-input SHA-256: ${inputHash || 'none'}.\nVersion metadata is generated only inside CI. No release PR or source commit was created. Publication requires the existing qualification and protected approval.\n`)
   } catch (error) { console.error(error.message); process.exitCode = 1 }
 }
