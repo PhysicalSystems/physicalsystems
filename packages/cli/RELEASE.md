@@ -84,6 +84,14 @@ reuse its registry bytes rather than republishing it.
 
 ## Current release model
 
+The default product release is one manual **Publish Physical Systems npm
+preview → auto** dispatch on main. CI generates a version from npm preview,
+stamps and qualifies a single candidate, then reaches the existing protected
+publishing approval. A release-version PR is not required. Checked-in versions
+are source templates; the installed package includes the actual version and
+`physicalsystemsRelease` generation record. See [the release protocol](../../release/README.md)
+for exact input binding, evidence retention and the optional precommitted route.
+
 `.github/workflows/npm-release.yml` is the only real-code publication route.
 It is manually dispatched from `main`, uses npm trusted publishing with GitHub
 OIDC, and is protected by the `npm-release` environment.

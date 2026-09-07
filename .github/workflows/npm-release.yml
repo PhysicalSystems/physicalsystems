@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Auto prepares a patch PR or publishes an already reviewed version
+        description: Generate the next patch candidate and qualify it for protected publishing
         required: true
         default: auto
         type: choice
@@ -33,6 +33,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Canonical Git bytes make generated metadata identical on all runners.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: core.autocrlf
+  GIT_CONFIG_VALUE_0: "false"
   PI_RUNTIME_VERSION: 0.84.2-tinyedge.1
   NODE_VERSION: 22.19.0
   # Keep the exact packaging/publishing CLI fixed. Consumer verification also
@@ -48,12 +52,10 @@ jobs:
   require-main:
     name: Require a manual main-branch dispatch
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Only preparation can push a new review branch.
-      pull-requests: write
     outputs:
       action: ${{ steps.request.outputs.action }}
       version: ${{ steps.request.outputs.version }}
+      inputs-sha256: ${{ steps.request.outputs.inputs-sha256 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -102,29 +104,21 @@ jobs:
       - name: Check coordinated product pins before release packaging
         run: node scripts/release.mjs check
 
-      - name: Decide whether to prepare, publish or do nothing
+      - name: Select the release version and generate candidate metadata
         id: request
         env:
           RELEASE_OPERATION: ${{ inputs.operation }}
           REQUESTED_VERSION: ${{ inputs.next_version }}
           COORDINATOR_ID: ${{ inputs.coordinator_id }}
         run: node scripts/release-request.mjs plan
-      - name: Prepare the version and generated records for review
-        if: steps.request.outputs.action == 'prepare'
-        run: node scripts/release-request.mjs prepare
-      - name: Open the release review PR
-        if: steps.request.outputs.action == 'prepare'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-request.mjs submit
-      - name: Preserve the preparation patch and decision
-        if: always() && steps.request.outputs.action == 'prepare'
+      - name: Preserve exact generated inputs and source identity
+        if: steps.request.outputs.action == 'publish'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-preparation-${{ github.sha }}-${{ github.run_attempt }}
+          name: release-inputs-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-request
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
 
   build:
     name: Pack the Windows x64 candidate once
@@ -150,6 +144,15 @@ jobs:
           cache-dependency-path: |
             packages/cli/npm-shrinkwrap.json
             packages/pi-runtime/npm-shrinkwrap.json
+      - name: Download the exact generated release inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-inputs-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-inputs
+      - name: Verify and restore the generated release inputs
+        env:
+          RELEASE_INPUTS_SHA256: ${{ needs.require-main.outputs.inputs-sha256 }}
+        run: node scripts/workflow-release-inputs.mjs
       - name: Install the pinned trusted-publishing npm CLI
         shell: pwsh
         run: |
@@ -220,6 +223,7 @@ jobs:
         run: |
           $productDirectory = Join-Path $env:RUNNER_TEMP 'physicalsystems-product'
           $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE $env:RELEASE_ARTIFACT_DIRECTORY
+          $env:RELEASE_INPUTS_SHA256 = "${{ needs.require-main.outputs.inputs-sha256 }}"
           npm run release:prepare -- --output $productDirectory --dependency-cache $env:npm_config_cache
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (Test-Path -LiteralPath $artifactDirectory) { throw 'Candidate output already exists' }
@@ -229,11 +233,7 @@ jobs:
         run: |
           npm --prefix packages/pi-runtime test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm --prefix packages/cli run check
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm --prefix packages/cli run check:pi-sdk
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm --prefix packages/cli test
+          npm test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Record candidate identity
         id: candidate
@@ -256,7 +256,7 @@ jobs:
           path: ${{ env.RELEASE_ARTIFACT_DIRECTORY }}
           if-no-files-found: error
           compression-level: 0
-          retention-days: 30
+          retention-days: 90
 
   verify:
     name: Verify on Windows ${{ matrix.architecture }} with npm ${{ matrix.npm-version }}
@@ -291,6 +291,15 @@ jobs:
           node-version: ${{ matrix.node-version }}
           architecture: ${{ matrix.architecture }}
           package-manager-cache: false
+      - name: Download the exact generated release inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-inputs-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-inputs
+      - name: Verify and restore the generated release inputs
+        env:
+          RELEASE_INPUTS_SHA256: ${{ needs.require-main.outputs.inputs-sha256 }}
+        run: node scripts/workflow-release-inputs.mjs
       - name: Install the pinned consumer npm CLI
         shell: pwsh
         run: |
@@ -369,7 +378,7 @@ jobs:
           name: physicalsystems-npm-verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}-${{ github.sha }}-${{ github.run_attempt }}
           path: verification-evidence/verification-${{ matrix.architecture }}-npm-${{ matrix.npm-version }}.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
   verify-linux:
     name: Verify on ${{ matrix.runner }} x64 with npm ${{ matrix.npm-version }}
@@ -404,6 +413,15 @@ jobs:
           node-version: ${{ matrix.node-version }}
           architecture: x64
           package-manager-cache: false
+      - name: Download the exact generated release inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-inputs-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-inputs
+      - name: Verify and restore the generated release inputs
+        env:
+          RELEASE_INPUTS_SHA256: ${{ needs.require-main.outputs.inputs-sha256 }}
+        run: node scripts/workflow-release-inputs.mjs
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
@@ -485,7 +503,7 @@ jobs:
           name: physicalsystems-npm-verification-${{ matrix.runner }}-npm-${{ matrix.npm-version }}-${{ github.sha }}-${{ github.run_attempt }}
           path: verification-evidence/verification-${{ matrix.runner }}-npm-${{ matrix.npm-version }}.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
   verify-unsupported-node:
     name: Verify the exact candidate fails clearly on Node 12
@@ -619,6 +637,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Download the exact generated release inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-inputs-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-inputs
+      - name: Verify and restore the generated release inputs
+        env:
+          RELEASE_INPUTS_SHA256: ${{ needs.require-main.outputs.inputs-sha256 }}
+        run: node scripts/workflow-release-inputs.mjs
       - name: Recheck public visibility and protected release-environment rules
         shell: bash
         env:
@@ -699,6 +726,7 @@ jobs:
       - name: Recheck the exact manifest and every tarball checksum
         shell: bash
         env:
+          EXPECTED_GENERATED_INPUTS_SHA256: ${{ needs.require-main.outputs.inputs-sha256 }}
           EXPECTED_MANIFEST_SHA256: ${{ needs.build.outputs.manifest-sha256 }}
         run: |
           set -euo pipefail
@@ -717,6 +745,7 @@ jobs:
             'downloaded release manifest must match the trusted build-job digest',
           )
           const manifest = JSON.parse(manifestBytes.toString('utf8'))
+          assert.equal(manifest.generatedInputsSha256, process.env.EXPECTED_GENERATED_INPUTS_SHA256, 'Candidate must bind the exact generated inputs')
           const expected = [
             ['pi-runtime', '@tinyedge/pi-runtime', process.env.PI_RUNTIME_VERSION, 'tinyedge-pi-runtime-0.84.2-tinyedge.1.tgz'],
             ['physicalsystems', 'physicalsystems', process.env.RELEASE_VERSION, `physicalsystems-${process.env.RELEASE_VERSION}.tgz`],
@@ -788,6 +817,12 @@ jobs:
             ))
             assert.equal(packedPackage.name, name)
             assert.equal(packedPackage.version, version)
+            if (name === 'physicalsystems') {
+              const generated = JSON.parse(readFileSync('packages/cli/package.json', 'utf8')).physicalsystemsRelease
+              assert.equal(generated.sourceCommit, process.env.GITHUB_SHA)
+              assert.equal(generated.version, process.env.RELEASE_VERSION)
+              assert.deepEqual(packedPackage.physicalsystemsRelease, generated, 'Packed release generation record differs')
+            }
             assert.notEqual(packedPackage.private, true, `${name} must be publishable before publication`)
             assert.deepEqual(
               packedPackage.publishConfig,
@@ -1247,4 +1282,4 @@ jobs:
           name: physicalsystems-npm-publish-evidence-${{ github.sha }}-${{ github.run_attempt }}
           path: publish-evidence
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90

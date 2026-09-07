@@ -15,7 +15,66 @@ The Pi compatibility package is frozen. Runtime imports no private Node code.
 Keep each `SOURCE-IMPORT.json`: it records historical public source bytes and
 explicit adaptations, not a claim that adapted files are still unchanged.
 
-## Normal product release
+## One-click product release
+
+After merging product changes, open **Actions → Publish Physical Systems npm
+preview → Run workflow**, select `main`, and leave `operation=auto` and
+`next_version` blank. One dispatch generates the candidate, runs the existing
+qualification matrix, and reaches the existing protected publishing approval.
+There is no release-version PR, manual CLI run, or second dispatch.
+
+The workflow compares main with the published npm preview's source commit.
+New release inputs select the next registry patch version; an explicit stable
+`next_version`, such as `0.3.0`, selects a larger release. Unchanged inputs are a
+no-op unless a new version is explicitly requested. An already committed higher
+source version remains supported. Published versions are never overwritten.
+
+`release/product.json` and the checked-in package versions are source templates.
+They need not advance after each publication: for example, a source template
+at 0.2.5 with npm preview 0.2.6 can generate 0.2.7. Source launches report their
+checked-in template version; installed npm packages report the stamped release
+version. Runtime/Node pins, dependency versions and toolchain policy remain
+reviewed source configuration and are not bumped speculatively.
+
+The preparation job generates version fields, lockfile roots, versioned checks,
+SBOMs and source provenance using the reviewed generation script. It restores
+its checkout and uploads one SHA-256-bound `release-inputs.json` bundle. Every
+build/native verifier and the protected publisher restores that exact bundle
+onto the selected source commit, rejects paths or code outside the deterministic
+version recipe, and verifies the regenerated records. The unsupported Node 12
+job tests the exact candidate tarball directly. No branch, commit, PR, repository
+setting or npm tag is written during preparation; PR-write permission is no
+longer needed. Global concurrency and registry checks prevent accidental patch
+increments from repeated runs after a successful publication.
+
+The candidate manifest binds the generated-input hash to the tarball hashes.
+The npm package carries `physicalsystemsRelease`: source commit, source template
+version, stamped version, previous preview, and generation contract. The npm
+registry retains that exact tarball and its normal provenance; checking out the
+recorded commit and using those inputs reproduces the version-generation recipe.
+The generated-input bundle, source change list, candidate and verification
+artifacts are retained in Actions for 90 days (subject to repository policy).
+Download them before expiry if longer retention of test logs is required.
+
+At approval, review the workflow summaries, source changes, candidate version,
+generated-input digest and native verification results. The protected job still
+publishes the exact qualified tarball with OIDC/provenance and verifies registry
+bytes/tags/signatures. A green no-op or preparation step is not publication
+proof. A failed/uncertain publication requires inspection of registry readback
+and the existing run before retrying.
+
+The change comparison uses HTTPS npm registry provenance as an ancestry hint,
+not an independent cryptographic attestation verification. Missing/malformed
+provenance, registry errors, unavailable/non-ancestor commits, occupied versions
+and incompatible source templates stop the run. Component changes still follow
+the separate reviewed Node/Runtime publication and manifest-adoption process
+below. The public workflow cannot detect unpublished private Node changes.
+
+## Optional precommitted-version and coordinator route
+
+The existing maintainer commands remain available for a deliberately reviewed,
+precommitted version. They do not choose registry-based versions themselves;
+use the Actions `auto` route above for the one-click process.
 
 For a product-only version bump, start on a clean release branch:
 
@@ -23,7 +82,7 @@ For a product-only version bump, start on a clean release branch:
 npm run release -- version NEW_MAJOR.MINOR.PATCH
 ```
 
-This updates product metadata, both locks, workflow constants, versioned checks
+This updates product metadata, both locks, versioned checks
 and documentation references, then regenerates SBOMs and export provenance.
 It retains backend pins and sets the expected previous preview to the current
 product version. Review the diff and write the release notes, run the checks,
@@ -160,60 +219,3 @@ inspection; absence is not retry permission.
 Workflow artifacts expire after 90 days. Preserve their safe receipts and
 digests in the release evidence archive before expiration; missing/expired
 evidence must not be reported as a newly verified successful migration.
-# Automatic patch preparation in the existing npm workflow
-
-After merging product changes, open **Actions → Publish Physical Systems npm
-preview → Run workflow**, select `main`, and leave `operation=auto` and
-`next_version` blank. This is the existing npm workflow, with a preparation
-step before its existing qualification and protected publisher.
-
-- If main still has the published preview version and release inputs changed,
-  it prepares the next patch (for example, 0.2.5 → 0.2.6) and opens a release PR.
-  To request a minor or major release, enter an explicit stable version such as
-  `0.3.0` in `next_version`.
-- Review the generated diff and release notes. Approve the **Physical Systems
-  CLI** checks if GitHub requests approval for the bot-created PR. If no checks
-  appear, run that existing workflow manually on the release branch. Merge the
-  PR only after its required checks and review.
-- Run **Publish Physical Systems npm preview** again on `main`, using the same
-  defaults. It recognizes the already prepared version, builds one candidate,
-  performs the existing native checks, and reaches the existing protected npm
-  approval/publishing step. It does not increment the version again.
-- With no new release inputs and no explicit version request, it reports a
-  no-op. A repeated preparation request reuses an exact open release PR, or
-  refuses a conflicting/closed PR or branch without overwriting it.
-
-`release/product.json` owns the reviewed product version, component pins and
-previous tags. Preparation reuses `scripts/prepare-release-version.mjs` to
-update required literal package metadata, documentation and fixtures, then
-regenerates SBOM/provenance. Workflow versions and tarball names read that
-descriptor through the checked preparation output; a version bump does not
-edit workflow files. The qualified toolchain matrix remains explicitly pinned.
-
-The change comparison uses the published npm preview's registry provenance to
-identify an ancestor on main. This is a bounded HTTPS registry lookup for
-change detection, not an independent cryptographic attestation verification.
-Missing/malformed provenance, registry errors, non-ancestor history, occupied
-versions and stale previous tags stop preparation. Existing exact-artifact and
-registry readback checks remain the publication authority.
-
-Preparation uses the repository's short-lived `GITHUB_TOKEN`, with contents
-and pull-request write permissions only in the preparation job. It neither
-approves nor merges PRs and has no OIDC permission. A repository owner must
-allow Actions to create pull requests in **Settings → Actions → General** for
-automatic PR creation. Organization policy may restrict that setting. The
-workflow never changes the setting or requests a personal token. On failure,
-the `release-preparation-*` artifact retains `release.patch` and the request
-record; inspect the branch/PR and failure before retrying. A branch pushed
-before a failed PR request can be recovered when its tree and base match.
-
-This automates npm product preparation, not private component publication.
-The private Node candidate and public Node/Runtime publishers remain their
-existing separate workflows. Publish changed components and adopt their real
-readback manifests and hashes through the reviewed process below **before**
-requesting the product release. Preparation never reads private Node source,
-bumps a backend dependency speculatively, or fabricates a future wheel URL.
-It blocks changed public Runtime source still pinned to the previous Runtime.
-Private Node changes cannot be detected from this public checkout; maintainers
-must review that component's readiness. `operation=publish` (also used by the
-existing maintainer coordinator) only accepts an already prepared version.
