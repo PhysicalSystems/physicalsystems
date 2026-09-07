@@ -109,11 +109,48 @@ artifacts and calibration.
 
 ## Public API limits
 
-This Harness report reuses Node 0.2.1 and Runtime 0.2.0. The public capability
+The Harness remains compatible with Node 0.2.1 and Runtime 0.2.0. The public capability
 catalog exposes typed capability inputs, common precondition references and
 workcell references. It does not enumerate per-implementation calibration,
 dependency or artifact requirements. Implementation candidates and their
 rejection codes become available through a route receipt.
+
+Nodes implementing the additive `physicalsystems-setup-requirements-v1`
+contract also expose `GET /v2/physical/setup/requirements` under the existing
+local execution credential. An explicit setup inspection reads that endpoint
+alongside execution status. It does not change either existing contract.
+Older Nodes returning 404 or 501 show **unsupported**, while authentication,
+service and contract failures remain **unavailable** or **invalid**. None of
+these states means calibration or equipment is absent.
+
+Use **Inspect setup** in `/workcell`, `/physical-setup` in the terminal, or ask
+the assistant what this implementation needs. These surfaces share one report
+and the same read-only inspector. The report clears when its workflow context
+changes and expires at its original deadline. Expired instructions remain
+readable as historical guidance with previously reported states; they are not
+current evidence. Browser reloads and reconnects cannot refresh that evidence.
+Inspection accepts no configuration paths,
+implementation identifiers or action arguments.
+
+The first provider profile describes `so101-waypoints-v1`. It distinguishes
+registered implementations from general provider guidance when no such
+implementation has been registered. Each requirement includes its reported
+state, evidence source and original source timestamp, plus a validation
+procedure classified as software inspection, operator configuration or
+hardware validation. Procedures are descriptions, not executable commands.
+Hardware validation and configuration require separate operator approval.
+Allowlisted declared dependency versions, observation limits with units, and
+precondition bindings/maximum ages are displayed when exposed by the exact
+configuration or registry. They describe requirements, not measured results.
+No default limit or timestamp is invented when the source does not report one.
+Bounded reports state how many implementations, requirements, bindings or constraints were omitted;
+omitted requirements remain unverified.
+
+Digest scopes remain separate: a stored registry entry, routing envelope,
+executable artifact, operating conditions and calibration artifact describe
+different objects. The report does not compare unrelated hashes or convert
+matching metadata into physical validation. Original registry timestamps
+describe metadata changes, not a fresh robot or camera observation.
 
 The raw stored receipt contains additional Runtime and host data, but the
 Harness deliberately uses its bounded, validated presentation projection. The
@@ -128,7 +165,16 @@ or qualify a stop procedure. A camera preview and matching calibration hashes
 cannot establish these conditions. Basic preview remains available separately
 through `/workcell` without commissioning; preview supplies no motion authority.
 
-There is no new physical commissioning or first-trial qualification wizard in
-this patch. A real implementation still needs its legitimate, reviewed setup
-and qualification process. No successful physical-trial evidence is created
-by a setup report, simulated run or software test.
+The guided inspection does not conduct commissioning or a first physical
+trial. Before a separately approved trial, the implementation owner must
+review the exact devices, configuration and artifact bindings; actual
+calibration and taught poses; trusted observation freshness; bounded motion
+limits; and the physical stop/cutoff procedure. Required qualification evidence
+must come from its legitimate reviewed process. A missing qualification blocks
+ordinary execution; the setup report cannot approve a provisional run to
+create its own qualification. No successful physical-trial evidence is created
+by this report, a simulated run or a software test.
+
+Shipping the client alone does not add this endpoint to an installed Node.
+The Node implementation needs its separate private-source review and reviewed
+backend release before the managed npm distribution can select its bytes.

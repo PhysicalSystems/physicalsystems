@@ -3,6 +3,7 @@ import { safeErrorMessage } from '../auth/redact.js'
 import { createExecutionController } from './execution-controller.js'
 
 export const WORKCELL_VIEW_VERSION = 'physicalsystems-workcell-view-v1'
+export const WORKCELL_VIEW_MAX_BYTES = 256 * 1024
 
 const REQUEST_ERRORS = Object.freeze({
   agent_busy: [409, 'Wait for the current agent request to finish before starting another request'],
@@ -13,6 +14,8 @@ const REQUEST_ERRORS = Object.freeze({
   camera_unavailable: [503, 'Camera preview is unavailable; refresh camera state and check the terminal'],
   camera_start_unconfirmed: [503, 'Camera Start was not confirmed; refresh camera state and request Stop before starting another preview'],
   camera_stop_unconfirmed: [503, 'Camera stop is not confirmed; retry Stop for this capture and check the terminal'],
+  setup_busy: [409, 'Setup inspection is already pending; wait for its result before retrying'],
+  setup_unavailable: [503, 'Setup inspection is unavailable; reopen /workcell from the Harness'],
 })
 class WorkcellRequestError extends Error {
   constructor(code) { super(REQUEST_ERRORS[code][1]); this.code = code }
@@ -38,6 +41,7 @@ export function createWorkcellController({
   workflow, refreshWorkflow, invalidateWorkflow = () => {},
   sendIntent, canPrompt = () => true, modelLabel = () => null,
   cameraClient, executionClient, now = () => new Date().toISOString(), pollMs = 200,
+  inspectSetup, getSetupView = () => ({ pending: false, report: null, error: null }),
   choiceTimeoutMs = 180_000,
 } = {}) {
   const sessionId = randomUUID()
@@ -66,18 +70,27 @@ export function createWorkcellController({
   let camera = { availability: 'unchecked', status: null, frame: null, previewFrameId: null, error: null, receivedAt: null }
   let cachedFrame = null
 
-  const snapshot = () => ({
-    contractVersion: WORKCELL_VIEW_VERSION, sessionId, revision,
-    physicalExecutionAuthorized: false,
-    workflow,
-    agent: { ...agent, model: displayText(modelLabel(), 160) || null, canPrompt: !disposed && agent.status !== 'working' && canPrompt(),
-      pendingChoice: choice ? { choiceId: choice.id, kind: choice.kind, question: choice.question, options: choice.options } : null },
-    camera: { ...camera, pending: cameraActionPending ? 'start' : null,
-      stopPending: pendingStops.size > 0 || Boolean(cameraStart?.cancelled),
-      stopUnconfirmed: unconfirmedStops.size > 0,
-      stopCaptureSessionId: stopCaptureSessionId || ownedCaptureSessions.values().next().value || null },
-    execution: execution.snapshot(),
-  })
+  const snapshot = () => {
+    const base = {
+      contractVersion: WORKCELL_VIEW_VERSION, sessionId, revision,
+      physicalExecutionAuthorized: false,
+      workflow,
+      agent: { ...agent, model: displayText(modelLabel(), 160) || null, canPrompt: !disposed && agent.status !== 'working' && canPrompt(),
+        pendingChoice: choice ? { choiceId: choice.id, kind: choice.kind, question: choice.question, options: choice.options } : null },
+      camera: { ...camera, pending: cameraActionPending ? 'start' : null,
+        stopPending: pendingStops.size > 0 || Boolean(cameraStart?.cancelled),
+        stopUnconfirmed: unconfirmedStops.size > 0,
+        stopCaptureSessionId: stopCaptureSessionId || ownedCaptureSessions.values().next().value || null },
+      execution: execution.snapshot(),
+    }
+    const setup = getSetupView()
+    const result = { ...base, setup }
+    if (Buffer.byteLength(JSON.stringify(result)) <= WORKCELL_VIEW_MAX_BYTES) return result
+    result.setup = { pending: setup.pending, report: null, historicalReport: null,
+      error: 'Setup details exceed this view’s remaining space. Use /physical-setup in the terminal for the bounded report.' }
+    // A read-only report must never disconnect a previously valid workcell view.
+    return Buffer.byteLength(JSON.stringify(result)) <= WORKCELL_VIEW_MAX_BYTES ? result : base
+  }
   const emit = () => {
     if (disposed) return
     revision += 1
@@ -202,6 +215,13 @@ export function createWorkcellController({
 
   return {
     snapshot, setWorkflow,
+    setupChanged: emit,
+    async inspectSetup() {
+      if (disposed || typeof inspectSetup !== 'function') throw new WorkcellRequestError('setup_unavailable')
+      if (getSetupView().pending) throw new WorkcellRequestError('setup_busy')
+      await inspectSetup()
+      return snapshot()
+    },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
     onViewerConnect() {
       if (disposed) throw new Error('Harness session ended')

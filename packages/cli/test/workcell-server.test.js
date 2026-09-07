@@ -30,6 +30,7 @@ class Controller {
     return () => { this.viewers -= 1; this.closedViewers += 1 }
   }
   async refresh() { this.calls.push(['refresh']); return this.state }
+  async inspectSetup() { this.calls.push(['setup']); return this.state }
   async submitIntent(text) { this.calls.push(['intent', text]); return { accepted: true } }
   async answerChoice(value) { this.calls.push(['choice', value]); return { accepted: true } }
   async cameraAction(action, value) { this.calls.push(['camera', action, value]); return { accepted: true } }
@@ -82,6 +83,23 @@ async function tickUntil(predicate) {
   }
   assert.ok(predicate(), 'expected local transport condition')
 }
+
+test('setup endpoint requires this session bearer, same origin and exactly an empty object', async t => {
+  const { server, host, auth } = await setup(t)
+  const endpoint = '/api/setup/inspect'
+  assert.equal((await raw(server.origin, endpoint, { method: 'POST', body: {} })).status, 401)
+  assert.equal((await raw(server.origin, endpoint, { method: 'POST', headers: { ...auth, Origin: 'http://malicious.invalid' }, body: {} })).status, 403)
+  for (const body of [{ path: '/private/config' }, { approve: true }, { implementationId: 'guessed' }, []]) {
+    assert.equal((await raw(server.origin, endpoint, { method: 'POST', headers: auth, body })).status, 400)
+  }
+  assert.deepEqual(host.calls, [])
+  const result = await raw(server.origin, endpoint, { method: 'POST', headers: auth, body: {} })
+  assert.equal(result.status, 200)
+  assert.deepEqual(host.calls, [['setup']])
+  assert.equal(JSON.parse(result.text).physicalExecutionAuthorized, false)
+  host.inspectSetup = undefined
+  assert.equal((await raw(server.origin, endpoint, { method: 'POST', headers: auth, body: {} })).status, 503)
+})
 
 test('local view serves only static allowlist with restrictive security headers and no embedded bearer', async (t) => {
   const { server, host, token } = await setup(t)

@@ -115,7 +115,7 @@ export async function view(t, options = {}) {
         if (response !== undefined) return response
         return path === '/api/state' ? Response.json(state) : new Response(makeStream(options.signal))
       }
-      if (['/api/camera/start', '/api/camera/stop', '/api/refresh', '/api/intent', '/api/choice'].includes(path)) {
+      if (['/api/camera/start', '/api/camera/stop', '/api/refresh', '/api/intent', '/api/choice', '/api/setup/inspect'].includes(path)) {
         assert.equal(options.method, 'POST')
         const pending = deferred(); actions.push({ path, options, ...pending }); return pending.promise
       }

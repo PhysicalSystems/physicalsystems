@@ -4,6 +4,7 @@ import test from 'node:test'
 import { createTinyEdgePiExtension } from '../src/pi-extension.js'
 import { normalizePhysicalCapabilityCatalog, normalizePhysicalRouteReceipt } from '../src/physical/route-contracts.js'
 import { status } from './fixtures/execution.js'
+import { setupRequirements } from './fixtures/setup-requirements.js'
 
 const toolName = 'inspect_physical_setup'
 const routeFixture = JSON.parse(readFileSync(new URL('./fixtures/physical-route-v1.json', import.meta.url), 'utf8'))
@@ -24,6 +25,7 @@ function setup(t, options = {}) {
   createTinyEdgePiExtension({ standalone: true, env: {},
     createPhysicalNodeClientImpl: () => physicalClient,
     createExecutionClientImpl: () => { calls.clients++; return client },
+    createSetupRequirementsClientImpl: () => ({ async requirements() { return { status: 'unsupported', report: null } } }),
     createCameraPreviewClientImpl: () => { calls.cameras++; assert.fail('Setup inspection cannot construct camera access') },
     createWorkcellServerImpl: () => { calls.servers++; assert.fail('Setup inspection cannot create a browser server') },
     ...options,
@@ -43,6 +45,45 @@ async function propose(h) {
   await h.pi.tools.get('inspect_physical_capabilities').execute('catalog', {})
   await h.pi.tools.get('preview_physical_capability').execute('route', params)
 }
+
+test('terminal setup prints exact declared requirements and separates simulation metadata from physical validation', async t => {
+  const metadata = setupRequirements({ inspectedAt: new Date().toISOString(), mode: 'simulation' })
+  metadata.implementations[0].constraints.push({ kind: 'dependency-version', name: 'tinyedge-runtime', value: '0.2.0', unit: null,
+    source: 'installed-configuration', sourceUpdatedAt: null })
+  const h = setup(t, { createSetupRequirementsClientImpl: () => ({ async requirements() { return { status: 'available', report: metadata } } }) })
+  await h.pi.commands.get('physical-setup').handler('', h.ctx)
+  const message = h.notices.at(-1).message
+  assert.match(message, /Implementation requirements · available/)
+  assert.match(message, /Validate robot calibration · unverified/)
+  assert.match(message, /separate approval required/)
+  assert.match(message, /Declared dependency-version · tinyedge-runtime: 0.2.0/)
+  assert.match(message, /source updated unreported/)
+  assert.match(message, /Node inspection · simulation/)
+  assert.equal(h.calls.cameras, 0)
+  assert.equal(h.calls.discoveries, 0)
+})
+
+test('terminal, tool and browser share the explicit setup report without enabling preparation or refreshing discovery', async t => {
+  let host, requirementReads = 0
+  const h = setup(t, {
+    createSetupRequirementsClientImpl: () => ({ async requirements() { requirementReads++; return { status: 'unsupported', report: null } } }),
+    createCameraPreviewClientImpl: () => undefined,
+    createWorkcellServerImpl: async ({ host: value }) => { host = value; return { openUrl: 'http://127.0.0.1:19000/#synthetic', async close() {} } },
+    openWorkcellBrowser: async () => {},
+  })
+  const fromTool = await h.inspect()
+  await h.pi.commands.get('workcell').handler('', h.ctx)
+  assert.deepEqual(host.snapshot().setup.report, fromTool)
+  const fromBrowser = await host.inspectSetup()
+  assert.equal(fromBrowser.setup.report.implementationSetup.status, 'unsupported')
+  assert.equal(fromBrowser.setup.pending, false)
+  await h.pi.commands.get('physical-setup').handler('', h.ctx)
+  assert.equal(requirementReads, 3)
+  assert.equal(host.snapshot().execution.canPrepare, false)
+  assert.equal(h.calls.discoveries, 0)
+  h.pi.handlers.get('before_agent_start')({ prompt: 'Explain this setup' }, h.ctx)
+  assert.equal(host.snapshot().setup.report, null)
+})
 
 test('terminal and browser followups retain only historical setup evidence while execution eligibility is retired', async t => {
   let host

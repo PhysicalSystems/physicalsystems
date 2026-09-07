@@ -20,6 +20,8 @@ import { createCameraPreviewClient } from './physical/camera-preview-client.js'
 import { createExecutionClient } from './physical/execution-client.js'
 import { createExecutionInspector } from './harness/execution-inspection.js'
 import { createSetupInspector } from './harness/setup-inspection.js'
+import { createSetupView } from './harness/setup-view.js'
+import { createSetupRequirementsClient } from './physical/setup-client.js'
 import { openBrowser } from './auth/open-browser.js'
 import {
   promptPhysicalCommissioningDraft,
@@ -106,10 +108,19 @@ function setupReportLines(report) {
     const age = Date.parse(report.inspection.observedAt) - Date.parse(value)
     return `${value} (${!Number.isFinite(age) ? 'age unverified' : age < 0 ? 'after report time' : `${Math.floor(age / 1000)} seconds before report`})`
   }
+  const details = report.implementationSetup
+  const requirements = details?.report
+  const setupStatus = {
+    unsupported: 'This Node does not expose implementation setup requirements. Existing records remain available; unreported requirements are unverified.',
+    unavailable: 'The requirements service could not be read. Check the Node connection and retry; no missing equipment is inferred.',
+    invalid: 'The requirements response failed contract validation. Retry after the Node integration is corrected.',
+    context_mismatch: 'The requirements belong to a different registry or execution context. Refresh the proposal and inspect again.',
+    expired: 'The requirements report expired. Inspect again; recorded evidence has not been refreshed.',
+  }
   return [
     `Physical setup · ${report.inspection.status} · ${report.inspection.message}`,
     ...(report.inspection.observedAt ? [`Report generated ${report.inspection.observedAt} · expires ${report.inspection.expiresAt}`] : []),
-    'Cached discovery and route evidence with a read-only execution service check. Physical readiness remains unverified; this report grants no execution authority.',
+    'Cached discovery and route evidence with read-only service and implementation requirements checks. Physical readiness remains unverified; this report grants no execution authority.',
     `Execution service · ${report.service.availability} · mode ${report.service.mode || 'unverified'}`,
     `Configuration inventory · ${report.service.configurationInventory}`,
     `Discovery evidence · ${report.sources.discovery.status} · observed ${evidenceTime(report.sources.discovery.observedAt)}`,
@@ -124,6 +135,17 @@ function setupReportLines(report) {
       `Implementation ${implementation.implementationId} · capability ${implementation.capabilityId} · route ${implementation.routingStatus} · recorded qualification ${implementation.recordedQualificationStatus}`,
       ...implementation.checks.map((check) => `  ${checkLine(check)}`),
     ]),
+    ...(details ? [`Implementation requirements · ${details.status}${setupStatus[details.status] ? ` · ${setupStatus[details.status]}` : ''}`] : []),
+    ...(requirements ? [
+      `Node inspection · ${requirements.mode} · ${requirements.inspectedAt}. Registry metadata updated ${requirements.registryUpdatedAt || 'unreported'}; this is not a fresh physical observation.`,
+      ...requirements.implementations.flatMap((item) => [
+        `${item.registeredImplementation ? `Registered implementation ${item.implementationId}` : 'Provider guidance only · no registered implementation'} · ${item.provider || 'unknown provider'} · profile ${item.profileStatus}`,
+        ...item.bindings.map((binding) => `  Binding ${binding.scope} · ${binding.id} · ${binding.digest}`),
+        ...item.constraints.map((constraint) => `  Declared ${constraint.kind} · ${constraint.name}: ${constraint.value}${constraint.unit ? ` ${constraint.unit}` : ''} · ${constraint.source} · source updated ${constraint.sourceUpdatedAt || 'unreported'}`),
+        ...item.requirements.map((requirement) => `  ${requirement.label} · ${requirement.state} · ${requirement.reason}\n    Evidence: ${requirement.evidence.source} · ${requirement.evidence.mode} · source updated ${requirement.evidence.sourceUpdatedAt || 'unreported'}\n    Next: ${requirement.procedure.description} (${requirement.procedure.effect}${requirement.procedure.requiresApproval ? '; separate approval required' : ''})`),
+      ]),
+      `Omitted requirements ${requirements.truncation.requirementsOmitted} · implementations ${requirements.truncation.implementationsOmitted} · bindings ${requirements.truncation.bindingsOmitted} · constraints ${requirements.truncation.constraintsOmitted}. Omitted entries remain unverified.`,
+    ] : []),
     ...(report.sources.discovery.truncated ? ['Device list truncated; inspect the exact intended device before choosing it.'] : []),
     ...(report.sources.catalog.truncated ? ['Capability catalog list truncated; omitted entries are not evaluated here.'] : []),
     ...(report.counts.configurationTruncated || report.counts.implementationTruncated
@@ -160,6 +182,7 @@ export function createTinyEdgePiExtension({
   createWorkcellServerImpl = createWorkcellServer,
   createCameraPreviewClientImpl = createCameraPreviewClient,
   createExecutionClientImpl = createExecutionClient,
+  createSetupRequirementsClientImpl = createSetupRequirementsClient,
   openWorkcellBrowser = openBrowser,
 } = {}) {
   return function tinyEdgeExtension(pi) {
@@ -208,6 +231,7 @@ export function createTinyEdgePiExtension({
     // conversational turn retires it. It is never supplied to execution or UI
     // eligibility and is replaced on an actual evidence request or invalidation.
     let setupGeneration = 0
+    let setupView
     let setupContext = Object.freeze({ generation: setupGeneration, snapshot: null,
       capabilityCatalog: null, routeReceipt: null, routeRelationship: 'none' })
     function replaceSetupContext(source = {}) {
@@ -215,6 +239,7 @@ export function createTinyEdgePiExtension({
         snapshot: source.snapshot ?? null, capabilityCatalog: source.capabilityCatalog ?? null,
         routeReceipt: source.routeReceipt ?? null,
         routeRelationship: source.routeReceipt ? source.routeRelationship === 'retired' ? 'retired' : 'current' : 'none' })
+      setupView?.contextChanged()
     }
     // One host-owned client serves both the operator controller and the narrow
     // model reader. Construction is inert and lazy; only explicit use reads Node.
@@ -241,15 +266,22 @@ export function createTinyEdgePiExtension({
         selectedRun: workcell?.snapshot().execution.run || null }),
     }) : null
     const setupInspector = physicalEnabled ? createSetupInspector({
-      // Setup diagnosis can only read status. Cached workflow evidence is
-      // projected by the inspector without refreshing discovery or routing.
+      // Only explicit read-only status/requirements requests; cached workflow
+      // evidence is projected without refreshing discovery or routing.
       client: Object.freeze({ status: (...args) => {
         const client = getExecutionClient()
         if (typeof client?.status !== 'function') throw new Error('Setup inspection is unavailable')
         return client.status(...args)
       } }),
+      requirementsClient: Object.freeze({ requirements: (...args) => {
+        const client = createSetupRequirementsClientImpl({ baseUrl: physicalClient.origin,
+          token: env.PHYSICAL_NODE_EXECUTION_TOKEN, fetchImpl: physicalFetchImpl })
+        return client.requirements(...args)
+      } }),
       getContext: () => setupContext,
     }) : null
+    setupView = physicalEnabled ? createSetupView({ inspector: setupInspector,
+      getContext: () => setupContext, onChange: () => workcell?.setupChanged() }) : null
     let physicalContext
     let registeredTools = []
     let headerContext
@@ -353,10 +385,10 @@ export function createTinyEdgePiExtension({
       pi.registerTool(defineToolImpl({
         name: PHYSICAL_SETUP_INSPECTION_TOOL,
         label: 'Inspect Physical Setup',
-        description: 'Explain present, missing and unverified physical setup from cached discovery, capability and route evidence plus a bounded read-only execution status check. Use when asked what is missing for physical execution: configuration, drivers, calibration, implementation artifacts, state and qualification. Taught positions apply only when the reported implementation uses taught-waypoints. Not exposed, unverified or unavailable does not mean absent or missing. Report absence only from an explicit missing status or missing reason code for that item. Qualification metadata can be present while underlying physical evidence is unverified. Route implementation digest: routing envelope; configuration implementation digest: executable artifact. These different scopes need not match; Node enforces exact bindings. No arguments, discovery refresh, routing, file access, commissioning, camera access or execution actions. This report never establishes physical readiness or grants approval; inspect_physical_execution reads existing run results.',
+        description: 'Explain present, missing and unverified physical setup from cached discovery, capability and route evidence plus bounded read-only execution status and implementation requirements checks. On supporting Nodes, explain each exact provider requirement, its original evidence timestamp, named binding scope and validation procedure. A provider profile without a registered implementation is guidance only. Procedures describe next steps and never authorize hardware or configuration changes. Use when asked what is missing for physical execution: configuration, drivers, calibration, implementation artifacts, state and qualification. Taught positions apply only when the reported implementation uses taught-waypoints. Not exposed, unverified or unavailable does not mean absent or missing. Report absence only from an explicit missing status or missing reason code for that item. Qualification metadata can be present while underlying physical evidence is unverified. Route implementation digest: routing envelope; configuration implementation digest: executable artifact. These different scopes need not match; Node enforces exact bindings. No arguments, discovery refresh, routing, file access, commissioning, camera access or execution actions. This report never establishes physical readiness or grants approval; inspect_physical_execution reads existing run results.',
         parameters: { type: 'object', additionalProperties: false, properties: {} },
         async execute(_callId, params, signal) {
-          const value = await setupInspector.inspect(params ?? {}, { signal })
+          const value = await setupView.inspect(params ?? {}, { signal })
           return { content: [{ type: 'text', text: JSON.stringify(value) }],
             details: { displaySummary: 'Read-only physical setup evidence and gaps' } }
         },
@@ -503,6 +535,8 @@ export function createTinyEdgePiExtension({
                   modelLabel: () => latestContext?.model ? `${latestContext.model.provider}/${latestContext.model.id}` : null,
                   cameraClient: createCameraPreviewClientImpl({ baseUrl: physicalClient.origin, token: env.PHYSICAL_NODE_CAMERA_TOKEN, fetchImpl: physicalFetchImpl }),
                   executionClient: getExecutionClient(),
+                  inspectSetup: () => setupView.inspect({}),
+                  getSetupView: () => setupView.snapshot(),
                 })
                 workcellServer = await createWorkcellServerImpl({ host: workcell })
               }
@@ -535,7 +569,7 @@ export function createTinyEdgePiExtension({
         description: 'Explain cached physical setup evidence and gaps with a read-only service check',
         handler: async (args, ctx) => {
           if (String(args || '').trim()) { ctx.ui.notify('Usage: /physical-setup', 'warning'); return }
-          const report = await setupInspector.inspect({})
+          const report = await setupView.inspect({})
           ctx.ui.notify(setupReportLines(report).join('\n'), report.inspection.status === 'available' ? 'info' : 'warning')
         },
       })
@@ -641,6 +675,7 @@ export function createTinyEdgePiExtension({
         workcellClosing = true
         replaceSetupContext()
         executionInspector.dispose()
+        setupView.dispose()
         setupInspector.dispose()
         await workcellOpening
         const closingServer = workcellServer
