@@ -1,9 +1,46 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createWorkcellController, WORKCELL_VIEW_VERSION } from '../src/harness/workcell-controller.js'
+import { createWorkcellController, WORKCELL_VIEW_VERSION, WORKCELL_VIEW_MAX_BYTES } from '../src/harness/workcell-controller.js'
 
 const tick = () => new Promise((resolve) => setImmediate(resolve))
+
+test('setup report size cannot break an otherwise valid workcell snapshot or remove camera and execution state', t => {
+  for (const space of [2000, 10]) {
+    let view = { pending: false, report: null, error: null }
+    const { controller } = setup(t, { workflow: { inventory: '' }, getSetupView: () => view })
+    const { setup: _setup, ...base } = controller.snapshot()
+    const baselineSize = Buffer.byteLength(JSON.stringify(base))
+    controller.setWorkflow({ inventory: 'x'.repeat(WORKCELL_VIEW_MAX_BYTES - baselineSize - space) })
+    const before = controller.snapshot()
+    view = { ...view, report: { description: 'y'.repeat(64 * 1024 - 100) } }
+    const after = controller.snapshot()
+    assert.ok(Buffer.byteLength(JSON.stringify(after)) <= WORKCELL_VIEW_MAX_BYTES)
+    assert.deepEqual(after.workflow, before.workflow)
+    assert.deepEqual(after.camera, before.camera)
+    assert.deepEqual(after.execution, before.execution)
+    assert.equal(after.setup?.report ?? null, null)
+    if (space === 2000) assert.match(after.setup.error, /\/physical-setup/)
+    else assert.equal(after.setup, undefined, 'when no notice fits, preserve the complete previously valid state')
+  }
+})
+
+test('setup inspection is read-only and independent of an assistant turn; duplicate and unavailable reads explain recovery', async t => {
+  let view = { pending: false, report: null, error: null }
+  const pending = deferred()
+  const { controller, calls } = setup(t, { getSetupView: () => view,
+    inspectSetup: async () => { view = { ...view, pending: true }; await pending.promise; view = { ...view, pending: false, report: { physicalExecutionAuthorized: false } } } })
+  controller.agentStart('Explain missing calibration')
+  const reading = controller.inspectSetup()
+  await assert.rejects(controller.inspectSetup(), /already pending/)
+  pending.resolve()
+  const result = await reading
+  assert.equal(result.setup.report.physicalExecutionAuthorized, false)
+  assert.equal(result.agent.status, 'working')
+  assert.deepEqual(calls, { intents: [], invalidations: 0, refreshes: 0, frames: 0, starts: [], stops: [] })
+  const absent = setup(t).controller
+  await assert.rejects(absent.inspectSetup(), /reopen \/workcell/)
+})
 
 function deferred() {
   let resolve

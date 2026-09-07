@@ -1,7 +1,10 @@
 import { executionDigest, executionFields, executionHash, executionId, normalizeExecutionStatus } from '../physical/execution-contracts.js'
 import { normalizePhysicalCapabilityCatalog, normalizePhysicalRouteRequest, PHYSICAL_ROUTE_RECEIPT_VERSION } from '../physical/route-contracts.js'
+import { normalizeSetupRequirements } from '../physical/setup-contracts.js'
+import { setupReadFailure } from '../physical/setup-client.js'
 
 const MAX_AGE = 5000, MAX_ROWS = 32, MAX_IMPLEMENTATIONS = 16
+const MAX_REPORT_BYTES = 64 * 1024
 const ROUTE_KEYS = ['contractVersion', 'runtimeVersion', 'registrySnapshotDigest', 'hostEvidenceDigest', 'receiptDigest', 'evaluatedAt', 'observedAt',
   'evaluationMonotonicNs', 'assessmentTimestamps', 'policyVersion', 'capabilityId', 'workcellId', 'request', 'decision', 'implementations', 'physicalExecutionAuthorized']
 const DECISION_KEYS = ['contract_version', 'request_id', 'request_digest', 'catalog_digest', 'policy_digest', 'state_digest', 'invocation_digest', 'decision_status',
@@ -27,7 +30,7 @@ const ACTIONS = Object.freeze({
 })
 const LIMITATIONS = Object.freeze([
   'This is a read-only setup inventory and explanation of cached records. It does not establish current readiness, approval or permission to execute.',
-  'The public capability and normalized route contracts do not expose exact per-implementation driver, calibration or artifact requirements. Unreported details remain unverified.',
+  'The legacy capability and normalized route contracts do not expose exact per-implementation driver, calibration or artifact requirements. A separately available Node setup report describes its own declared requirements; unreported details remain unverified.',
   'Not exposed or unverified does not mean absent or missing. A missing claim requires an explicitly reported missing condition or a missing matching record in an available inventory.',
   'An implementation row\'s implementationDigest identifies a routing envelope; a configuration row\'s implementationDigest identifies an executable artifact. These digests have different scopes and need not match. Exact Node binding checks remain unchanged.',
   'Route decisions, qualification metadata and discovery observations describe their recorded context and times. A new inspection does not refresh those observations.',
@@ -127,6 +130,7 @@ function empty(code, status = 'unavailable') {
       route: { status: 'unavailable', receiptDigest: null, evaluatedAt: null, observedAt: null, capabilityId: null, workcellId: null, decisionStatus: null, relationship: 'none', historical: true } },
     devices: [], capabilities: [], configurations: [], implementations: [], checks: [], requestBlockers: [],
     counts: { configurations: null, implementations: 0, configurationTruncated: false, implementationTruncated: false },
+    implementationSetup: { status: 'not_inspected', report: null },
     limitations: [...LIMITATIONS], physicalReadiness: 'unverified', physicalExecutionAuthorized: false }
 }
 function requestBlocker(code) {
@@ -246,9 +250,76 @@ function identity(value) {
     value.capabilityCatalog?.currentCandidateBindingDigest, value.routeReceipt, value.routeReceipt?.receiptDigest, value.routeReceipt?.decision?.decision_digest, value.routeRelationship]
 }
 
-/** Status-only, operator-neutral inventory. No discovery refresh, route preview,
+function implementationSetup(result, current, read, completedAt) {
+  result.implementationSetup = { status: read.status, report: null }
+  if (read.status !== 'available') return
+  const report = read.report
+  const generated = Date.parse(report.inspectedAt)
+  if (generated > completedAt || completedAt >= generated + report.maximumAgeMs) {
+    result.implementationSetup.status = 'expired'
+    return
+  }
+  // Registry digests have the same public scope. An implementation binding's
+  // registry-entry digest and a route's routing-envelope digest do not.
+  const registry = result.sources.catalog.status === 'cached' ? result.sources.catalog.registryDigest
+    : result.sources.route.status === 'cached' ? current.routeReceipt.request.expectedRegistryDigest : null
+  if ((registry !== null && report.registryDigest !== registry)
+    || (result.service.availability === 'available' && report.mode !== 'discovery' && report.mode !== result.service.mode)) {
+    result.implementationSetup.status = 'context_mismatch'
+    return
+  }
+  const copy = structuredClone(report)
+  const selected = current.routeReceipt?.decision?.selected_implementation_id
+  const selectedRow = (item) => result.sources.route.status === 'cached' && item.registeredImplementation
+    && item.implementationId === selected && item.capabilityId === result.sources.route.capabilityId && item.workcellId === result.sources.route.workcellId
+  copy.implementations = [...copy.implementations.filter(selectedRow), ...copy.implementations.filter((item) => !selectedRow(item))]
+  result.implementationSetup.report = copy
+  result.inspection.expiresAt = new Date(Math.min(Date.parse(result.inspection.expiresAt), generated + report.maximumAgeMs)).toISOString()
+  result.limitations.push('The Node setup report describes declared requirements and recorded metadata. Present does not mean physically validated. Registry or configuration source dates are not calibration validation or live observation times. Provider guidance without a registered implementation is not an installed implementation.',
+    'Setup binding scopes are distinct: registry-implementation identifies the stored registry entry; routing-envelope and executable-artifact digests identify different records. Do not equate these hashes or infer execution readiness.')
+}
+
+function boundedReport(result) {
+  let truncated = false
+  const provider = result.implementationSetup.report
+  // Prefer the selected implementation and its exact requirements. Drop whole
+  // presentation rows, never alter a Node requirement or turn omission into PASS.
+  while (Buffer.byteLength(JSON.stringify(result)) > MAX_REPORT_BYTES) {
+    truncated = true
+    if (result.implementations.length > 1) {
+      result.implementations.pop(); result.counts.implementationTruncated = true
+    } else if (provider?.implementations.length > 1) {
+      const removed = provider.implementations.pop()
+      provider.truncation.implementationsOmitted += 1
+      provider.truncation.requirementsOmitted += removed.requirements.length
+      provider.truncation.bindingsOmitted += removed.bindings.length
+      provider.truncation.constraintsOmitted += removed.constraints.length
+    } else if (result.configurations.length > 1) {
+      result.configurations.pop(); result.counts.configurationTruncated = true
+    } else if (result.devices.length) {
+      result.devices.pop(); result.sources.discovery.shown = result.devices.length; result.sources.discovery.truncated = true
+    } else if (result.capabilities.length) {
+      result.capabilities.pop(); result.sources.catalog.shown = result.capabilities.length; result.sources.catalog.truncated = true
+    } else if (provider?.implementations[0]?.requirements.length > 1) {
+      provider.implementations[0].requirements.pop(); provider.truncation.requirementsOmitted += 1
+    } else {
+      // Valid field bounds make this unreachable, but a failed size guarantee
+      // must never publish a partially validated or unbounded browser report.
+      return empty('unavailable')
+    }
+  }
+  if (truncated || (provider && Object.values(provider.truncation).some(Boolean))
+    || !['available', 'not_inspected'].includes(result.implementationSetup.status)) {
+    if (result.inspection.status === 'available') {
+      result.inspection = { ...result.inspection, status: 'partial', reasonCode: 'partial', message: MESSAGES.partial }
+    }
+  }
+  return result
+}
+
+/** Read-only, operator-neutral inventory. No discovery refresh, route preview,
  * filesystem access, execution history, hardware call or readiness evaluator. */
-export function createSetupInspector({ client, getContext = () => ({}), now = Date.now, readTimeoutMs = MAX_AGE } = {}) {
+export function createSetupInspector({ client, requirementsClient, getContext = () => ({}), now = Date.now, readTimeoutMs = MAX_AGE } = {}) {
   if (!Number.isFinite(readTimeoutMs) || readTimeoutMs <= 0 || readTimeoutMs > MAX_AGE) throw new TypeError('Invalid setup inspection timeout')
   let disposed = false, pending = null
   async function inspect(args = {}, { signal } = {}) {
@@ -278,12 +349,27 @@ export function createSetupInspector({ client, getContext = () => ({}), now = Da
     const work = (async () => {
       try {
         guard()
-        let service = null
-        try { if (client) service = normalizeExecutionStatus(await client.status()) } catch { /* Fixed partial/unavailable projection; no provider diagnostics. */ }
+        const [service, requirements] = await Promise.all([
+          (async () => {
+            try { return client ? normalizeExecutionStatus(await client.status()) : null } catch { return null }
+          })(),
+          (async () => {
+            if (!requirementsClient) return { status: 'not_inspected', report: null }
+            let read
+            try { read = await requirementsClient.requirements() } catch (error) { return { status: setupReadFailure(error), report: null } }
+            try {
+              executionFields(read, ['status', 'report'])
+              if (read.status === 'unsupported' && read.report === null) return read
+              check(read.status === 'available')
+              return { status: 'available', report: normalizeSetupRequirements(read.report) }
+            } catch { return { status: 'invalid', report: null } }
+          })(),
+        ])
         guard()
         const result = project(current, service, startedAt)
+        implementationSetup(result, current, requirements, now())
         guard()
-        return result
+        return boundedReport(result)
       } catch (code) { return fail(Object.hasOwn(MESSAGES, code) ? code : 'unavailable') }
       finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); if (pending === attempt) pending = null }
     })()

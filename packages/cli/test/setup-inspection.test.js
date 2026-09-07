@@ -276,7 +276,8 @@ test('large inventories are bounded with explicit totals and truncation counts',
   assert.equal(result.sources.discovery.total, 40); assert.equal(result.devices.length, 32); assert.equal(result.sources.discovery.truncated, true)
   assert.equal(result.sources.catalog.total, 40); assert.equal(result.capabilities.length, 32); assert.equal(result.sources.catalog.truncated, true)
   assert.equal(result.counts.configurations, 40); assert.equal(result.configurations.length, 32); assert.equal(result.counts.configurationTruncated, true)
-  assert.equal(result.counts.implementations, 20); assert.equal(result.implementations.length, 16); assert.equal(result.counts.implementationTruncated, true)
+  assert.equal(result.counts.implementations, 20); assert.ok(result.implementations.length > 0 && result.implementations.length <= 16); assert.equal(result.counts.implementationTruncated, true)
+  assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 64 * 1024, 'The combined report must fit the shared browser snapshot budget')
 })
 
 test('partial discovery and setup-required adapters are explicit without inferring health or calibration', async (t) => {

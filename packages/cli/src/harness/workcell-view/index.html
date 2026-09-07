@@ -43,6 +43,12 @@
         <div id="proposal"><p class="quiet">A proposal appears after the assistant checks a physical capability against the node’s registered implementations.</p></div>
         <div class="execution-lock"><span aria-hidden="true">⊘</span><div><strong>Selection is not authorization</strong><p>Prepare an exact available configuration below. A separate, unexpired operator approval is required for each invocation.</p></div></div>
       </section>
+      <section class="panel setup-panel" aria-labelledby="setup-title">
+        <div class="panel-heading"><div><p class="eyebrow">IMPLEMENTATION SETUP</p><h2 id="setup-title">What is still needed?</h2></div><span class="badge" id="setup-state">NOT INSPECTED</span></div>
+        <p id="setup-detail" class="panel-note">Inspect recorded requirements and blockers for the exact implementation. This read does not establish readiness or authorize a run.</p>
+        <div class="setup-controls"><button id="setup-inspect" class="secondary" disabled>Inspect setup</button></div>
+        <div id="setup-report" class="setup-report" aria-live="polite"><p class="quiet">Setup inspection is shared with the Harness terminal. No inspection starts automatically.</p></div>
+      </section>
       <section class="panel execution-panel" aria-labelledby="execution-title">
         <div class="panel-heading"><div><p class="eyebrow">04 / OPERATOR EXECUTION</p><h2 id="execution-title">Physical run</h2></div><span class="badge" id="execution-state">UNAVAILABLE</span></div>
         <p id="execution-detail" class="panel-note">Checking the local execution service. No execution is assumed available.</p>
