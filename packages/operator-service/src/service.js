@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, lstat } from 'node:fs/promises'
 import path from 'node:path'
 import { createExperimentController, createExperimentStore, createExperimentTools, experimentRequestFailure,
-  workcellRequestFailure, cameraIsFresh, loadVerifiedAgentSkills, createReadAgentSkillTool, assertRunMatches } from '../../operator-core/src/index.js'
+  workcellRequestFailure, cameraIsFresh, loadVerifiedAgentSkills, createReadAgentSkillTool, assertRunMatches, commissioningUnresolved, normalizeGripperCheck, assertGripperCheckMatches } from '../../operator-core/src/index.js'
 import { createNativeSecretStore } from '../../cli/src/auth/secret-store.js'
 import * as connectionAdapters from '../../desktop/src/connections.js'
 import { agentToolDefinitions, agentToolNames } from './tools.js'
@@ -102,8 +102,12 @@ export async function createOperatorService({ dataDir, secretStore, connections 
       for (const field of ['planDigest', 'checkpoint']) if (record[field] !== undefined && !/^[0-9a-f]{64}$/.test(record[field])) throw new Error('Invalid continuation binding')
     }
     for (const record of saved.ownership) {
-      if (!ids.has(record.conversationId) || !saved.projects.some((project) => project.id === record.projectId) || !['camera', 'execution'].includes(record.kind)) throw new Error('Invalid ownership evidence')
+      if (!ids.has(record.conversationId) || !saved.projects.some((project) => project.id === record.projectId) || !['camera', 'execution', 'commissioning'].includes(record.kind)) throw new Error('Invalid ownership evidence')
       text(record.nodeId, 'Saved Node identity', 512)
+      if (record.kind === 'commissioning') {
+        const status = normalizeGripperCheck(record.commissioningStatus)
+        if (status.nodeSessionId !== record.nodeSessionId || status.trial?.trialId !== record.trialId || !commissioningUnresolved(status)) throw new Error('Invalid commissioning ownership evidence')
+      }
     }
     fields(saved.selection, ['projectId', 'conversationId'])
     if (saved.selection.projectId && !saved.projects.some((project) => project.id === saved.selection.projectId)) throw new Error('Invalid selection')
@@ -122,11 +126,11 @@ export async function createOperatorService({ dataDir, secretStore, connections 
     try { store.write(saved) } catch { storageFailed = true; throw fail('STORAGE_UNAVAILABLE', 'Operator evidence could not be saved. Work is blocked; retain the files and resolve owned operations.') }
   }
   const unresolved = (view) => Boolean(view?.camera?.pending || view?.camera?.stopPending || view?.camera?.stopUnconfirmed || view?.camera?.stopCaptureSessionId ||
-    view?.execution?.pending || view?.execution?.stopPending || [...(view?.execution?.activeRuns || []), ...(view?.execution?.runs || []), ...(view?.execution?.run ? [view.execution.run] : [])].some((run) => !TERMINAL_RUN.has(run.phase) || run.stopStatus === 'STOP_UNCONFIRMED'))
-  const requiresRecovery = (record) => record.recovered || (record.status === 'OUTCOME_UNKNOWN' && !(record.kind === 'camera' ? record.captureSessionId : record.runId))
+    view?.commissioning?.unresolved || view?.commissioning?.pending || view?.commissioning?.stopPending || view?.execution?.pending || view?.execution?.stopPending || [...(view?.execution?.activeRuns || []), ...(view?.execution?.runs || []), ...(view?.execution?.run ? [view.execution.run] : [])].some((run) => !TERMINAL_RUN.has(run.phase) || run.stopStatus === 'STOP_UNCONFIRMED'))
+  const requiresRecovery = (record) => record.recovered || (record.status === 'OUTCOME_UNKNOWN' && !(record.kind === 'camera' ? record.captureSessionId : record.kind === 'commissioning' ? record.trialId : record.runId))
   const recoveryOwner = (record) => ({ ...record, ...bindingScope(binding(record.conversationId)),
     projectName: project(record.projectId).name, statusUnavailable: true,
-    ...(!(record.kind === 'camera' ? record.captureSessionId : record.runId) ? {
+    ...(!(record.kind === 'camera' ? record.captureSessionId : record.kind === 'commissioning' ? record.trialId : record.runId) ? {
       error: 'The operation acknowledgement did not include an identity. Its outcome is unknown. Inspect the original Node and retain its evidence; another camera or run cannot safely be guessed.',
     } : {}) })
   const experimentView = (context, entry) => {
@@ -143,7 +147,8 @@ export async function createOperatorService({ dataDir, secretStore, connections 
     const view = ownsView ? selectedLink.physical?.workcell.snapshot() : null
     const connected = selectedLink?.status === 'connected' && fresh(selectedLink.observedAt)
     const workcell = view && !connected ? { ...view, camera: { ...view.camera, availability: 'unavailable', frame: null, previewFrameId: null, receivedAt: null },
-      execution: { ...view.execution, availability: 'unavailable', canPrepare: false, canApprove: false } } : view
+      execution: { ...view.execution, availability: 'unavailable', canPrepare: false, canApprove: false },
+      commissioning: view.commissioning ? { ...view.commissioning, available: false, fresh: false, receivedAt: null } : null } : view
     const owners = [...links].flatMap(([id, link]) => {
       const owner = binding(link.physicalOwner), view = link.physical?.workcell.snapshot()
       if (!owner || !view) return []
@@ -177,6 +182,13 @@ export async function createOperatorService({ dataDir, secretStore, connections 
         ...saved.ownership.filter((record) => requiresRecovery(record) && record.kind === 'execution').map((record) => ({ ...recoveryOwner(record),
           run: { runId: record.runId, runDigest: record.runDigest, phase: 'OUTCOME_UNKNOWN' },
           canStop: Boolean(record.runId && links.get(record.projectId)?.status === 'connected') }))],
+      activeCommissioning: [...owners.filter(({ view }) => view.commissioning?.unresolved).map(({ view, ...owner }) => ({ ...owner,
+        statusUnavailable: owner.statusUnavailable || !view.commissioning.fresh,
+        status: view.commissioning.status, trialId: view.commissioning.status?.trial?.trialId || null, nodeSessionId: view.commissioning.status?.nodeSessionId || null,
+        canStop: Boolean(view.commissioning.status?.trial && !view.commissioning.stopPending), stopPending: view.commissioning.stopPending })),
+        ...saved.ownership.filter((record) => requiresRecovery(record) && record.kind === 'commissioning').map((record) => ({ ...recoveryOwner(record),
+          status: record.commissioningStatus || null, trialId: record.trialId || null, nodeSessionId: record.nodeSessionId || null, stopPending: false,
+          canStop: Boolean(record.trialId && record.nodeSessionId && links.get(record.projectId)?.status === 'connected') }))],
       recoveryOperations: saved.ownership.filter(requiresRecovery).map(recoveryOwner),
     })
   }
@@ -356,6 +368,8 @@ export async function createOperatorService({ dataDir, secretStore, connections 
       const pins = Object.fromEntries(['runId', 'mode', 'capabilityId', 'implementationId', 'implementationDigest', 'configurationId', 'configurationDigest', 'routeReceiptDigest', 'snapshotDigest', 'inputs', 'approval'].filter((key) => Object.hasOwn(exact, key)).map((key) => [key, exact[key]]))
       retained.push({ ...base, kind: 'execution', runId: run.runId, runDigest: run.runDigest, pins, status: run.phase })
     }
+    if (view.commissioning?.status?.trial && view.commissioning.unresolved) retained.push({ ...base, kind: 'commissioning',
+      trialId: view.commissioning.status.trial.trialId, nodeSessionId: view.commissioning.status.nodeSessionId, commissioningStatus: view.commissioning.status, status: view.commissioning.status.trial.phase })
     if (view.execution.pending && !retained.some((record) => record.projectId === p.id && record.kind === 'execution')) retained.push({ ...base, kind: 'execution', runId: null, status: 'REQUEST_PENDING' })
     if (JSON.stringify(retained) !== JSON.stringify(saved.ownership)) { saved.ownership = retained; try { save() } catch {} }
     emit()
@@ -392,13 +406,19 @@ export async function createOperatorService({ dataDir, secretStore, connections 
   async function recoveredStop(owner, operation, body) {
     const { p, entry } = owner, link = links.get(p.id)
     const record = saved.ownership.find((item) => item.recovered && item.projectId === p.id && item.conversationId === entry.id &&
-      (operation === 'camera.stop' ? item.kind === 'camera' && item.captureSessionId === body.expectedCaptureSessionId : item.kind === 'execution' && item.runId === body.runId))
+      (operation === 'camera.stop' ? item.kind === 'camera' && item.captureSessionId === body.expectedCaptureSessionId :
+        operation === 'commissioning.stop' ? item.kind === 'commissioning' && item.trialId === body.trialId : item.kind === 'execution' && item.runId === body.runId))
     if (!record) return null
     if (!link?.clients || link.status !== 'connected' || p.connection.expectedNodeId !== record.nodeId) throw fail('RECOVERY_REQUIRED', 'Reconnect the exact original Node before retrying its owned Stop')
     let confirmed = false
     if (record.kind === 'camera') {
       const status = await link.clients.camera.stop({ expectedCaptureSessionId: record.captureSessionId })
       confirmed = status.phase === 'stopped' && status.captureSessionId === record.captureSessionId
+    }
+    else if (record.kind === 'commissioning') {
+      const status = await link.clients.commissioning.stop({ expectedNodeSessionId: record.nodeSessionId, trialId: record.trialId, reason: 'operator-requested-stop' })
+      assertGripperCheckMatches(status, record.commissioningStatus)
+      confirmed = status.nodeSessionId === record.nodeSessionId && status.trial?.trialId === record.trialId && status.trial.digest === record.commissioningStatus?.trial?.digest && !commissioningUnresolved(status)
     }
     else {
       const run = await link.clients.execution.stop(record.runId, { reason: 'operator-requested-stop' }, record.pins || { runId: record.runId })
@@ -476,7 +496,7 @@ export async function createOperatorService({ dataDir, secretStore, connections 
         if (p.connection.expectedNodeId) nodeOwners.delete(p.connection.expectedNodeId)
         links.delete(p.id); p.generation += 1; save(); emit(); return snapshot()
       }
-      const owner = scope(body, { generation: name !== 'session.agentState' && name !== 'experiment.stop' && name !== 'experiment.finish' })
+      const owner = scope(body, { generation: name !== 'session.agentState' && name !== 'experiment.stop' && name !== 'experiment.finish' && name !== 'workcell.commissioning.stop' })
       if (name === 'session.agentState') {
         fields(body, ['projectId', 'conversationId', 'serverId', 'sessionId', 'connectionGeneration', 'busy', 'error'], ['serverId', 'sessionId', 'busy'])
         if (typeof body.busy !== 'boolean') throw fail('INVALID_REQUEST', 'Agent busy state must be explicit')
@@ -506,14 +526,14 @@ export async function createOperatorService({ dataDir, secretStore, connections 
       }
       if (name.startsWith('workcell.')) {
         const operation = name.slice(9), stop = operation.endsWith('.stop'), frame = operation === 'camera.frame'
-        if (!['refresh', 'setup.inspect', 'camera.start', 'camera.stop', 'camera.frame', 'execution.refresh', 'execution.prepare', 'execution.approve', 'execution.stop', 'execution.select', 'execution.receipt', 'execution.reconcile'].includes(operation)) throw fail('UNSUPPORTED_COMMAND', 'This workcell action is unsupported')
+        if (!['refresh', 'setup.inspect', 'camera.start', 'camera.stop', 'camera.frame', 'execution.refresh', 'execution.prepare', 'execution.approve', 'execution.stop', 'execution.select', 'execution.receipt', 'execution.reconcile', 'commissioning.refresh', 'commissioning.inspect', 'commissioning.prepare', 'commissioning.approve', 'commissioning.stop'].includes(operation)) throw fail('UNSUPPORTED_COMMAND', 'This workcell action is unsupported')
         if (stop) {
           owner.context.physicalStopEpoch += 1
           const recovered = await recoveredStop(owner, operation, body)
           if (recovered) return recovered
         }
         if (!stop) scope(body, { physical: true })
-        const review = ['camera.start', 'execution.prepare', 'execution.approve'].includes(operation)
+        const review = ['camera.start', 'execution.prepare', 'execution.approve', 'commissioning.inspect', 'commissioning.prepare', 'commissioning.approve'].includes(operation)
         if (review) scope(body, { selected: true })
         return await withContext(owner.context, stop || frame, () => withPhysical(owner, stop || frame, async (physical) => {
           if (review) scope(body, { selected: true })
@@ -527,6 +547,9 @@ export async function createOperatorService({ dataDir, secretStore, connections 
               captureSessionId: null, runId: null, status: 'REQUEST_PENDING', recovered: false }); save()
           }
           if (operation.startsWith('camera.')) return physical.workcell.cameraAction(operation.slice(7), payload)
+          if (operation.startsWith('commissioning.') && !stop) scope(body, { physical: true, selected: review })
+          if (operation === 'commissioning.approve') { journalPhysical(owner.p, owner.entry, links.get(owner.p.id)); save() }
+          if (operation.startsWith('commissioning.')) return physical.workcell.commissioningAction(operation.slice(14), payload)
           if (operation.startsWith('execution.')) return physical.workcell.executionAction(operation.slice(10), payload)
           throw fail('UNSUPPORTED_COMMAND', 'This workcell action is unsupported')
         }))

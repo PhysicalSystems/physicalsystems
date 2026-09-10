@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { safeErrorMessage } from '../auth/redact.js'
 import { createExecutionController } from './execution-controller.js'
+import { createCommissioningController } from './commissioning-controller.js'
 
 export const WORKCELL_VIEW_VERSION = 'physicalsystems-workcell-view-v1'
 export const WORKCELL_VIEW_MAX_BYTES = 256 * 1024
@@ -41,7 +42,7 @@ function inputText(value, maximum = 500) {
 export function createWorkcellController({
   workflow, refreshWorkflow, invalidateWorkflow = () => {},
   sendIntent, canPrompt = () => true, modelLabel = () => null,
-  cameraClient, executionClient, now = () => new Date().toISOString(), pollMs = 200,
+  cameraClient, executionClient, commissioningClient, now = () => new Date().toISOString(), pollMs = 200,
   inspectSetup, getSetupView = () => ({ pending: false, report: null, error: null }),
   getExperiments = () => null,
   choiceTimeoutMs = 180_000,
@@ -84,6 +85,7 @@ export function createWorkcellController({
         stopUnconfirmed: unconfirmedStops.size > 0,
         stopCaptureSessionId: stopCaptureSessionId || ownedCaptureSessions.values().next().value || null },
       execution: execution.snapshot(),
+      commissioning: commissioning.snapshot(),
       experiments: getExperiments()?.snapshot() || null,
     }
     const setup = getSetupView()
@@ -99,8 +101,11 @@ export function createWorkcellController({
     revision += 1
     for (const listener of listeners) { try { listener() } catch { /* A viewer cannot break the agent. */ } }
   }
+  const commissioning = createCommissioningController({ client: commissioningClient,
+    canAct: () => !disposed && agent.status !== 'working' && !choice && !cameraActionPending && !pendingStops.size && !unconfirmedStops.size && !execution.snapshot().activeRuns.length && !execution.snapshot().pending,
+    onChange: emit, now: () => Date.parse(now()) })
   const execution = createExecutionController({ client: executionClient, currentRoute: () => workflow?.routeReceipt,
-    canPrepare: () => !disposed && agent.status !== 'working' && !choice && !cameraActionPending && !pendingStops.size && !unconfirmedStops.size,
+    canPrepare: () => !commissioning.snapshot().unresolved && !commissioning.snapshot().pending && !disposed && agent.status !== 'working' && !choice && !cameraActionPending && !pendingStops.size && !unconfirmedStops.size,
     onChange: emit, now: () => Date.parse(now()) })
   const setWorkflow = (value) => { workflow = value; execution.contextChanged() }
   const resolveChoice = (answer) => {
@@ -390,6 +395,10 @@ export function createWorkcellController({
       if (!cachedFrame || id !== cachedFrame.id) throw new Error('This exact preview frame is no longer retained; refresh the view')
       return { bytes: cachedFrame.bytes, contentType: cachedFrame.contentType }
     },
+    async commissioningAction(action, body) {
+      await commissioning.action(action, body)
+      return snapshot()
+    },
     async executionAction(action, body) {
       await execution.action(action, body)
       return snapshot()
@@ -399,6 +408,7 @@ export function createWorkcellController({
       disposed = true
       pendingPrompt = null
       execution.dispose()
+      commissioning.dispose()
       clearTimeout(pollTimer)
       resolveChoice(null)
       listeners.clear()
