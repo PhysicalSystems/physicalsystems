@@ -19,3 +19,6 @@ export { createSetupRequirementsClient } from '../../cli/src/physical/setup-clie
 export { cameraIsFresh } from '../../cli/src/harness/workcell-view/view-state.js'
 export { safeErrorMessage } from '../../cli/src/auth/redact.js'
 export { loadVerifiedAgentSkills, createReadAgentSkillTool } from '../../cli/src/harness/agent-skills.js'
+
+export { createCommissioningClient, commissioningUnresolved, normalizeGripperCheck, assertGripperCheckMatches, assertGripperRecoveryMatches, gripperRecoveryCleared } from '../../cli/src/physical/commissioning-client.js'
+export { createCommissioningController } from '../../cli/src/harness/commissioning-controller.js'

@@ -19,6 +19,7 @@ test('IPC rejects arbitrary authority, prototype keys and excessive request size
   assert.throws(() => validateCommand('project.create', JSON.parse('{"__proto__":{"polluted":true}}')));
   assert.throws(() => validateCommand('conversation.send', { text: 'x'.repeat(1024 * 1024) }));
   assert.deepEqual(validateCommand('workcell.camera.stop', { projectId: 'project-1' }), { projectId: 'project-1' });
+  for (const name of ['workcell.commissioning.recoveryInspect', 'workcell.commissioning.recoveryConfirm']) assert.deepEqual(validateCommand(name, { projectId: 'project-1' }), { projectId: 'project-1' });
 });
 
 test('asset protocol exposes only the packaged renderer allowlist', () => {
@@ -45,6 +46,11 @@ test('host death retires camera/status claims but preserves last-observed runs a
   assert.equal(result.activeRuns[0].canStop, false);
   assert.deepEqual(result.conversation.messages, original.conversation.messages);
   assert.equal(original.workcell.camera.frame, 'must-clear');
+  const retained = unavailableSnapshot({ activeCommissioning: [{ trialId: 'retained-unknown', recoveryView: { recoveryAvailable: true, recoveryFresh: true, recoveryReceivedAt: 123, unresolved: true } }] });
+  assert.equal(retained.activeCommissioning[0].trialId, 'retained-unknown');
+  assert.equal(retained.activeCommissioning[0].recoveryView.recoveryFresh, false);
+  assert.equal(retained.activeCommissioning[0].recoveryView.recoveryAvailable, false);
+  assert.equal(retained.activeCommissioning[0].recoveryView.unresolved, true);
 });
 
 test('native provider browser destination rejects executable schemes and embedded credentials', () => {

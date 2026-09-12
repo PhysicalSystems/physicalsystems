@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { createPhysicalNodeClient, createCameraPreviewClient, createExecutionClient, createSetupRequirementsClient,
+import { createPhysicalNodeClient, createCameraPreviewClient, createExecutionClient, createSetupRequirementsClient, createCommissioningClient,
   createWorkcellController, createSetupInspector, createSetupView, createExecutionInspector,
   createPhysicalWorkflowState, updatePhysicalWorkflow, createPhysicalTools } from '../../operator-core/src/index.js'
 
@@ -9,6 +9,7 @@ export function createPublicClients({ endpoint, credential = {}, fetchImpl = glo
     node: createPhysicalNodeClient({ baseUrl: endpoint, fetchImpl }),
     camera: createCameraPreviewClient({ baseUrl: endpoint, token: credential.cameraToken, fetchImpl }),
     execution: createExecutionClient({ baseUrl: endpoint, token: credential.executionToken, fetchImpl }),
+    commissioning: createCommissioningClient({ baseUrl: endpoint, token: credential.executionToken, fetchImpl }),
     setup: createSetupRequirementsClient({ baseUrl: endpoint, token: credential.executionToken, fetchImpl }),
   })
 }
@@ -40,7 +41,7 @@ export function createPhysicalContext({ clients, experiments, now, onChange, can
     onRouteError: (error, generation) => transition({ type: 'route-error', error, generation }),
     onRouteChecking: (type) => { transition({ type }); return workflow.generation },
   })
-  workcell = createWorkcellController({ workflow, cameraClient: clients.camera, executionClient: clients.execution,
+  workcell = createWorkcellController({ workflow, cameraClient: clients.camera, executionClient: clients.execution, commissioningClient: clients.commissioning,
     now: () => new Date(now()).toISOString(), canPrompt, sendIntent,
     getExperiments: () => experiments, getSetupView: () => setupView.snapshot(), inspectSetup: () => setupView.inspect({}),
     invalidateWorkflow: () => transition({ type: 'reset-intent' }),
