@@ -8,7 +8,8 @@ import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createOperatorService, createPublicClients, agentToolNames } from '../src/index.js'
 import { normalizeLocalEndpoint } from '../../desktop/src/connections.js'
-import { createCommissioningClient, normalizeGripperCheck, GRIPPER_JOINTS } from '../../cli/src/physical/commissioning-client.js'
+import { createCommissioningClient, normalizeGripperCheck, commissioningUnresolved, GRIPPER_JOINTS } from '../../cli/src/physical/commissioning-client.js'
+import { executionDigest } from '../../cli/src/physical/execution-contracts.js'
 import { createCommissioningController } from '../../cli/src/harness/commissioning-controller.js'
 import { createExperimentStore } from '../../operator-core/src/index.js'
 
@@ -23,20 +24,31 @@ const inspect = (now) => ({ id: 'inspection-one', digest: digest(3), observedAt:
   checks: [{ code: 'fixture-observed', state: 'met', message: 'Synthetic evidence only' }], gripperPosition: 50 })
 const trial = (now, target = 52) => ({ trialId: 'trial-one', digest: digest(4), phase: 'WAITING_FOR_APPROVAL', approvalExpiresAt: new Date(now + 30000).toISOString(),
   startPosition: 50, targetPosition: target, maximumDurationSeconds: 10, latestPosition: 50, stopStatus: null, message: null })
+const seal = (value) => ({ ...value, digest: executionDigest(value) })
+const recoveryBinding = (status) => ({ trialId: status.trial.trialId, trialDigest: status.trial.digest, trialNodeSessionId: status.trialNodeSessionId,
+  nodeSessionId: status.nodeSessionId, configurationDigest: status.configuration.digest, deviceIdentity: status.configuration.deviceIdentity })
+const unknown = (status, currentSession = status.nodeSessionId) => ({ ...status, nodeSessionId: currentSession, trialNodeSessionId: status.trialNodeSessionId ?? status.nodeSessionId,
+  trial: { ...status.trial, phase: 'OUTCOME_UNKNOWN', stopStatus: 'STOPPED' }, canInspect: false, canPrepare: false, canApprove: false, canStop: true,
+  recovery: null, recoveryClearance: null, canInspectRecovery: true, canConfirmRecovery: false })
+const recoveryOffer = (status, now) => seal({ id: 'recovery-one', ...recoveryBinding(status), observedAt: new Date(now).toISOString(), expiresAt: new Date(now + 30000).toISOString(),
+  ready: true, positions: inspect(now).positions, torqueEnabled: inspect(now).torqueEnabled, checks: inspect(now).checks })
+const clearance = (status, now, recoveryDigest = status.recovery?.digest || digest(6)) => seal({ id: 'clearance-one', ...recoveryBinding(status), recoveryDigest,
+  confirmedAt: new Date(now).toISOString(), inspectionDigest: digest(7), priorRunDigest: digest(8), priorRevision: 3 })
+const cleared = (status, now) => ({ ...status, recovery: null, recoveryClearance: clearance(status, now), canInspectRecovery: false, canConfirmRecovery: false, canInspect: true, canStop: false })
 
 async function fixture(t) {
-  let clock = Date.now(), node = initial(clock), failStatus = null, failStop = false, approvalWait = null, dropApproval = false, disconnected
+  let clock = Date.now(), node = initial(clock), failStatus = null, failStop = false, approvalWait = null, recoveryWait = null, recoveryCancelled = false, dropApproval = false, dropRecovery = false, disconnected, prepared = 0
   const calls = [], credentials = new Map(), dataDir = await mkdtemp(path.join(tmpdir(), 'operator-gripper-'))
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const part of req) raw += part
-    const body = raw ? JSON.parse(raw) : undefined, action = req.url.split('/').pop()
+    const body = raw ? JSON.parse(raw) : undefined, suffix = req.url.split('/').pop(), action = req.url.includes('/recovery/') ? `recovery${suffix[0].toUpperCase()}${suffix.slice(1)}` : suffix
     calls.push({ action, body, authorization: req.headers.authorization })
     res.setHeader('Content-Type', 'application/json')
     if (req.headers.authorization !== `Bearer ${token}`) { res.statusCode = 401; res.end('{}'); return }
     if (failStatus) { res.statusCode = failStatus; res.end('{"secret":"must-not-reflect-provider-body"}'); return }
     if (body && body.expectedNodeSessionId !== node.nodeSessionId) { res.statusCode = 409; res.end('{}'); return }
     if (action === 'inspect') node = { ...node, inspection: inspect(clock), canPrepare: true }
-    if (action === 'prepare') node = { ...node, trial: trial(clock, body.targetPosition), canInspect: false, canPrepare: false, canApprove: true, canStop: true }
+    if (action === 'prepare') { prepared++; node = { ...node, trial: { ...trial(clock, body.targetPosition), ...(prepared > 1 ? { trialId: `trial-${prepared}`, digest: digest(9) } : {}) }, canInspect: false, canPrepare: false, canApprove: true, canStop: true } }
     if (action === 'approve') {
       node = { ...node, trial: { ...node.trial, phase: 'RUNNING' }, canApprove: false }
       const response = structuredClone(node)
@@ -46,7 +58,16 @@ async function fixture(t) {
     }
     if (action === 'stop') {
       if (failStop) { req.socket.destroy(); return }
-      node = { ...node, trial: { ...node.trial, phase: 'STOPPED', stopStatus: 'STOPPED' }, canInspect: true, canApprove: false, canStop: false }
+      if (node.trial?.phase === 'OUTCOME_UNKNOWN') { recoveryCancelled = true; node = { ...node, recovery: null, canConfirmRecovery: false } }
+      else node = { ...node, trial: { ...node.trial, phase: 'STOPPED', stopStatus: 'STOPPED' }, canInspect: true, canApprove: false, canStop: false }
+    }
+    if (action === 'recoveryInspect') { recoveryCancelled = false; node = { ...node, recovery: recoveryOffer(node, clock), canConfirmRecovery: true } }
+    if (action === 'recoveryConfirm') {
+      if (body.confirmed !== true || body.recoveryDigest !== node.recovery?.digest) { res.statusCode = 409; res.end('{}'); return }
+      await recoveryWait
+      if (recoveryCancelled) { res.statusCode = 409; res.end('{}'); return }
+      node = cleared(node, clock)
+      if (dropRecovery) { req.socket.destroy(); return }
     }
     res.end(JSON.stringify(node))
   })
@@ -74,17 +95,26 @@ async function fixture(t) {
   const command = (action, body = {}, scope = owner) => service.command(`workcell.commissioning.${action}`, { ...Object.fromEntries(['projectId', 'conversationId', 'serverId', 'sessionId', 'connectionGeneration'].map((key) => [key, scope[key]])), ...body })
   const prepare = async () => { await command('refresh'); await command('inspect'); await command('prepare', { configurationDigest: digest(1), inspectionDigest: digest(3), targetPosition: 52 }) }
   t.after(async () => {
-    failStatus = null; failStop = false; node.nodeSessionId = 'node-session-one'
+    failStatus = null; failStop = false; dropRecovery = false; node.nodeSessionId = 'node-session-one'
     if (service.snapshot().activeCommissioning.length) {
       const active = service.snapshot().activeCommissioning[0]
       node.trial = structuredClone(active.status?.trial || trial(clock))
-      try { await command('stop', { trialId: active.trialId, reason: 'operator-requested-stop' }, active) } catch {}
+      try {
+        if (active.status?.trial?.phase === 'OUTCOME_UNKNOWN') {
+          node = cleared(unknown(structuredClone(active.status)), clock)
+          await service.command('connection.connect', { projectId: active.projectId })
+          const current = service.snapshot().activeCommissioning[0]
+          await command('recoveryInspect', { trialId: active.trialId, trialDigest: active.status.trial.digest }, current)
+        } else await command('stop', { trialId: active.trialId, reason: 'operator-requested-stop' }, active)
+      } catch {}
     }
     try { await service.close() } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dataDir, { recursive: true, force: true }) }
   })
   return { get service() { return service }, options, owner, bound, command, prepare, endpoint, calls, dataDir,
     set node(value) { node = value }, get node() { return node }, advance: (ms) => { clock += ms }, disconnect: () => disconnected(),
     failStatus: (value) => { failStatus = value }, failStop: (value) => { failStop = value }, waitApproval: (value) => { approvalWait = value }, dropApproval: () => { dropApproval = true },
+    dropRecovery: () => { dropRecovery = true },
+    waitRecovery: (value) => { recoveryWait = value },
     restart: async (records) => { await service.close(); const store = createExperimentStore({ storageDir: path.join(dataDir, 'operator-state'), sessionId: 'operator-service-v1' }); const state = store.read(); state.ownership = records; store.write(state); store.release(); service = await createOperatorService(options) },
   }
 }
@@ -240,4 +270,273 @@ test('a lost approval delivery is never offered for repeat even if a later read 
     assert.equal(approvals, 1)
     assert.equal(controller.snapshot().unresolved, true)
   } finally { controller.dispose() }
+})
+
+test('recovery seals reject altered evidence and unrelated historical clearance cannot resolve another trial', () => {
+  const now = Date.now(), base = unknown({ ...initial(now), trial: trial(now) })
+  const offered = { ...base, recovery: recoveryOffer(base, now), canConfirmRecovery: true }
+  assert.equal(normalizeGripperCheck(offered).recovery.ready, true)
+  for (const mutate of [
+    (value) => { value.recovery.positions.gripper += 1 },
+    (value) => { value.recovery.nodeSessionId = 'wrong-node-session' },
+    (value) => { value.recovery.trialId = 'wrong-trial' },
+    (value) => { value.recovery.trialNodeSessionId = 'wrong-origin' },
+    (value) => { delete value.canInspectRecovery },
+    (value) => { value.recovery.torqueEnabled.gripper = true; value.recovery = seal(Object.fromEntries(Object.entries(value.recovery).filter(([key]) => key !== 'digest'))) },
+  ]) { const value = structuredClone(offered); mutate(value); assert.throws(() => normalizeGripperCheck(value)) }
+  const resolved = cleared(base, now)
+  assert.equal(commissioningUnresolved(normalizeGripperCheck(resolved)), false)
+  const altered = structuredClone(resolved); altered.recoveryClearance.priorRevision += 1
+  assert.throws(() => normalizeGripperCheck(altered))
+  const unrelated = { ...base, recoveryClearance: resolved.recoveryClearance, trial: { ...base.trial, trialId: 'new-unknown-trial', digest: digest(9) } }
+  assert.equal(commissioningUnresolved(normalizeGripperCheck(unrelated)), true)
+  const afterRestart = { ...resolved, nodeSessionId: 'current-session-after-clearance' }
+  assert.equal(commissioningUnresolved(normalizeGripperCheck(afterRestart)), false, 'durable receipt keeps its historical confirmation session')
+})
+
+test('owned recovery requires separate inspection and exact explicit confirmation while preserving unknown history', async (t) => {
+  const f = await fixture(t); await f.prepare(); f.node = unknown(f.node); await f.command('refresh')
+  const body = { trialId: 'trial-one', trialDigest: digest(4) }
+  await f.command('recoveryInspect', body)
+  const view = f.service.snapshot().workcell.commissioning
+  assert.equal(view.status.trial.phase, 'OUTCOME_UNKNOWN')
+  assert.equal(view.recoveryStatus.recovery.ready, true)
+  assert.equal(view.recoveryFresh, true)
+  await assert.rejects(f.command('recoveryConfirm', { ...body, recoveryDigest: digest(9), confirmed: true }))
+  await assert.rejects(f.command('recoveryConfirm', { ...body, recoveryDigest: view.recoveryStatus.recovery.digest, confirmed: false }))
+  await assert.rejects(f.service.agentCall({ agentToken: f.bound.agentToken, name: 'recover_gripper_check', arguments: body, callId: 'fixture-recovery-call' }))
+  assert.equal(f.calls.filter((call) => call.action === 'recoveryConfirm').length, 0)
+  await f.command('recoveryConfirm', { ...body, recoveryDigest: view.recoveryStatus.recovery.digest, confirmed: true })
+  assert.equal(f.service.snapshot().activeCommissioning.length, 0)
+  assert.equal(f.service.snapshot().workcell.commissioning.status.trial.phase, 'OUTCOME_UNKNOWN')
+  assert.equal(f.service.snapshot().workcell.commissioning.status.recoveryClearance.trialId, body.trialId)
+  await assert.rejects(f.command('recoveryConfirm', { ...body, recoveryDigest: view.recoveryStatus.recovery.digest, confirmed: true }))
+  assert.equal(f.calls.filter((call) => call.action === 'recoveryConfirm').length, 1)
+  assert.equal(f.calls.some((call) => call.action === 'approve'), false)
+  await f.command('inspect')
+  await f.command('prepare', { configurationDigest: digest(1), inspectionDigest: digest(3), targetPosition: 52 })
+  const next = f.service.snapshot().workcell.commissioning
+  assert.equal(next.status.trial.trialId, 'trial-2')
+  assert.equal(next.status.trial.phase, 'WAITING_FOR_APPROVAL')
+  assert.equal(next.recoveryStatus, null); assert.equal(next.recoveryFresh, false)
+  assert.equal(next.status.recoveryClearance.trialId, body.trialId, 'historical Node receipt remains available without controlling the new plan')
+  assert.equal(next.status.canApprove, true)
+})
+
+test('restarted Node recovery uses a separate current status and clears only the original owned trial', async (t) => {
+  const f = await fixture(t); await f.prepare(); f.node = unknown(f.node); await f.command('refresh')
+  f.node = { ...f.node, nodeSessionId: 'restarted-node-session' }
+  await f.command('refresh')
+  assert.equal(f.service.snapshot().workcell.commissioning.available, false)
+  const body = { trialId: 'trial-one', trialDigest: digest(4) }
+  await f.command('recoveryInspect', body)
+  const view = f.service.snapshot().workcell.commissioning
+  assert.equal(view.status.nodeSessionId, 'node-session-one')
+  assert.equal(view.recoveryStatus.nodeSessionId, 'restarted-node-session')
+  assert.equal(view.recoveryStatus.trialNodeSessionId, 'node-session-one')
+  assert.equal(f.service.snapshot().activeCommissioning[0].nodeSessionId, 'node-session-one')
+  await f.command('recoveryConfirm', { ...body, recoveryDigest: view.recoveryStatus.recovery.digest, confirmed: true })
+  assert.equal(f.service.snapshot().activeCommissioning.length, 0)
+  assert.equal(f.service.snapshot().workcell.commissioning.status.nodeSessionId, 'restarted-node-session')
+})
+
+test('authenticated matching metadata refresh keeps recovery available without another inspection or extending offer expiry', async (t) => {
+  const f = await fixture(t); await f.prepare(); f.node = unknown(f.node); await f.command('refresh')
+  const body = { trialId: 'trial-one', trialDigest: digest(4) }
+  await f.command('recoveryInspect', body)
+  const recoveryDigest = f.service.snapshot().workcell.commissioning.recoveryStatus.recovery.digest
+  f.advance(5001); await f.command('refresh')
+  const view = f.service.snapshot().workcell.commissioning
+  assert.equal(view.fresh, true); assert.equal(view.recoveryFresh, true)
+  assert.equal(f.calls.filter((call) => call.action === 'recoveryInspect').length, 1)
+  f.advance(25000); await f.service.command('connection.connect', { projectId: f.owner.projectId }); await f.command('refresh')
+  assert.equal(f.service.snapshot().workcell.commissioning.recoveryFresh, false)
+  await assert.rejects(f.command('recoveryConfirm', { ...body, recoveryDigest, confirmed: true }))
+  assert.equal(f.calls.filter((call) => call.action === 'recoveryConfirm').length, 0)
+})
+
+test('restarted recovery metadata polls preserve original ownership and reject changed or failed evidence', async () => {
+  let clock = Date.now()
+  const original = unknown({ ...initial(clock), trial: trial(clock) }), current = { ...original, nodeSessionId: 'restarted-node-session' }
+  const offered = { ...current, recovery: recoveryOffer(current, clock), canConfirmRecovery: true }
+  for (const broken of [null, { ...offered, nodeSessionId: 'another-node-session' }, { ...offered, trialNodeSessionId: 'another-origin' },
+    { ...offered, configuration: { ...offered.configuration, digest: digest(9) } }, { ...offered, recovery: { ...offered.recovery, digest: digest(9) } }, { ...offered, recovery: null }]) {
+    let response = current, reads = 0
+    const controller = createCommissioningController({ initialStatus: original, recoveryOnly: true, now: () => clock, client: {
+      async status() { if (!response) throw Error('Synthetic offline'); return response }, async recoveryInspect() { reads++; return offered },
+    } })
+    try {
+      await controller.action('recoveryInspect', { trialId: 'trial-one', trialDigest: digest(4) })
+      response = offered; clock += 1000; await controller.refresh()
+      assert.equal(controller.snapshot().recoveryFresh, true); assert.equal(controller.snapshot().recoveryReceivedAt, clock)
+      assert.equal(controller.snapshot().status.nodeSessionId, original.nodeSessionId)
+      response = broken; await controller.refresh()
+      assert.equal(controller.snapshot().recoveryFresh, false); assert.equal(controller.snapshot().recoveryAvailable, false)
+      assert.equal(controller.snapshot().unresolved, true); assert.equal(reads, 1)
+      response = offered; await controller.refresh()
+      assert.equal(controller.snapshot().recoveryFresh, false, 'a later read does not restore invalidated confirmation evidence')
+    } finally { controller.dispose() }
+  }
+})
+
+test('persisted-owner metadata cannot release ownership before explicit durable clearance adoption', async () => {
+  const now = Date.now(), original = unknown({ ...initial(now), trial: trial(now) })
+  const offered = { ...original, recovery: recoveryOffer(original, now), canConfirmRecovery: true }
+  let response = original, inspections = 0
+  const controller = createCommissioningController({ initialStatus: original, recoveryOnly: true, client: {
+    async status() { return response }, async recoveryInspect() { inspections++; return offered },
+  } })
+  try {
+    const body = { trialId: 'trial-one', trialDigest: digest(4) }
+    await controller.action('recoveryInspect', body)
+    response = cleared(offered, now); await controller.refresh(); await controller.refresh()
+    assert.equal(controller.snapshot().unresolved, true)
+    await controller.action('recoveryInspect', body)
+    assert.equal(controller.snapshot().unresolved, false); assert.equal(inspections, 1)
+  } finally { controller.dispose() }
+})
+
+test('a lost recovery confirmation retains owner until exact durable status readback without another hardware inspection', async (t) => {
+  const f = await fixture(t); await f.prepare(); f.node = unknown(f.node); await f.command('refresh')
+  f.node = { ...f.node, nodeSessionId: 'restarted-node-session' }
+  const body = { trialId: 'trial-one', trialDigest: digest(4) }
+  await f.command('recoveryInspect', body)
+  const recoveryDigest = f.service.snapshot().workcell.commissioning.recoveryStatus.recovery.digest
+  f.dropRecovery()
+  await assert.rejects(f.command('recoveryConfirm', { ...body, recoveryDigest, confirmed: true }))
+  assert.equal(f.service.snapshot().activeCommissioning.length, 1)
+  await assert.rejects(f.command('recoveryConfirm', { ...body, recoveryDigest, confirmed: true }))
+  const inspections = f.calls.filter((call) => call.action === 'recoveryInspect').length
+  await f.command('recoveryInspect', body)
+  assert.equal(f.service.snapshot().activeCommissioning.length, 0)
+  assert.equal(f.calls.filter((call) => call.action === 'recoveryInspect').length, inspections)
+  assert.equal(f.calls.filter((call) => call.action === 'recoveryConfirm').length, 1)
+})
+
+test('operator restart exposes recovery on the exact selected persisted owner and durable clearance survives reopening', async (t) => {
+  const f = await fixture(t)
+  const old = unknown({ ...f.node, trial: trial(Date.now()) })
+  const record = { projectId: f.owner.projectId, conversationId: f.owner.conversationId, nodeId: 'loopback-fixture-node', connectionGeneration: f.owner.connectionGeneration,
+    kind: 'commissioning', trialId: 'trial-one', nodeSessionId: 'node-session-one', status: 'OUTCOME_UNKNOWN', commissioningStatus: old }
+  f.node = { ...old, nodeSessionId: 'restarted-node-session' }
+  await f.restart([record]); await f.service.command('connection.connect', { projectId: f.owner.projectId })
+  const owner = f.service.snapshot().activeCommissioning[0], body = { trialId: 'trial-one', trialDigest: digest(4) }
+  await assert.rejects(f.command('recoveryInspect', body, { ...owner, connectionGeneration: 0 }))
+  await f.command('recoveryInspect', body, owner)
+  const retained = f.service.snapshot().activeCommissioning[0]
+  assert.equal(retained.nodeSessionId, 'node-session-one')
+  assert.equal(retained.recoveryView.recoveryStatus.nodeSessionId, 'restarted-node-session')
+  const other = await f.service.command('session.bind', { projectId: f.owner.projectId, serverId: 'fixture-server', sessionId: 'other-recovery-session' })
+  await assert.rejects(f.command('recoveryConfirm', { ...body, recoveryDigest: retained.recoveryStatus.recovery.digest, confirmed: true }, other.binding))
+  assert.equal(f.calls.filter((call) => call.action === 'recoveryConfirm').length, 0)
+  await f.service.command('session.select', { projectId: f.owner.projectId, conversationId: f.owner.conversationId })
+  await f.command('recoveryConfirm', { ...body, recoveryDigest: retained.recoveryStatus.recovery.digest, confirmed: true }, owner)
+  assert.equal(f.service.snapshot().activeCommissioning.length, 0)
+  await f.restart([])
+  assert.equal(f.service.snapshot().activeCommissioning.length, 0)
+})
+
+test('persisted owner accepts a matching prior-session durable clearance by status read alone', async (t) => {
+  const f = await fixture(t), old = unknown({ ...f.node, trial: trial(Date.now()) })
+  const record = { projectId: f.owner.projectId, conversationId: f.owner.conversationId, nodeId: 'loopback-fixture-node', connectionGeneration: f.owner.connectionGeneration,
+    kind: 'commissioning', trialId: 'trial-one', nodeSessionId: 'node-session-one', status: 'OUTCOME_UNKNOWN', commissioningStatus: old }
+  f.node = { ...cleared(old, Date.now()), nodeSessionId: 'new-node-after-clearance' }
+  await f.restart([record]); await f.service.command('connection.connect', { projectId: f.owner.projectId })
+  const active = f.service.snapshot().activeCommissioning[0]
+  await f.command('recoveryInspect', { trialId: active.trialId, trialDigest: active.status.trial.digest }, active)
+  assert.equal(f.service.snapshot().activeCommissioning.length, 0)
+  assert.equal(f.calls.some((call) => ['inspect', 'recoveryInspect', 'recoveryConfirm', 'approve'].includes(call.action)), false)
+})
+
+test('mismatched restarted recovery status fails before any recovery inspection request', async () => {
+  const now = Date.now(), original = unknown({ ...initial(now), trial: trial(now) })
+  for (const replacement of [
+    { ...original, nodeSessionId: 'restarted', trialNodeSessionId: 'another-original-session' },
+    { ...original, nodeSessionId: 'restarted', trial: { ...original.trial, digest: digest(5) } },
+    { ...original, nodeSessionId: 'restarted', configuration: { ...original.configuration, deviceIdentity: 'other-device' } },
+    { ...original, nodeSessionId: 'restarted', configuration: { ...original.configuration, digest: digest(5) } },
+  ]) {
+    let reads = 0
+    const controller = createCommissioningController({ initialStatus: original, client: { async status() { return replacement }, async recoveryInspect() { reads++; throw Error('must not reach') } } })
+    try { await assert.rejects(controller.action('recoveryInspect', { trialId: 'trial-one', trialDigest: digest(4) })); assert.equal(reads, 0); assert.equal(controller.snapshot().unresolved, true) }
+    finally { controller.dispose() }
+  }
+})
+
+test('Stop invalidates a pending recovery inspection and its late offer cannot become confirmable', async () => {
+  const now = Date.now(), original = unknown({ ...initial(now), trial: trial(now) })
+  let release, reached
+  const waiting = new Promise((resolve) => { reached = resolve })
+  const controller = createCommissioningController({ initialStatus: original, client: { async status() { return original },
+    async recoveryInspect() { reached(); return new Promise((resolve) => { release = resolve }) }, async stop() { return original } } })
+  try {
+    const pending = controller.action('recoveryInspect', { trialId: 'trial-one', trialDigest: digest(4) })
+    await waiting
+    await controller.action('stop', { trialId: 'trial-one', reason: 'operator-requested-stop' })
+    release({ ...original, recovery: recoveryOffer(original, now), canConfirmRecovery: true }); await pending
+    assert.equal(controller.snapshot().recoveryStatus, null)
+    assert.equal(controller.snapshot().recoveryFresh, false)
+    assert.equal(controller.snapshot().unresolved, true)
+  } finally { controller.dispose() }
+})
+
+test('Stop independently cancels a restarted Node recovery confirmation without claiming the original Stop succeeded', async () => {
+  const now = Date.now(), original = unknown({ ...initial(now), trial: trial(now) }), current = { ...original, nodeSessionId: 'restarted-node-session' }
+  let release, reached, cancelled = false, committed = false
+  const started = new Promise((resolve) => { reached = resolve }), stopSessions = []
+  const offered = { ...current, recovery: recoveryOffer(current, now), canConfirmRecovery: true }
+  const controller = createCommissioningController({ initialStatus: original, client: {
+    async status() { return current }, async recoveryInspect() { return offered },
+    async recoveryConfirm() { reached(); await new Promise((resolve) => { release = resolve }); if (cancelled) throw Error('Node cancellation rejected commit'); committed = true; return cleared(offered, now) },
+    async stop(body) { stopSessions.push(body.expectedNodeSessionId); if (body.expectedNodeSessionId === original.nodeSessionId) throw Error('Original Node session rejected'); cancelled = true; return current },
+  } })
+  try {
+    const body = { trialId: 'trial-one', trialDigest: digest(4) }
+    await controller.action('recoveryInspect', body)
+    const confirming = controller.action('recoveryConfirm', { ...body, recoveryDigest: offered.recovery.digest, confirmed: true })
+    await started
+    await assert.rejects(controller.action('stop', { trialId: body.trialId, reason: 'operator-requested-stop' }), /unconfirmed/i)
+    release(); await confirming
+    assert.deepEqual(stopSessions.sort(), ['node-session-one', 'restarted-node-session'])
+    assert.equal(cancelled, true); assert.equal(committed, false)
+    assert.equal(controller.snapshot().status.nodeSessionId, original.nodeSessionId)
+    assert.equal(controller.snapshot().unresolved, true); assert.equal(controller.snapshot().recoveryFresh, false)
+  } finally { controller.dispose() }
+})
+
+test('ordinary status polling preserves a failed recovery message and cannot make its offer fresh', async () => {
+  const now = Date.now(), original = unknown({ ...initial(now), trial: trial(now) })
+  const controller = createCommissioningController({ initialStatus: original, client: { async status() { return original }, async recoveryInspect() { throw Error('Synthetic failure') } } })
+  try {
+    await assert.rejects(controller.action('recoveryInspect', { trialId: 'trial-one', trialDigest: digest(4) }))
+    const message = controller.snapshot().message
+    await controller.refresh()
+    assert.equal(controller.snapshot().message, message)
+    assert.equal(controller.snapshot().recoveryFresh, false)
+  } finally { controller.dispose() }
+})
+
+test('persisted operator owner Stop cancels current-session confirmation and keeps its original unknown record', async (t) => {
+  const f = await fixture(t), old = unknown({ ...f.node, trial: trial(Date.now()) })
+  const record = { projectId: f.owner.projectId, conversationId: f.owner.conversationId, nodeId: 'loopback-fixture-node', connectionGeneration: f.owner.connectionGeneration,
+    kind: 'commissioning', trialId: 'trial-one', nodeSessionId: 'node-session-one', status: 'OUTCOME_UNKNOWN', commissioningStatus: old }
+  f.node = { ...old, nodeSessionId: 'restarted-node-session' }
+  await f.restart([record]); await f.service.command('connection.connect', { projectId: f.owner.projectId })
+  const owner = f.service.snapshot().activeCommissioning[0], body = { trialId: owner.trialId, trialDigest: digest(4) }
+  await f.command('recoveryInspect', body, owner)
+  let release
+  f.waitRecovery(new Promise((resolve) => { release = resolve }))
+  const offer = f.service.snapshot().activeCommissioning[0].recoveryStatus.recovery
+  const confirming = f.command('recoveryConfirm', { ...body, recoveryDigest: offer.digest, confirmed: true }, owner)
+  try {
+    for (let attempt = 0; attempt < 100 && !f.calls.some((call) => call.action === 'recoveryConfirm'); attempt++) await delay(5)
+    assert.equal(f.calls.some((call) => call.action === 'recoveryConfirm'), true)
+    await assert.rejects(f.command('stop', { trialId: body.trialId, reason: 'operator-requested-stop' }, owner))
+  } finally { release(); await confirming }
+  const stopped = f.calls.filter((call) => call.action === 'stop').map((call) => call.body.expectedNodeSessionId)
+  assert.deepEqual(stopped.sort(), ['node-session-one', 'restarted-node-session'])
+  assert.equal(f.node.recoveryClearance, null)
+  const retained = f.service.snapshot().activeCommissioning[0]
+  assert.equal(retained.nodeSessionId, old.nodeSessionId); assert.equal(retained.status.trial.phase, 'OUTCOME_UNKNOWN')
+  assert.equal(retained.recoveryView.recoveryFresh, false)
 })

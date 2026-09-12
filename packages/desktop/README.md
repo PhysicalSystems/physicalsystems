@@ -179,6 +179,28 @@ does not stop equipment. Quit and disconnect refuse to discard owned resources
 until their stop or outcome is confirmed. A timed-out request is not permission
 to repeat an action; inspect the same operation first.
 
+The shared operator service exposes gripper recovery through the explicit
+`workcell.commissioning.recoveryInspect` and
+`workcell.commissioning.recoveryConfirm` desktop commands. A compatible Node
+must provide the recovery contract. Inspection reads the current robot state;
+confirmation separately checks that state again and records a durable clearance.
+Neither command moves the robot or approves a new trial. The original trial
+remains `OUTCOME_UNKNOWN` in its history.
+
+Recovery is bound to the exact project, conversation, Node identity, original
+trial session, trial digest, configuration and device. A restarted Node is
+tracked separately from the original operation. Authenticated status polls can
+refresh availability only for the same unexpired inspection; changed evidence
+requires another inspection and confirmation. Stop cancels pending recovery
+independently while retaining any uncertainty about the original Stop.
+
+Only a validated, matching durable clearance releases the retained owner. A
+lost confirmation response is not permission to confirm again: inspect recovery
+status to read back the receipt. After an operator-service restart, that explicit
+read also commits removal of the exact saved owner. Historical receipts cannot
+release a different trial, and preparing another trial still requires separate
+approval. Recovery mutations are never exposed as assistant tools.
+
 ## Architecture and validation
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the process boundaries and
