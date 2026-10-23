@@ -1,11 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createInferenceClient } from '../../cli/src/physical/inference-client.js'
+import { createSshNodeFetch } from './ssh-node-fetch.js'
 import { createPhysicalNodeClient, createCameraPreviewClient, createExecutionClient, createSetupRequirementsClient, createCommissioningClient,
   createWorkcellController, createSetupInspector, createSetupView, createExecutionInspector,
   createPhysicalWorkflowState, updatePhysicalWorkflow, createPhysicalTools } from '../../operator-core/src/index.js'
 
 /** Constructors are inert. Only explicit connected-project requests read Node. */
-export function createPublicClients({ endpoint, credential = {}, fetchImpl = globalThis.fetch }) {
+export function createPublicClients({ endpoint, credential = {}, fetchImpl, remotePort }) {
+  if (remotePort !== undefined) {
+    if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) throw new TypeError('Invalid remote Node port')
+    const transport = fetchImpl || createSshNodeFetch(endpoint, remotePort)
+    fetchImpl = (url, init) => {
+      const headers = new Headers(init?.headers)
+      // SSH forwards bytes, not HTTP authority. Preserve Node's exact-loopback
+      // host checks while the TCP connection uses the locally allocated port.
+      headers.set('Host', `127.0.0.1:${remotePort}`)
+      return transport(url, { ...init, headers })
+    }
+  }
+  fetchImpl ||= globalThis.fetch
   return Object.freeze({
+    inference: createInferenceClient({ baseUrl: endpoint, token: credential.executionToken, fetchImpl }),
     node: createPhysicalNodeClient({ baseUrl: endpoint, fetchImpl }),
     camera: createCameraPreviewClient({ baseUrl: endpoint, token: credential.cameraToken, fetchImpl }),
     execution: createExecutionClient({ baseUrl: endpoint, token: credential.executionToken, fetchImpl }),
