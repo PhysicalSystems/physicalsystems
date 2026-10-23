@@ -180,6 +180,7 @@ export async function createOperatorService({ dataDir, secretStore, connections 
       }),
       conversation: selected ? { id: selected.id, title: selected.title, serverId: selected.serverId, sessionId: selected.sessionId,
         busy: Boolean(context?.busy), error: context?.error || null } : null,
+      modelRuntime: connected ? selectedLink?.inference || null : null,
       experiments: experimentView(context, selected), workcell, setupReport: workcell?.setup?.report || null,
       activeExperiments: [...contexts].flatMap(([id, entry]) => {
         const current = entry.experiments.snapshot().current, owner = binding(id)
@@ -311,7 +312,7 @@ export async function createOperatorService({ dataDir, secretStore, connections 
       if (endpointOwners.has(key) && endpointOwners.get(key) !== p.id) throw fail('NODE_OWNED', 'This Node endpoint already belongs to another project.')
       const credential = p.connection.credentialRef ? JSON.parse(await secrets.read(p.connection.credentialRef) || 'null') : null
       const probeNode = async ({ endpoint, expectedNodeId }) => {
-        const clients = clientFactory({ endpoint, credential: credential || {} })
+        const clients = clientFactory({ endpoint, credential: credential || {}, ...(p.connection.type === 'ssh' ? { remotePort: p.connection.remotePort || 8876 } : {}) })
         const [observation] = await Promise.all([clients.node.inspect(), clients.camera.status()])
         if (expectedNodeId && observation.nodeName !== expectedNodeId) throw fail('NODE_CHANGED', 'The responding Node identity changed. Retain the original project owner.')
         return { authenticated: true, nodeId: observation.nodeName, observation }
@@ -330,7 +331,7 @@ export async function createOperatorService({ dataDir, secretStore, connections 
       p.connection.expectedNodeId = attached.identity.nodeId
       if (!prior) p.generation += 1
       save()
-      const link = { ...prior, ...attached, credential, clients: clientFactory({ endpoint: attached.endpoint, credential: credential || {} }), key,
+      const link = { ...prior, ...attached, credential, clients: clientFactory({ endpoint: attached.endpoint, credential: credential || {}, ...(p.connection.type === 'ssh' ? { remotePort: p.connection.remotePort || 8876 } : {}) }), key,
         status: 'connected', observedAt: now(), observation: attached.identity.observation, error: null, transportLost: false }
       prior?.offDisconnect?.()
       link.offDisconnect = attached.onDisconnect?.(() => { link.status = 'offline'; link.observedAt = null; link.transportLost = true; link.error = 'Connection lost. Owned outcomes remain unresolved until the same Node is inspected.'; emit() })
@@ -587,6 +588,23 @@ export async function createOperatorService({ dataDir, secretStore, connections 
           const payload = Object.fromEntries(allowed.filter((key) => key !== 'approved' && Object.hasOwn(body, key)).map((key) => [key, body[key]]))
           const result = await owner.context.experiments[operation](payload); emit(); return result
         })
+      }
+      if (['inference.refresh', 'inference.start', 'inference.stop'].includes(name)) {
+        scope(body, { physical: true, selected: true })
+        const link = links.get(owner.p.id)
+        if (!link?.clients?.inference) throw fail('INFERENCE_UNAVAILABLE', 'Model inference is not available on this connection.')
+        const { projectId, conversationId, serverId, sessionId, connectionGeneration, ...payload } = body
+        const operation = name.slice(10)
+        fields(payload, operation === 'start' ? ['manifestSha256', 'generation'] : operation === 'stop' ? ['runtimeId'] : [])
+        if (operation === 'start' && (typeof payload.manifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(payload.manifestSha256) || !Number.isSafeInteger(payload.generation) || payload.generation < 1)) throw fail('INVALID_SELECTION', 'Refresh the exact selected model before loading.')
+        if (operation === 'stop' && (typeof payload.runtimeId !== 'string' || !/^[a-f0-9]{32}$/.test(payload.runtimeId))) throw fail('INVALID_RUNTIME', 'Refresh the running model before stopping.')
+        const request = {}; link.inferenceRequest = request
+        try {
+          const result = await link.clients.inference[operation === 'refresh' ? 'status' : operation](payload)
+          if (links.get(owner.p.id) !== link) throw fail('CONNECTION_CHANGED', 'Reconnect the original Node to inspect its model.')
+          if (link.inferenceRequest === request) link.inference = result
+        } catch (error) { if (link.inferenceRequest === request) link.inference = null; emit(); throw error }
+        emit(); return snapshot()
       }
       if (name.startsWith('workcell.')) {
         const operation = name.slice(9), stop = operation.endsWith('.stop'), frame = operation === 'camera.frame'
