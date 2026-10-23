@@ -1,5 +1,17 @@
 # Upstream provenance
 
+## Reviewed dependency maintenance
+
+PR #51 updates only the Undici dependency from 8.9.0 to 8.10.2 for the
+upstream security fixes. The exact npm URL and SHA-512 integrity are pinned
+in the shrinkwrap and verifier. MIT licensing, Node >=22.19.0, and the
+127-node dependency closure are unchanged. Retained Pi source bytes remain
+unchanged. The verifier checks the upgraded node exactly before normalizing
+it back to 8.9.0 for comparison with the original upstream fingerprint;
+the actual upgraded closure also has its own exact fingerprint. The legal
+inventory, SBOMs, and export provenance are regenerated with this review.
+This source update does not republish the historical compatibility package.
+
 `@tinyedge/pi-runtime@0.84.2-tinyedge.1` is a compatibility package of the
 published `@earendil-works/pi-coding-agent@0.84.2` artifact. TinyEdge does not
 claim authorship of the upstream Pi payload.

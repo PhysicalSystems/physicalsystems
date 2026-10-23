@@ -220,7 +220,7 @@ export const TARGETS = Object.freeze({
     key: 'pi-runtime',
     shrinkwrapPath: 'packages/pi-runtime/npm-shrinkwrap.json',
     outputPath: 'packages/pi-runtime/SBOM.cdx.json',
-    shrinkwrapSha256: 'dede15b51ca4af8d1685cfe228e1d9fea224227a7bd04d92a72e55eb732b19c6',
+    shrinkwrapSha256: 'e556cacd317281e5f04490670bdd59f91c4e65238e406c22d966903ec689b7c4',
     rootName: '@tinyedge/pi-runtime',
     rootVersion: '0.84.2-tinyedge.1',
     rootLicense: 'MIT',
@@ -231,7 +231,7 @@ export const TARGETS = Object.freeze({
     key: 'physicalsystems',
     shrinkwrapPath: 'packages/cli/npm-shrinkwrap.json',
     outputPath: 'packages/cli/SBOM.cdx.json',
-    shrinkwrapSha256: 'a010b11e26825c42cfd1d81126efa808288d2cb8982a65918f1c71e1f171570f',
+    shrinkwrapSha256: '4bcedfc158b295efa79dc2250b6726fdc276b87ff4c0745592f49df886689222',
     rootName: 'physicalsystems',
     rootVersion: '0.2.6',
     // Direct publication is limited to preview through the protected OIDC

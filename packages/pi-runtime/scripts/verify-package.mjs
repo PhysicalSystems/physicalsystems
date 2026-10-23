@@ -30,7 +30,7 @@ const expectedDependencies = {
 	"proper-lockfile": "4.1.2",
 	semver: "7.8.0",
 	typebox: "1.3.7",
-	undici: "8.9.0",
+	undici: "8.10.2",
 	yaml: "2.9.0",
 };
 const expectedPeers = {
@@ -132,6 +132,23 @@ for (const [packagePath, integrity] of Object.entries(reviewedPiIntegrities)) {
 	);
 }
 const upstreamComparableClosure = structuredClone(retainedClosure);
+// The only reviewed dependency upgrade beyond the original Pi closure.
+// Verify its exact registry identity, then restore the original node solely
+// for comparison with the immutable upstream provenance fingerprint.
+assert.deepEqual(retainedClosure["node_modules/undici"], {
+	version: "8.10.2",
+	resolved: "https://registry.npmjs.org/undici/-/undici-8.10.2.tgz",
+	integrity: "sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ==",
+	license: "MIT",
+	engines: { node: ">=22.19.0" },
+});
+upstreamComparableClosure["node_modules/undici"] = {
+	version: "8.9.0",
+	resolved: "https://registry.npmjs.org/undici/-/undici-8.9.0.tgz",
+	integrity: "sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA==",
+	license: "MIT",
+	engines: { node: ">=22.19.0" },
+};
 for (const packagePath of Object.keys(reviewedPiIntegrities)) {
 	delete upstreamComparableClosure[packagePath].integrity;
 }
@@ -144,8 +161,8 @@ assert.equal(
 );
 assert.equal(
 	createHash("sha256").update(JSON.stringify(retainedClosure)).digest("hex"),
-	auditedUpstream.hardenedClosureSha256,
-	"runtime closure or one of its six reviewed SRI hardenings drifted",
+	"359f742f3258c68446bea143960edec36262b59ac54edf6c1f9b99e409b32ff1",
+	"runtime closure, reviewed Undici upgrade, or Pi SRI hardening drifted",
 );
 
 const vendorHashes = {
