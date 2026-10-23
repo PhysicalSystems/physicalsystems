@@ -3683,7 +3683,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "939d6527e2ae347a1d1a0c01a6042ea3eed5c8a985bb34e81950487668c981cb8427bc1b205bcc0fee39e80a64bb14bff7fcdca979c7bbc3130fb095af1f4eec"
+          "content": "992f4d53f93c2a5863ee541452aaac25e74f8a32d31903ed37804b1ed376db7f7c44d6f0573a70b27db2b4c84379de3995cac761014ac4902f3728712775c83c"
         }
       ],
       "licenses": [
@@ -3701,7 +3701,7 @@
           "hashes": [
             {
               "alg": "SHA-512",
-              "content": "939d6527e2ae347a1d1a0c01a6042ea3eed5c8a985bb34e81950487668c981cb8427bc1b205bcc0fee39e80a64bb14bff7fcdca979c7bbc3130fb095af1f4eec"
+              "content": "992f4d53f93c2a5863ee541452aaac25e74f8a32d31903ed37804b1ed376db7f7c44d6f0573a70b27db2b4c84379de3995cac761014ac4902f3728712775c83c"
             }
           ]
         }
@@ -3709,7 +3709,7 @@
       "properties": [
         {
           "name": "tinyedge:npm:integrity",
-          "value": "sha512-k51lJ+KuNHodGgwBpgQuo+7VyKmFuzToGVBIdmjJgcuEJ7wbIFvMD+456ApkuxS/9/zcqXnHu8MTD7CVrx9O7A=="
+          "value": "sha512-mS9NU/k8Klhj7lQUUqqsJedPijLTGQPtN4BLHtN22398RNbwVzpwsn2ytMhDed45lcrHYQFKxJAvNyhxJ3XIPA=="
         },
         {
           "name": "tinyedge:npm:package-path",
@@ -3725,7 +3725,7 @@
         },
         {
           "name": "tinyedge:workspace:package-json-sha256",
-          "value": "69e09e1de9ddd10cc5cd91cfb29d80efda20e598f9674679ad8f1b9448a1c1d2"
+          "value": "88f862b606617ddfdc0bd8a37407d63392decf4c244f09bda802c019967ce3a2"
         },
         {
           "name": "tinyedge:workspace:package-root",
@@ -6438,7 +6438,7 @@
         },
         {
           "name": "tinyedge:sbom:shrinkwrap-sha256",
-          "value": "a010b11e26825c42cfd1d81126efa808288d2cb8982a65918f1c71e1f171570f"
+          "value": "4bcedfc158b295efa79dc2250b6726fdc276b87ff4c0745592f49df886689222"
         },
         {
           "name": "tinyedge:workspace:package-json-path",
@@ -7115,14 +7115,14 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/undici@8.9.0",
+      "bom-ref": "pkg:npm/undici@8.10.2",
       "name": "undici",
-      "version": "8.9.0",
+      "version": "8.10.2",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "696669523ed7a06a27302971e2074345f8018ea780f85e3bdda0e644e4106ccf67e8f45f2bfbb5abf6b45f8c0c4e07077d3f07e9fa5bb7df0f16e0d4c0583660"
+          "content": "ff2e3f6c7f58354e618bd348ae93aebc65c5731ae3dc232b57efc0629a300184e91e7f205ff5cf163372efae853e8618d2689085d5bdefb24558a18d841770c9"
         }
       ],
       "licenses": [
@@ -7132,15 +7132,15 @@
           }
         }
       ],
-      "purl": "pkg:npm/undici@8.9.0",
+      "purl": "pkg:npm/undici@8.10.2",
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/undici/-/undici-8.9.0.tgz",
+          "url": "https://registry.npmjs.org/undici/-/undici-8.10.2.tgz",
           "hashes": [
             {
               "alg": "SHA-512",
-              "content": "696669523ed7a06a27302971e2074345f8018ea780f85e3bdda0e644e4106ccf67e8f45f2bfbb5abf6b45f8c0c4e07077d3f07e9fa5bb7df0f16e0d4c0583660"
+              "content": "ff2e3f6c7f58354e618bd348ae93aebc65c5731ae3dc232b57efc0629a300184e91e7f205ff5cf163372efae853e8618d2689085d5bdefb24558a18d841770c9"
             }
           ]
         }
@@ -7148,7 +7148,7 @@
       "properties": [
         {
           "name": "tinyedge:npm:integrity",
-          "value": "sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA=="
+          "value": "sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ=="
         },
         {
           "name": "tinyedge:npm:package-path",
@@ -7156,7 +7156,7 @@
         },
         {
           "name": "tinyedge:npm:resolved",
-          "value": "https://registry.npmjs.org/undici/-/undici-8.9.0.tgz"
+          "value": "https://registry.npmjs.org/undici/-/undici-8.10.2.tgz"
         }
       ]
     },
@@ -8005,7 +8005,7 @@
         "pkg:npm/proper-lockfile@4.1.2",
         "pkg:npm/semver@7.8.0",
         "pkg:npm/typebox@1.3.7",
-        "pkg:npm/undici@8.9.0",
+        "pkg:npm/undici@8.10.2",
         "pkg:npm/yaml@2.9.0"
       ]
     },
@@ -8395,7 +8395,7 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:npm/undici@8.9.0",
+      "ref": "pkg:npm/undici@8.10.2",
       "dependsOn": []
     },
     {

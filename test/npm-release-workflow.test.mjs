@@ -1210,7 +1210,7 @@ test('the compatibility runtime is an exact MIT artifact without default native 
   )
   assert.equal(
     lockedRuntime.integrity,
-    'sha512-k51lJ+KuNHodGgwBpgQuo+7VyKmFuzToGVBIdmjJgcuEJ7wbIFvMD+456ApkuxS/9/zcqXnHu8MTD7CVrx9O7A==',
+    'sha512-mS9NU/k8Klhj7lQUUqqsJedPijLTGQPtN4BLHtN22398RNbwVzpwsn2ytMhDed45lcrHYQFKxJAvNyhxJ3XIPA==',
   )
   assert.notEqual(piRuntimePackage.private, true)
   assert.equal(piRuntimePackage.license, 'MIT')
