@@ -12,5 +12,5 @@
     "test": "node --test test/*.test.js",
     "check": "node --check src/main.js && node --check src/preload.cjs && node --check src/host.js && node scripts/audit-dependencies.mjs --check"
   },
-  "devDependencies": { "electron": "44.2.0" }
+  "devDependencies": { "electron": "44.9.1" }
 }
